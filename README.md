@@ -79,6 +79,16 @@
 - **内存**: 512MB 以上（推荐 1GB+）
 - **权限**: Root 权限
 - **网络**: 能够访问 GitHub
+- 
+- # 安装ZRAM 模块
+- # 更新源
+apt update
+
+# 安装当前内核对应的扩展模块
+apt install -y linux-modules-extra-$(uname -r)
+
+# 尝试手动加载模块测试
+modprobe zram && echo "成功加载 ZRAM 模块"
 
 ### 一键安装
 
