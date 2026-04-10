@@ -20,53 +20,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 set -euo pipefail
 IFS=$'\n\t'
 
-# ─────────────────────────────────────────────────────────────────────────────
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 安装方式选择
-# ─────────────────────────────────────────────────────────────────────────────
-
-select_install_method() {
-    # 如果已通过环境变量传入，直接使用
-    if [[ -n "$INSTALL_METHOD" ]]; then
-        log_info "使用预选安装方式: $INSTALL_METHOD"
-        return 0
-    fi
-    
-    log_step "选择 OpenClaw 安装方式..."
-    echo ""
-    echo "┌──────────────────────────────────────────────────────────────┐"
-    echo "│                    OpenClaw 安装方式                        │"
-    echo "├──────────────────────────────────────────────────────────────┤"
-    echo "│                                                              │"
-    echo "│  [1] 全局安装 (npm install -g)                              │"
-    echo "│      - 优点: 简单直接，占用资源少                            │"
-    echo "│      - 缺点: 与宿主机共享环境                                │"
-    echo "│                                                              │"
-    echo "│  [2] 容器安装 (Docker)                                       │"
-    echo "│      - 优点: 环境隔离，易于管理                              │"
-    echo "│      - 缺点: 占用更多资源                                    │"
-    echo "│                                                              │"
-    echo "└──────────────────────────────────────────────────────────────┘"
-    echo ""
-    
-    local choice=""
-    while [[ "$choice" != "1" && "$choice" != "2" ]]; do
-        read -p "请选择安装方式 [1/2，默认1]: " choice
-        [[ -z "$choice" ]] && choice="1"
-        [[ "$choice" != "1" && "$choice" != "2" ]] && echo "请输入 1 或 2"
-    done
-    
-    if [[ "$choice" == "1" ]]; then
-        INSTALL_METHOD="global"
-        log_info "选择: 全局安装 (npm install -g)"
-    else
-        INSTALL_METHOD="docker"
-        log_info "选择: 容器安装 (Docker)"
-    fi
-    
-    export INSTALL_METHOD
-}
 
 # 颜色
 # ─────────────────────────────────────────────────────────────────────────────
@@ -593,52 +546,26 @@ install_openclaw() {
     log_step "安装 OpenClaw..."
     
     # 创建用户
-    if ! id -u "$OPENCLAW_USER" &>/dev/null; then
-        useradd -r -m -s /bin/bash -c "OpenClaw Service Account" "$OPENCLAW_USER" 2>/dev/null || true
+    if ! id -u "" &>/dev/null; then
+        useradd -r -m -s /bin/bash -c "OpenClaw Service Account" "" 2>/dev/null || true
     fi
     
-    # 根据安装方式安装
-    if [[ "$INSTALL_METHOD" == "docker" ]]; then
-        # 容器安装
-        log_info "使用 Docker 容器安装 OpenClaw..."
-        
-        # 确保 Docker 已安装
-        if ! command -v docker &>/dev/null; then
-            log_info "安装 Docker..."
-            install_docker
-        fi
-        
-        # 创建 OpenClaw 数据目录
-        mkdir -p "$OPENCLAW_DATA_DIR"
-        chown -R "$OPENCLAW_USER:$OPENCLAW_USER" "$OPENCLAW_DATA_DIR" 2>/dev/null || true
-        
-        # 拉取镜像
-        log_info "拉取 OpenClaw 镜像..."
-        docker pull openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
-            log_error "Docker 镜像拉取失败"
-            return 1
-        }
-        
-        log_info "OpenClaw 容器安装完成"
-    else
-        # 全局安装 (原始方式)
-        log_info "使用全局安装 OpenClaw..."
-        
-        if ! command -v openclaw &>/dev/null; then
-            npm install -g openclaw --registry https://registry.npmmirror.com >> "$APT_LOG" 2>&1 || {
-                npm install -g openclaw >> "$APT_LOG" 2>&1 || {
-                    log_error "OpenClaw 安装失败"
-                    return 1
-                }
+    # 全局安装
+    if ! command -v openclaw &>/dev/null; then
+        log_info "安装 OpenClaw (npm 全局安装)..."
+        npm install -g openclaw --registry https://registry.npmmirror.com >> "" 2>&1 || {
+            npm install -g openclaw >> "" 2>&1 || {
+                log_error "OpenClaw 安装失败"
+                return 1
             }
-        fi
-        
-        # 创建目录
-        mkdir -p "$OPENCLAW_DATA_DIR"
-        chown -R "$OPENCLAW_USER:$OPENCLAW_USER" "$OPENCLAW_DATA_DIR" 2>/dev/null || true
-        
-        log_info "OpenClaw 全局安装完成"
+        }
     fi
+    
+    # 创建目录
+    mkdir -p ""
+    chown -R ":" "" 2>/dev/null || true
+    
+    log_info "OpenClaw 安装完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -648,38 +575,7 @@ install_openclaw() {
 create_systemd_service() {
     log_step "创建 systemd 服务..."
     
-    if [[ "$INSTALL_METHOD" == "docker" ]]; then
-        # Docker 容器模式
-        cat > /etc/systemd/system/openclaw-gateway.service <<EOF
-[Unit]
-Description=OpenClaw AI Gateway (Docker)
-Documentation=https://docs.openclaw.ai
-After=network-online.target docker.service
-Wants=network-online.target
-Requires=docker.service
-
-[Service]
-Type=simple
-Restart=on-failure
-RestartSec=10
-TimeoutStopSec=30
-
-# Docker 容器运行 OpenClaw
-ExecStart=/usr/bin/docker run --rm \
-    --name openclaw-gateway \
-    --network host \
-    -v ${OPENCLAW_DATA_DIR}:/root/.openclaw \
-    -e OPENCLAW_DATA_DIR=/root/.openclaw \
-    -e NODE_ENV=production \
-    openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
-ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    else
-        # 全局安装模式
-        cat > /etc/systemd/system/openclaw-gateway.service <<EOF
+    cat > /etc/systemd/system/openclaw-gateway.service <<EOF
 [Unit]
 Description=OpenClaw AI Gateway
 Documentation=https://docs.openclaw.ai
@@ -688,15 +584,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${OPENCLAW_USER}
-Group=${OPENCLAW_USER}
-WorkingDirectory=${OPENCLAW_DATA_DIR}
+User=
+Group=
+WorkingDirectory=
 Environment="NODE_ENV=production"
 Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
-Environment="OPENCLAW_DATA_DIR=${OPENCLAW_DATA_DIR}"
-ExecStart=/usr/local/bin/openclaw gateway --port ${OPENCLAW_PORT}
-ExecStop=/bin/kill -SIGTERM \$MAINPID
-Restart=on-failure
+Environment="OPENCLAW_DATA_DIR="
+ExecStart=/usr/local/bin/openclaw gateway --port 
+ExecStop=/bin/kill -SIGTERM Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
 LimitNOFILE=524288
@@ -704,7 +599,6 @@ LimitNOFILE=524288
 [Install]
 WantedBy=multi-user.target
 EOF
-    fi
     
     systemctl daemon-reload
     log_info "systemd 服务创建完成"
