@@ -575,6 +575,26 @@ install_openclaw() {
 create_systemd_service() {
     log_step "创建 systemd 服务..."
     
+    # 根据平台设置 MemoryMax
+    local memory_max=""
+    case "$PLATFORM_NAME" in
+        *"R4S"*)
+            memory_max="MemoryMax=2G"
+            ;;
+        *"T6"*|"NanoPi T6"*)
+            memory_max="MemoryMax=4G"
+            ;;
+        *"N5105"*|"N5095"*|"N5105"*)
+            memory_max="MemoryMax=2G"
+            ;;
+        *"Oracle"*|"ARM"*)
+            memory_max="MemoryMax=8G"
+            ;;
+        *)
+            memory_max="# MemoryMax=2G  # 自动检测内存"
+            ;;
+    esac
+    
     cat > /etc/systemd/system/openclaw-gateway.service <<EOF
 [Unit]
 Description=OpenClaw AI Gateway
@@ -596,6 +616,7 @@ Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
 LimitNOFILE=524288
+${memory_max}
 
 [Install]
 WantedBy=multi-user.target

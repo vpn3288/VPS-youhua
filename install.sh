@@ -52,7 +52,7 @@ detect_platform() {
         x86_64)
             if echo "$cpu_model" | grep -qiE "N5105|N5095|J6412|J6413"; then
                 echo "n5105"
-            elif echo "$cpu_model" | grep -qi "Intel\|AMD"; then
+            elif echo "$cpu_model" | grep -qi "Intel|AMD"; then
                 echo "generic-x86"
             else
                 echo "generic-x86"

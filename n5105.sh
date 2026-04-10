@@ -584,17 +584,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=
-Group=
-WorkingDirectory=
+User=${OPENCLAW_USER}
+Group=${OPENCLAW_USER}
+WorkingDirectory=${OPENCLAW_DATA_DIR}
 Environment="NODE_ENV=production"
 Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
-Environment="OPENCLAW_DATA_DIR="
-ExecStart=/usr/local/bin/openclaw gateway --port 
-ExecStop=/bin/kill -SIGTERM Restart=on-failure
+Environment="OPENCLAW_DATA_DIR=${OPENCLAW_DATA_DIR}"
+ExecStart=/usr/local/bin/openclaw gateway --port ${OPENCLAW_PORT}
+ExecStop=/bin/kill -SIGTERM \$MAINPID
+Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
 LimitNOFILE=524288
+MemoryMax=2G
 
 [Install]
 WantedBy=multi-user.target
@@ -603,6 +605,7 @@ EOF
     systemctl daemon-reload
     log_info "systemd 服务创建完成"
 }
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # I/O 调度优化
