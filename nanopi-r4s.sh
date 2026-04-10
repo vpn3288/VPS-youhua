@@ -375,102 +375,6 @@ configure_locale() {
 }
 
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TF 卡优化 (适合 NanoPi R4S 等使用 TF 卡的设备)
-# 目的: 减少写入、延长 TF 卡寿命
-# ─────────────────────────────────────────────────────────────────────────────
-
-configure_tf_card_optimize() {
-    log_step "配置 TF 卡优化 (减少写入)..."
-    
-    # 1. 安装 log2ram - 将日志写入 RAM
-    log_info "安装 log2ram..."
-    if ! command -v log2ram &>/dev/null; then
-        # 添加 azlux 源
-        curl -fsSL https://azlux.fr/repo.gpg | gpg --dearmor -o /usr/share/keyrings/azlux-archive-keyring.gpg 2>/dev/null || true
-        
-        local codename
-        codename=$(grep -oP '(?<=^VERSION_CODENAME=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "bookworm")
-        
-        echo "deb [signed-by=/usr/share/keyrings/azlux-archive-keyring.gpg] http://packages.azlux.fr/debian/ ${codename} main" > /etc/apt/sources.list.d/azlux.list
-        
-        apt-get update -qq >> "$APT_LOG" 2>&1 || true
-        apt-get install -y log2ram >> "$APT_LOG" 2>&1 || {
-            log_warn "log2ram 安装失败，使用 tmpfs 方案"
-        }
-    fi
-    
-    # 2. 配置 log2ram
-    if [[ -f /etc/log2ram.conf ]]; then
-        log_info "配置 log2ram..."
-        sed -i 's/^SIZE=.*/SIZE=64M/' /etc/log2ram.conf
-        sed -i 's/^JOURNALD_AWARE=.*/JOURNALD_AWARE=true/' /etc/log2ram.conf
-    fi
-    
-    # 3. 减少 journald 日志大小
-    log_info "配置 journald..."
-    mkdir -p /etc/systemd
-    cat > /etc/systemd/journald.conf <<'EOFJ'
-[Journal]
-SystemMaxUse=20M
-SystemMaxFileSize=10M
-MaxRetentionSec=1day
-ForwardToSyslog=no
-EOFJ
-    systemctl restart systemd-journald 2>/dev/null || true
-    
-    # 4. 使用 tmpfs 挂载 /tmp
-    log_info "配置 /tmp 到 tmpfs..."
-    if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
-        echo "tmpfs /tmp tmpfs defaults,noatime,nosuid,nodev 0 0" >> /etc/fstab
-    fi
-    
-    # 5. 禁用 swap (TF 卡不适合 swap)
-    log_info "禁用 swap..."
-    for sw in /swapfile /swap.img; do
-        swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
-        [[ -f "$sw" ]] && rm -f "$sw"
-    done
-    sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
-    [[ -f /sys/module/zswap/parameters/enabled ]] && echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
-    
-    # 6. 调整 logrotate
-    log_info "配置 logrotate..."
-    mkdir -p /etc/logrotate.d
-    cat > /etc/logrotate.d/openclaw <<'EOFLOG'
-/var/log/openclaw/*.log {
-    daily
-    rotate 1
-    size 1M
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0644 root root
-}
-EOFLOG
-    
-    # 7. 清理旧日志
-    log_info "清理旧日志..."
-    rm -f /var/log/*.1 /var/log/*.gz 2>/dev/null || true
-    rm -rf /var/log/apt/*.gz 2>/dev/null || true
-    rm -rf /var/log/journal/* 2>/dev/null || true
-    
-    # 8. 设置 tmpfs 选项减少写入
-    log_info "配置 sysctl 减少写入..."
-    cat >> /etc/sysctl.d/99-tf-optimize.conf <<'EOFSYS'
-# TF 卡优化 - 减少写入
-vm.dirty_ratio = 5
-vm.dirty_background_ratio = 2
-vm.dirty_writeback_centisecs = 6000
-vm.dirty_expire_centisecs = 12000
-EOFSYS
-    sysctl -p /etc/sysctl.d/99-tf-optimize.conf 2>/dev/null || true
-    
-    log_info "TF 卡优化完成"
-}
-
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl 基础配置 (通用)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1025,7 +929,6 @@ main() {
     preflight_check
     configure_apt_sources
     clean_system
-    configure_tf_card_optimize
     optimize_memory_r4s
     configure_sysctl_r4s
     configure_limits
