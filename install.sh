@@ -134,6 +134,10 @@ main() {
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
     
+    # 选择安装方式
+    select_install_method
+    echo ""
+    
     # 检测平台
     local platform
     platform=$(detect_platform)
@@ -141,64 +145,21 @@ main() {
     log_info "检测到平台: $platform"
     echo ""
     
-    # 显示对应脚本
-    case "$platform" in
-        nanopi-r4s)
-            echo -e "${BLUE}推荐脚本: nanopi-r4s.sh${NC}"
-            echo "  特点: RK3399 ARM64, 4GB, 双网口"
-            echo ""
-            echo "  bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)"
-            ;;
-        nanopi-t6)
-            echo -e "${BLUE}推荐脚本: nanopi-t6.sh${NC}"
-            echo "  特点: RK3588 ARM64, 8GB"
-            echo ""
-            echo "  bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-t6.sh)"
-            ;;
-        n5105)
-            echo -e "${BLUE}推荐脚本: n5105.sh${NC}"
-            echo "  特点: Intel N5105/N5095, 低功耗 x86_64"
-            echo ""
-            echo "  bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)"
-            ;;
-        oracle-arm)
-            echo -e "${BLUE}推荐脚本: oracle-arm.sh${NC}"
-            echo "  特点: Oracle Cloud ARM, 2核16GB, 100GB"
-            echo ""
-            echo "  bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)"
-            ;;
-        generic-x86)
-            echo -e "${BLUE}推荐脚本: generic-x86.sh${NC}"
-            echo "  特点: 通用 x86_64 VPS, 自动适配内存"
-            echo ""
-            echo "  bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)"
-            ;;
-        generic-arm)
-            echo -e "${BLUE}推荐脚本: nanopi-t6.sh (通用 ARM)${NC}"
-            echo "  特点: 通用 ARM64 设备"
-            echo ""
-            echo "  bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-t6.sh)"
-            ;;
-        *)
-            echo -e "${RED}未知平台: $platform${NC}"
-            echo ""
-            echo "请手动选择脚本:"
-            echo "  NanoPi R4S:    bash <(curl -fsSL .../nanopi-r4s.sh)"
-            echo "  NanoPi T6:     bash <(curl -fsSL .../nanopi-t6.sh)"
-            echo "  N5105:         bash <(curl -fsSL .../n5105.sh)"
-            echo "  Oracle Cloud:  bash <(curl -fsSL .../oracle-arm.sh)"
-            echo "  通用 x86_64:   bash <(curl -fsSL .../generic-x86.sh)"
-            exit 1
-            ;;
-    esac
+    # 确认开始安装
+    echo -e "${YELLOW}即将开始安装 OpenClaw (安装方式: $INSTALL_METHOD)${NC}"
+    read -p "按回车继续，或 Ctrl+C 取消: "
     
-    echo ""
-    echo "═══════════════════════════════════════════════════════════════════════"
-    echo ""
-    echo -e "${YELLOW}或者使用一键安装命令:${NC}"
-    echo ""
-    echo -e "${CYAN}bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/${platform}.sh)${NC}"
-    echo ""
+    # 下载并执行对应平台脚本
+    local script_url="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/${platform}.sh"
+    log_info "下载 ${platform}.sh..."
+    
+    # 设置环境变量传递给平台脚本
+    export INSTALL_METHOD
+    
+    # 下载并执行脚本
+    bash <(curl -fsSL "$script_url")
+    
+    log_step "安装完成!"
 }
 
 trap 'log_error "脚本异常退出"; exit 1' ERR
