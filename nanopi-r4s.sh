@@ -699,6 +699,96 @@ detect_nanopi_r4s() {
 # ─────────────────────────────────────────────────────────────────────────────
 # 内存优化 (R4S 专用)
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TF 卡优化 (NanoPi R4S 专用)
+# 目的: 减少 TF 卡写入，延长寿命
+# 安全优化: 不破坏数据完整性
+# ─────────────────────────────────────────────────────────────────────────────
+
+configure_tf_card_optimize() {
+    log_step "配置 TF 卡优化 (减少写入)..."
+    
+    # 1. 配置 journald 限制 (安全)
+    log_info "配置 journald 日志限制..."
+    mkdir -p /etc/systemd
+    cat > /etc/systemd/journald.conf <<'EOFJ'
+[Journal]
+SystemMaxUse=50M
+SystemMaxFileSize=20M
+MaxRetentionSec=1day
+ForwardToSyslog=no
+EOFJ
+    systemctl restart systemd-journald 2>/dev/null || true
+    
+    # 2. 安装 log2ram (日志写入 RAM)
+    log_info "安装 log2ram..."
+    if ! command -v log2ram &>/dev/null; then
+        curl -fsSL https://azlux.fr/repo.gpg | gpg --dearmor -o /usr/share/keyrings/azlux-archive-keyring.gpg 2>/dev/null || true
+        
+        local codename
+        codename=$(grep -oP '(?<=^VERSION_CODENAME=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "bookworm")
+        
+        echo "deb [signed-by=/usr/share/keyrings/azlux-archive-keyring.gpg] http://packages.azlux.fr/debian/ ${codename} main" > /etc/apt/sources.list.d/azlux.list
+        
+        apt-get update -qq >> "$APT_LOG" 2>&1 || true
+        apt-get install -y log2ram >> "$APT_LOG" 2>&1 || {
+            log_warn "log2ram 安装失败，跳过"
+        }
+    fi
+    
+    # 3. 配置 log2ram (R4S 4GB RAM, 分配 40MB)
+    if [[ -f /etc/log2ram.conf ]]; then
+        log_info "配置 log2ram..."
+        sed -i 's/^SIZE=.*/SIZE=40M/' /etc/log2ram.conf
+        sed -i 's/^USE_RSYNC=.*/USE_RSYNC=true/' /etc/log2ram.conf
+    fi
+    
+    # 4. 使用 tmpfs 挂载 /tmp (安全)
+    log_info "配置 /tmp 到 tmpfs..."
+    if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
+        echo "tmpfs /tmp tmpfs defaults,noatime,nosuid,nodev,mode=1777 0 0" >> /etc/fstab
+    fi
+    
+    # 5. 禁用 swap (TF 卡不适合 swap)
+    log_info "禁用 swap..."
+    for sw in /swapfile /swap.img; do
+        swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
+        [[ -f "$sw" ]] && rm -f "$sw"
+    done
+    sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
+    [[ -f /sys/module/zswap/parameters/enabled ]] && echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
+    
+    # 6. 配置 logrotate (安全轮换)
+    log_info "配置 logrotate..."
+    mkdir -p /etc/logrotate.d
+    cat > /etc/logrotate.d/openclaw <<'EOFLOG'
+/var/log/openclaw/*.log {
+    daily
+    rotate 2
+    size 2M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}
+EOFLOG
+    
+    # 7. 安全 sysctl 优化
+    log_info "配置 sysctl 减少写入..."
+    cat >> /etc/sysctl.d/99-tf-optimize.conf <<'EOFSYS'
+# TF 卡安全优化
+vm.dirty_writeback_centisecs = 60000
+vm.dirty_expire_centisecs = 60000
+vm.dirty_ratio = 10
+vm.dirty_background_ratio = 5
+EOFSYS
+    sysctl -p /etc/sysctl.d/99-tf-optimize.conf 2>/dev/null || true
+    
+    log_info "TF 卡优化完成"
+}
+
 optimize_memory_r4s() {
     log_step "配置内存优化 (R4S 4GB)..."
     
@@ -929,6 +1019,7 @@ main() {
     preflight_check
     configure_apt_sources
     clean_system
+    configure_tf_card_optimize
     optimize_memory_r4s
     configure_sysctl_r4s
     configure_limits
