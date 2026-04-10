@@ -527,7 +527,7 @@ install_docker() {
 {
     "storage-driver": "overlay2",
     "log-driver": "json-file",
-    "log-opts": {"max-size": "100m", "max-file": "5"},
+    "log-opts": {"max-size": "50m", "max-file": "3"},
     "live-restore": true
 }
 EOF

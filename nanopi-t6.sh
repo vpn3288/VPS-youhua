@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # NanoPi T6 专用优化安装脚本
-# 硬件: RK3588 ARM64, 16GB RAM (T6) / 4-8GB RAM (T6S)
+# 硬件: RK3588 ARM64, 8GB RAM (T6) / 4-8GB RAM (T6S)
 # 特点: 性能更强, 8GB大内存, 适合重度使用
 # =============================================================================
 #
@@ -126,6 +126,7 @@ preflight_check() {
     }
     
     [[ $SYS_DISK_AVAIL_GB -lt 3 ]] && {
+        [[ $SYS_DISK_AVAIL_GB -lt 10 ]] && { log_warn "磁盘可用空间 ${SYS_DISK_AVAIL_GB}GB < 10GB，建议清理"; }
         log_warn "磁盘可用空间 ${SYS_DISK_AVAIL_GB}GB < 3GB"
     }
     
@@ -526,7 +527,7 @@ install_docker() {
 {
     "storage-driver": "overlay2",
     "log-driver": "json-file",
-    "log-opts": {"max-size": "100m", "max-file": "5"},
+    "log-opts": {"max-size": "50m", "max-file": "3"},
     "live-restore": true
 }
 EOF
@@ -595,7 +596,7 @@ RestartSec=10
 TimeoutStopSec=30
 LimitNOFILE=524288
 LimitNPROC=65535
-MemoryMax=8G
+MemoryMax=4G
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
@@ -647,7 +648,7 @@ optimize_io_scheduler() {
 
 
 readonly PLATFORM_NAME="NanoPi T6/T6S"
-readonly PLATFORM_DESC="RK3588 ARM64, 16GB RAM"
+readonly PLATFORM_DESC="RK3588 ARM64, 8GB RAM"
 
 # T6 优化参数 - 8GB 内存更宽裕
 ZRAM_SIZE=0        # 8GB 足够，不需要 ZRAM
@@ -670,8 +671,8 @@ detect_nanopi_t6() {
                 PLATFORM_DESC="RK3588S ARM64, 4-8GB RAM"
                 SYS_MEM_MB=4096  # T6S 通常 4GB
             else
-                PLATFORM_DESC="RK3588 ARM64, 16GB RAM"
-                SYS_MEM_MB=16384
+                PLATFORM_DESC="RK3588 ARM64, 8GB RAM"
+                SYS_MEM_MB=8192
             fi
             return 0
         fi
@@ -691,7 +692,7 @@ detect_nanopi_t6() {
 }
 
 optimize_memory_t6() {
-    log_step "配置内存优化 (T6 16GB)..."
+    log_step "配置内存优化 (T6 ${SYS_MEM_MB}MB)..."
     
     # 清理旧 swap
     for sw in /swapfile /swap.img; do
