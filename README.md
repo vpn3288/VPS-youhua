@@ -60,7 +60,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/inst
 | 平台 | CPU | 内存 | 特点 | 推荐脚本 |
 |------|-----|------|------|----------|
 | NanoPi R4S | RK3399 (ARM64) | 4GB | 双千兆网口，低功耗 | nanopi-r4s.sh |
-| NanoPi T6/T6S | RK3588 (ARM64) | 8GB | 性能强，适合重度使用 | nanopi-t6.sh |
+| NanoPi T6/T6S | RK3588 (ARM64) | 8GB | 性能强，适合重度使用(16GB大内存) | nanopi-t6.sh |
 | N5105 小主机 | Intel N5105 (x86_64) | 4-16GB | 低功耗x86，稳定可靠 | n5105.sh |
 | Oracle Cloud ARM | Ampere Altra (ARM64) | 2核16GB | 云环境，网络优化 | oracle-arm.sh |
 | 通用 x86 VPS | 任意 x86_64 | 自动适配 | 通用兼容 | generic-x86.sh |
@@ -75,9 +75,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/inst
 
 #### NanoPi T6/T6S
 - CPU: RK3588 (四核 Cortex-A76 + 四核 Cortex-A55)
-- 内存: 4-8GB LPDDR4X
+- 内存: 16GB LPDDR4X
 - 网络: 2.5Gbps (RTL8125)
-- 优化: 跳过ZRAM、TCP缓冲32MB、大内存优化
+- 优化: 跳过ZRAM(16GB充足)、大内存优化
 
 #### N5105/N5095 小主机
 - CPU: Intel N5105/N5095 (四核, 2.0-2.9GHz)

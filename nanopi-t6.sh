@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # NanoPi T6 专用优化安装脚本
-# 硬件: RK3588 ARM64, 8GB RAM (T6) / 4-8GB RAM (T6S)
+# 硬件: RK3588 ARM64, 16GB RAM (T6) / 4-8GB RAM (T6S)
 # 特点: 性能更强, 8GB大内存, 适合重度使用
 # =============================================================================
 #
@@ -595,7 +595,7 @@ RestartSec=10
 TimeoutStopSec=30
 LimitNOFILE=524288
 LimitNPROC=65535
-MemoryMax=4G
+MemoryMax=8G
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
@@ -647,7 +647,7 @@ optimize_io_scheduler() {
 
 
 readonly PLATFORM_NAME="NanoPi T6/T6S"
-readonly PLATFORM_DESC="RK3588 ARM64, 8GB RAM"
+readonly PLATFORM_DESC="RK3588 ARM64, 16GB RAM"
 
 # T6 优化参数 - 8GB 内存更宽裕
 ZRAM_SIZE=0        # 8GB 足够，不需要 ZRAM
@@ -670,8 +670,8 @@ detect_nanopi_t6() {
                 PLATFORM_DESC="RK3588S ARM64, 4-8GB RAM"
                 SYS_MEM_MB=4096  # T6S 通常 4GB
             else
-                PLATFORM_DESC="RK3588 ARM64, 8GB RAM"
-                SYS_MEM_MB=8192
+                PLATFORM_DESC="RK3588 ARM64, 16GB RAM"
+                SYS_MEM_MB=16384
             fi
             return 0
         fi
@@ -691,7 +691,7 @@ detect_nanopi_t6() {
 }
 
 optimize_memory_t6() {
-    log_step "配置内存优化 (T6 ${SYS_MEM_MB}MB)..."
+    log_step "配置内存优化 (T6 16GB)..."
     
     # 清理旧 swap
     for sw in /swapfile /swap.img; do
