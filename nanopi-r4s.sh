@@ -550,23 +550,53 @@ install_openclaw() {
         useradd -r -m -s /bin/bash -c "OpenClaw Service Account" "$OPENCLAW_USER" 2>/dev/null || true
     fi
     
-    # 全局安装
-    if ! command -v openclaw &>/dev/null; then
-        log_info "安装 OpenClaw (npm 全局安装)..."
-        npm install -g openclaw --registry https://registry.npmmirror.com >> "$APT_LOG" 2>&1 || {
-            npm install -g openclaw >> "$APT_LOG" 2>&1 || {
-                log_error "OpenClaw 安装失败"
+    # 根据安装方式安装
+    if [[ "${INSTALL_METHOD:-}" == "docker" ]]; then
+        # 容器安装 (Docker)
+        log_info "使用 Docker 容器安装 OpenClaw..."
+        
+        # 确保 Docker 已安装
+        if ! command -v docker &>/dev/null; then
+            log_info "安装 Docker..."
+            install_docker
+        fi
+        
+        # 创建 OpenClaw 数据目录
+        mkdir -p "$OPENCLAW_DATA_DIR"
+        chown -R "$OPENCLAW_USER:$OPENCLAW_USER" "$OPENCLAW_DATA_DIR" 2>/dev/null || true
+        
+        # 拉取镜像
+        log_info "拉取 OpenClaw 镜像..."
+        docker pull openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
+            log_warn "镜像拉取失败，尝试备用方案..."
+            docker pull ghcr.io/openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
+                log_error "Docker 镜像拉取失败"
                 return 1
             }
         }
+        
+        log_info "OpenClaw 容器安装完成"
+    else
+        # 全局安装 (npm)
+        log_info "使用全局安装 OpenClaw (npm install -g)..."
+        
+        if ! command -v openclaw &>/dev/null; then
+            npm install -g openclaw --registry https://registry.npmmirror.com >> "$APT_LOG" 2>&1 || {
+                npm install -g openclaw >> "$APT_LOG" 2>&1 || {
+                    log_error "OpenClaw 安装失败"
+                    return 1
+                }
+            }
+        fi
+        
+        # 创建目录
+        mkdir -p "$OPENCLAW_DATA_DIR"
+        chown -R "$OPENCLAW_USER:$OPENCLAW_USER" "$OPENCLAW_DATA_DIR" 2>/dev/null || true
+        
+        log_info "OpenClaw 全局安装完成"
     fi
-    
-    # 创建目录
-    mkdir -p "$OPENCLAW_DATA_DIR"
-    chown -R "$OPENCLAW_USER:$OPENCLAW_USER" "$OPENCLAW_DATA_DIR" 2>/dev/null || true
-    
-    log_info "OpenClaw 安装完成"
 }
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -595,7 +625,40 @@ create_systemd_service() {
             ;;
     esac
     
-    cat > /etc/systemd/system/openclaw-gateway.service <<EOF
+    if [[ "${INSTALL_METHOD:-}" == "docker" ]]; then
+        # Docker 容器模式
+        cat > /etc/systemd/system/openclaw-gateway.service <<EOF
+[Unit]
+Description=OpenClaw AI Gateway (Docker)
+Documentation=https://docs.openclaw.ai
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# Docker 容器运行 OpenClaw
+ExecStart=/usr/bin/docker run --rm \
+    --name openclaw-gateway \
+    --network host \
+    -v ${OPENCLAW_DATA_DIR}:/root/.openclaw \
+    -e OPENCLAW_DATA_DIR=/root/.openclaw \
+    -e NODE_ENV=production \
+    openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
+ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
+
+${memory_max}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    else
+        # 全局安装模式
+        cat > /etc/systemd/system/openclaw-gateway.service <<EOF
 [Unit]
 Description=OpenClaw AI Gateway
 Documentation=https://docs.openclaw.ai
@@ -621,10 +684,12 @@ ${memory_max}
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
     
     systemctl daemon-reload
     log_info "systemd 服务创建完成"
 }
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
