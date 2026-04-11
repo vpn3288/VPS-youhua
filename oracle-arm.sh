@@ -300,47 +300,106 @@ EOF
     log_info "时间同步配置完成"
 }
 
-
-
-# 配置中文 locale
-configure_locale() {
-    log_step "配置 locale..."
+# ─────────────────────────────────────────────────────────────────────────────
+# 自动检测服务器时区
+# ─────────────────────────────────────────────────────────────────────────────
+detect_timezone() {
+    log_step "检测服务器时区..."
     
-    # 检查是否已有中文 locale
-    if locale -a 2>/dev/null | grep -qi "zh_CN"; then
-        log_info "中文 locale 已存在"
-        return 0
-    fi
+    local detected_tz=""
     
-    # 安装中文 locale
-    apt-get install -y locales >> "$APT_LOG" 2>&1 || true
-    
-    # 生置中文 locale
-    sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen 2>/dev/null || true
-    locale-gen >> "$APT_LOG" 2>&1 || true
-    
-    # 设置默认 locale
-    update-locale LANG=zh_CN.UTF-8 2>/dev/null || true
-    
-    log_info "中文 locale 配置完成"
-}
-
-
-# 设置时区为 Asia/Shanghai
-configure_timezone() {
-    log_step "配置时区..."
-    
-    if [[ -f /etc/timezone ]]; then
-        local current_tz
-        current_tz=$(cat /etc/timezone 2>/dev/null || echo "")
-        if [[ "$current_tz" == "Asia/Shanghai" ]]; then
-            log_info "时区已是 Asia/Shanghai"
+    # 方法1: 优先使用 timedatectl 显示的当前时区
+    if command -v timedatectl &>/dev/null; then
+        detected_tz=$(timedatectl show --property=Timezone --value 2>/dev/null || true)
+        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
+            echo "$detected_tz"
             return 0
         fi
     fi
     
+    # 方法2: 从 /etc/timezone 读取
+    if [[ -f /etc/timezone ]] && [[ -n "$(cat /etc/timezone 2>/dev/null)" ]]; then
+        detected_tz=$(cat /etc/timezone 2>/dev/null)
+        if [[ -f "/usr/share/zoneinfo/$detected_tz" ]]; then
+            echo "$detected_tz"
+            return 0
+        fi
+    fi
     
-# 配置中文 locale
+    # 方法3: 从 /etc/localtime 读取 (符号链接)
+    if [[ -L /etc/localtime ]]; then
+        detected_tz=$(readlink -f /etc/localtime 2>/dev/null | sed 's|/usr/share/zoneinfo/||')
+        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
+            echo "$detected_tz"
+            return 0
+        fi
+    fi
+    
+    # 方法4: 通过 IP 地理位置 API 自动检测 (需要网络)
+    if ping -c1 -W3 ip-api.com &>/dev/null; then
+        detected_tz=$(curl -s --max-time 5 http://ip-api.com/json/ 2>/dev/null | \
+            python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('timezone',''))" 2>/dev/null || true)
+        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
+            echo "$detected_tz"
+            return 0
+        fi
+    fi
+    
+    # 方法5: 尝试解析 /usr/share/zoneinfo 目录
+    # 尝试常见的美国时区
+    for tz in "America/New_York" "America/Los_Angeles" "America/Chicago" "America/Denver"; do
+        if [[ -f "/usr/share/zoneinfo/$tz" ]]; then
+            echo "$tz"
+            return 0
+        fi
+    done
+    
+    # 默认 fallback
+    echo "UTC"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 配置时区
+# ─────────────────────────────────────────────────────────────────────────────
+configure_timezone() {
+    log_step "配置时区..."
+    
+    # 自动检测服务器当前时区
+    local server_tz
+    server_tz=$(detect_timezone)
+    
+    # 检查当前时区是否已是检测到的时区
+    local current_tz=""
+    if [[ -f /etc/timezone ]]; then
+        current_tz=$(cat /etc/timezone 2>/dev/null || echo "")
+    fi
+    
+    if [[ "$current_tz" == "$server_tz" ]]; then
+        log_info "时区已是 $server_tz (服务器当前时区)"
+        return 0
+    fi
+    
+    # 设置为检测到的时区
+    if command -v timedatectl &>/dev/null; then
+        timedatectl set-timezone "$server_tz" 2>/dev/null && {
+            log_info "时区已设置为 $server_tz (服务器当前时区)"
+            return 0
+        }
+    fi
+    
+    # Fallback: 手动链接
+    if [[ -f "/usr/share/zoneinfo/$server_tz" ]]; then
+        ln -sf "/usr/share/zoneinfo/$server_tz" /etc/localtime 2>/dev/null
+        echo "$server_tz" > /etc/timezone 2>/dev/null || true
+        log_info "时区已设置为 $server_tz (服务器当前时区)"
+    else
+        log_warn "无法设置时区 $server_tz，保持当前配置"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 配置 locale
+# ─────────────────────────────────────────────────────────────────────────────
 configure_locale() {
     log_step "配置 locale..."
     
@@ -353,7 +412,7 @@ configure_locale() {
     # 安装中文 locale
     apt-get install -y locales >> "$APT_LOG" 2>&1 || true
     
-    # 生置中文 locale
+    # 生成中文 locale
     sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen 2>/dev/null || true
     locale-gen >> "$APT_LOG" 2>&1 || true
     
@@ -361,16 +420,6 @@ configure_locale() {
     update-locale LANG=zh_CN.UTF-8 2>/dev/null || true
     
     log_info "中文 locale 配置完成"
-}
-
-
-# 设置时区
-    timedatectl set-timezone Asia/Shanghai 2>/dev/null || {
-        # 如果 timedatectl 不可用，使用手动链接
-        [[ -f /usr/share/zoneinfo/Asia/Shanghai ]] &&             ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime 2>/dev/null || true
-    }
-    
-    log_info "时区已设置为 Asia/Shanghai"
 }
 
 
