@@ -657,7 +657,8 @@ create_systemd_service() {
     log_step "创建 systemd 服务..."
     
     if [[ "${INSTALL_METHOD:-}" == "docker" ]]; then
-        cat > /etc/systemd/system/openclaw-gateway.service <<EOF
+        mkdir -p ~/.config/systemd/user
+    cat > ~/.config/systemd/user/openclaw-gateway.service <<EOF
 [Unit]
 Description=OpenClaw AI Gateway (Docker)
 Documentation=https://docs.openclaw.ai
@@ -683,10 +684,11 @@ ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
 MemoryMax=2G
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
     else
-        cat > /etc/systemd/system/openclaw-gateway.service <<EOF
+        mkdir -p ~/.config/systemd/user
+    cat > ~/.config/systemd/user/openclaw-gateway.service <<EOF
 [Unit]
 Description=OpenClaw AI Gateway
 Documentation=https://docs.openclaw.ai
@@ -710,12 +712,18 @@ LimitNOFILE=524288
 MemoryMax=2G
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
     fi
     
-    systemctl daemon-reload
+    systemctl --user daemon-reload
+    systemctl --user enable openclaw-gateway 2>/dev/null || true
     log_info "systemd 服务创建完成"
+    
+    # 提示用户启动服务
+    log_step "提示: 运行以下命令启动服务:"
+    echo "  systemctl --user start openclaw-gateway"
+    echo "  systemctl --user enable openclaw-gateway  # 开机自启"
 }
 
 

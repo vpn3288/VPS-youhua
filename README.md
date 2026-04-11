@@ -275,7 +275,7 @@ systemctl --user stop openclaw-gateway
 systemctl --user disable openclaw-gateway
 
 # 删除服务
-rm /etc/systemd/system/openclaw-gateway.service
+rm ~/.config/systemd/user/openclaw-gateway.service
 systemctl daemon-reload
 
 # 删除用户
