@@ -327,52 +327,119 @@ configure_locale() {
 }
 
 
-# 设置时区为 Asia/Shanghai
-configure_timezone() {
-    log_step "配置时区..."
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 自动检测服务器时区
+# ─────────────────────────────────────────────────────────────────────────────
+detect_timezone() {
+    log_step "检测服务器时区..."
     
-    if [[ -f /etc/timezone ]]; then
-        local current_tz
-        current_tz=$(cat /etc/timezone 2>/dev/null || echo "")
-        if [[ "$current_tz" == "Asia/Shanghai" ]]; then
-            log_info "时区已是 Asia/Shanghai"
+    local detected_tz=""
+    
+    # 方法1: timedatectl
+    if command -v timedatectl &>/dev/null; then
+        detected_tz=$(timedatectl show --property=Timezone --value 2>/dev/null || true)
+        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
+            echo "$detected_tz"
             return 0
         fi
     fi
     
+    # 方法2: /etc/timezone
+    if [[ -f /etc/timezone ]] && [[ -n "$(cat /etc/timezone 2>/dev/null)" ]]; then
+        detected_tz=$(cat /etc/timezone 2>/dev/null)
+        if [[ -f "/usr/share/zoneinfo/$detected_tz" ]]; then
+            echo "$detected_tz"
+            return 0
+        fi
+    fi
     
-# 配置中文 locale
+    # 方法3: /etc/localtime 符号链接
+    if [[ -L /etc/localtime ]]; then
+        detected_tz=$(readlink -f /etc/localtime 2>/dev/null | sed 's|/usr/share/zoneinfo/||')
+        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
+            echo "$detected_tz"
+            return 0
+        fi
+    fi
+    
+    # 方法4: IP 地理位置 API
+    if ping -c1 -W3 ip-api.com &>/dev/null; then
+        detected_tz=$(curl -s --max-time 5 http://ip-api.com/json/ 2>/dev/null | \
+            python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('timezone',''))" 2>/dev/null || true)
+        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
+            echo "$detected_tz"
+            return 0
+        fi
+    fi
+    
+    # 方法5: 美国时区 fallback
+    for tz in "America/New_York" "America/Los_Angeles" "America/Chicago" "America/Denver"; do
+        if [[ -f "/usr/share/zoneinfo/$tz" ]]; then
+            echo "$tz"
+            return 0
+        fi
+    done
+    
+    echo "UTC"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 配置时区
+# ─────────────────────────────────────────────────────────────────────────────
+configure_timezone() {
+    log_step "配置时区..."
+    
+    local server_tz
+    server_tz=$(detect_timezone)
+    
+    local current_tz=""
+    if [[ -f /etc/timezone ]]; then
+        current_tz=$(cat /etc/timezone 2>/dev/null || echo "")
+    fi
+    
+    if [[ "$current_tz" == "$server_tz" ]]; then
+        log_info "时区已是 $server_tz"
+        return 0
+    fi
+    
+    if command -v timedatectl &>/dev/null; then
+        timedatectl set-timezone "$server_tz" 2>/dev/null && {
+            log_info "时区已设置为 $server_tz"
+            return 0
+        }
+    fi
+    
+    if [[ -f "/usr/share/zoneinfo/$server_tz" ]]; then
+        ln -sf "/usr/share/zoneinfo/$server_tz" /etc/localtime 2>/dev/null
+        echo "$server_tz" > /etc/timezone 2>/dev/null || true
+        log_info "时区已设置为 $server_tz"
+    else
+        log_warn "无法设置时区 $server_tz"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 配置 locale
+# ─────────────────────────────────────────────────────────────────────────────
 configure_locale() {
     log_step "配置 locale..."
     
-    # 检查是否已有中文 locale
     if locale -a 2>/dev/null | grep -qi "zh_CN"; then
         log_info "中文 locale 已存在"
         return 0
     fi
     
-    # 安装中文 locale
     apt-get install -y locales >> "$APT_LOG" 2>&1 || true
-    
-    # 生置中文 locale
     sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen 2>/dev/null || true
     locale-gen >> "$APT_LOG" 2>&1 || true
-    
-    # 设置默认 locale
     update-locale LANG=zh_CN.UTF-8 2>/dev/null || true
     
     log_info "中文 locale 配置完成"
 }
 
 
-# 设置时区
-    timedatectl set-timezone Asia/Shanghai 2>/dev/null || {
-        # 如果 timedatectl 不可用，使用手动链接
-        [[ -f /usr/share/zoneinfo/Asia/Shanghai ]] &&             ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime 2>/dev/null || true
-    }
-    
-    log_info "时区已设置为 Asia/Shanghai"
-}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1080,6 +1147,43 @@ main() {
     echo "  系统:      ${SYS_OS_ID} ${SYS_OS_VERSION}"
     echo "  架构:      ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
     echo "  ZRAM:      ${ZRAM_SIZE}MB (${ZRAM_ALGO})"
+    # 安装方式选择 (交互式)
+    if [[ -t 0 ]]; then
+        echo ""
+        echo -e "${YELLOW}请选择 OpenClaw 安装方式:${NC}"
+        echo "  1) Docker 容器安装 (推荐，默认)"
+        echo "  2) 全局安装 (npm install -g)"
+        echo -n "选择 (1/2，默认 1): "
+        read -r install_choice
+        case "$install_choice" in
+            2)
+                export INSTALL_METHOD="npm"
+                INSTALL_DOCKER="false"
+                INSTALL_NODEJS="true"
+                install_method_display="全局安装 (npm)"
+                ;;
+            *)
+                export INSTALL_METHOD="docker"
+                INSTALL_DOCKER="true"
+                INSTALL_NODEJS="false"
+                install_method_display="Docker 容器 (推荐)"
+                ;;
+        esac
+    else
+        export INSTALL_METHOD="${INSTALL_METHOD:-docker}"
+        INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
+        INSTALL_NODEJS="${INSTALL_NODEJS:-false}"
+        install_method_display="Docker 容器 (默认)"
+    fi
+    
+    local docker_display="${INSTALL_DOCKER}"
+    local nodejs_display="${INSTALL_NODEJS}"
+    [[ "$docker_display" == "true" ]] && docker_display="是" || docker_display="跳过"
+    [[ "$nodejs_display" == "true" ]] && nodejs_display="是" || nodejs_display="跳过"
+    
+    echo "  安装方式:  ${install_method_display}"
+    echo "  Docker:    ${docker_display}"
+    echo "  Node.js:  ${nodejs_display}"
     echo "  Docker:    ${INSTALL_DOCKER}"
     echo "  Node.js:  ${NODEJS_VERSION}"
     echo ""
