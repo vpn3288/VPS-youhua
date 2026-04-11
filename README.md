@@ -4,6 +4,11 @@
 
 **为 OpenClaw AI 网关设计的专属平台优化脚本**
 
+[![Debian 12](https://img.shields.io/badge/Debian-12-AA0000?logo=debian)](https://www.debian.org/)
+[![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
+[![Node.js 24](https://img.shields.io/badge/Node.js-24-339933?logo=node.js)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 </div>
 
 ---
@@ -14,11 +19,11 @@
 
 ### 主要功能
 
-- 系统优化 - 网络、内存、I/O、CPU 全方位优化
-- 自动检测 - 智能识别硬件平台
-- 一键安装 - 下载即用，无需配置
-- 新手友好 - 中文界面，简单易用
-- 安全可靠 - 多重错误处理，幂等设计
+- 🖥️ **系统优化** - 网络、内存、I/O、CPU 全方位优化
+- 🔍 **自动检测** - 智能识别硬件平台和服务器时区
+- ⚡ **一键安装** - 下载即用，无需配置
+- 🛠️ **新手友好** - 中文界面，简单易用
+- 🔒 **安全可靠** - 多重错误处理，幂等设计
 
 ### 支持的系统
 
@@ -60,8 +65,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/inst
 | 平台 | CPU | 内存 | 特点 | 推荐脚本 |
 |------|-----|------|------|----------|
 | NanoPi R4S | RK3399 (ARM64) | 4GB | 双千兆网口，低功耗 | nanopi-r4s.sh |
-| NanoPi T6/T6S | RK3588 (ARM64) | 16GB | 性能强，适合重度使用(16GB大内存) | nanopi-t6.sh |
-| N5105 小主机 | Intel N5105 (x86_64) | 4-16GB | 低功耗x86，稳定可靠 | n5105.sh |
+| NanoPi T6/T6S | RK3588 (ARM64) | 16GB | 性能强，适合重度使用 | nanopi-t6.sh |
+| N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | 低功耗x86，稳定可靠 | n5105.sh |
 | Oracle Cloud ARM | Ampere Altra (ARM64) | 2核16GB | 云环境，网络优化 | oracle-arm.sh |
 | 通用 x86 VPS | 任意 x86_64 | 自动适配 | 通用兼容 | generic-x86.sh |
 
@@ -117,17 +122,23 @@ ssh root@your-server-ip
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh)
 ```
 
-#### 第三步：等待安装完成
+#### 第三步：选择安装方式
+
+脚本会提示选择安装方式：
+- **Docker 容器安装** (推荐)：环境隔离，易于管理
+- **全局安装** (npm install -g)：简单直接，占用资源少
+
+#### 第四步：等待安装完成
 
 脚本会自动完成以下操作：
-1. 检测硬件平台
+1. 检测硬件平台和服务器时区
 2. 优化系统参数
-3. 安装 Node.js
-4. 安装 Docker（可选）
+3. 安装 Node.js（全局安装模式）
+4. 安装 Docker（容器安装模式）
 5. 安装 OpenClaw
 6. 创建 systemd 服务
 
-#### 第四步：配置 OpenClaw
+#### 第五步：配置 OpenClaw
 
 安装完成后，运行以下命令完成 OpenClaw 配置：
 
@@ -139,16 +150,16 @@ sudo -u openclaw -i openclaw onboard --install-daemon
 按照提示完成：
 - 选择模型提供商
 - 输入 API Key
-- 配置 Telegram（可选）
+- 配置 Telegram Bot（可选）
 
-#### 第五步：启动服务
+#### 第六步：启动服务
 
 ```bash
 # 启动 OpenClaw Gateway
-systemctl start openclaw-gateway
+systemctl --user start openclaw-gateway
 
 # 查看状态
-systemctl status openclaw-gateway
+systemctl --user status openclaw-gateway
 
 # 查看 OpenClaw 状态
 openclaw status
@@ -161,7 +172,7 @@ openclaw status
 openclaw doctor
 
 # 查看 Gateway 日志
-journalctl -u openclaw-gateway -f
+journalctl --user -u openclaw-gateway -f
 
 # 测试端口
 ss -tlnp | grep 18789
@@ -171,22 +182,27 @@ ss -tlnp | grep 18789
 
 ## 脚本选项
 
-所有脚本支持以下选项：
+所有脚本支持以下环境变量：
 
-| 选项 | 说明 | 默认值 |
+| 变量 | 说明 | 默认值 |
 |------|------|--------|
-| --no-docker | 跳过 Docker 安装 | 安装 |
-| --no-nodejs | 跳过 Node.js 安装 | 安装 |
-| --nodejs-version N | 指定 Node.js 版本 | 24 |
+| `INSTALL_METHOD=docker` | Docker 容器安装 | 默认 |
+| `INSTALL_METHOD=npm` | 全局安装 | 可选 |
+| `INSTALL_DOCKER=false` | 跳过 Docker 安装 | 安装 |
+| `INSTALL_NODEJS=true` | 跳过 Node.js 安装 | 安装 |
+| `NODEJS_VERSION=24` | 指定 Node.js 版本 | 24 |
 
 ### 示例
 
 ```bash
-# 跳过 Docker 安装
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh) --no-docker
+# Docker 容器安装（默认）
+INSTALL_METHOD=docker bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)
 
-# 指定 Node.js 22
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh) --nodejs-version 22
+# 全局安装
+INSTALL_METHOD=npm bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)
+
+# 跳过 Docker，使用指定 Node.js 版本
+INSTALL_DOCKER=false NODEJS_VERSION=22 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)
 ```
 
 ---
@@ -199,7 +215,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nano
 | APT 源配置 | 腾讯云镜像 + 官方源备选 |
 | 系统清理 | 移除 snapd、apache、nginx 等 |
 | DNS 配置 | 1.1.1.1 + 8.8.8.8 |
-| 时区配置 | Asia/Shanghai |
+| 时区配置 | 自动检测服务器时区（支持IP地理定位） |
 | 时间同步 | chrony + NTP 服务器 |
 | 网络优化 | BBR + TCP 缓冲 + 连接追踪 |
 | 内存优化 | ZRAM（低内存设备）+ swappiness |
@@ -213,12 +229,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nano
 
 | 文件 | 路径 |
 |------|------|
-| OpenClaw 配置 | ~/.openclaw/openclaw.json |
-| Gateway 服务 | /etc/systemd/system/openclaw-gateway.service |
-| 系统限制 | /etc/security/limits.conf |
-| sysctl 配置 | /etc/sysctl.d/99-openclaw.conf |
-| Docker 配置 | /etc/docker/daemon.json |
-| 安装日志 | /var/log/openclaw-install.log |
+| OpenClaw 配置 | `~/.openclaw/openclaw.json` |
+| Gateway 服务 | `/etc/systemd/system/openclaw-gateway.service` (系统级) 或 `~/.config/systemd/user/openclaw-gateway.service` (用户级) |
+| 系统限制 | `/etc/security/limits.conf` |
+| sysctl 配置 | `/etc/sysctl.d/99-openclaw.conf` |
+| Docker 配置 | `/etc/docker/daemon.json` |
+| 安装日志 | `/var/log/openclaw-install.log` |
 
 ---
 
@@ -248,15 +264,15 @@ sudo -u openclaw -i openclaw onboard --install-daemon
 
 ```bash
 npm update -g openclaw
-systemctl restart openclaw-gateway
+systemctl --user restart openclaw-gateway
 ```
 
 ### Q: 如何卸载？
 
 ```bash
 # 停止服务
-systemctl stop openclaw-gateway
-systemctl disable openclaw-gateway
+systemctl --user stop openclaw-gateway
+systemctl --user disable openclaw-gateway
 
 # 删除服务
 rm /etc/systemd/system/openclaw-gateway.service
@@ -286,10 +302,10 @@ ufw allow 18789
 
 ```bash
 # 查看服务状态
-systemctl status openclaw-gateway
+systemctl --user status openclaw-gateway
 
 # 查看实时日志
-journalctl -u openclaw-gateway -f
+journalctl --user -u openclaw-gateway -f
 
 # 运行诊断
 openclaw doctor

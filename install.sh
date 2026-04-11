@@ -57,14 +57,18 @@ select_install_method() {
     done
     
     if [[ "$choice" == "1" ]]; then
-        INSTALL_METHOD="global"
+        INSTALL_METHOD="npm"
+        INSTALL_DOCKER="false"
+        INSTALL_NODEJS="true"
         log_info "选择: 全局安装 (npm install -g)"
     else
         INSTALL_METHOD="docker"
+        INSTALL_DOCKER="true"
+        INSTALL_NODEJS="false"
         log_info "选择: 容器安装 (Docker)"
     fi
     
-    export INSTALL_METHOD
+    export INSTALL_METHOD INSTALL_DOCKER INSTALL_NODEJS
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -175,6 +179,8 @@ main() {
     
     # 设置环境变量传递给平台脚本
     export INSTALL_METHOD
+    export INSTALL_DOCKER
+    export INSTALL_NODEJS
     
     # 下载并执行脚本
     bash <(curl -fsSL "$script_url")
