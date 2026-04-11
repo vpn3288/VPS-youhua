@@ -965,8 +965,46 @@ main() {
     echo "  ZRAM:      跳过 (内存充足)"
     echo "  TCP缓冲:   ${TCP_BUF_MAX} (64MB)"
     echo "  CT追踪:    ${CT_MAX}"
-    echo "  Docker:    ${INSTALL_DOCKER}"
-    echo "  Node.js:  ${NODEJS_VERSION}"
+    
+    # 安装方式选择 (交互式)
+    if [[ -t 0 ]]; then
+        echo ""
+        echo -e "${YELLOW}请选择 OpenClaw 安装方式:${NC}"
+        echo "  1) Docker 容器安装 (推荐，默认)"
+        echo "  2) 全局安装 (npm install -g)"
+        echo -n "选择 (1/2，默认 1): "
+        read -r install_choice
+        case "$install_choice" in
+            2)
+                export INSTALL_METHOD="npm"
+                INSTALL_DOCKER="false"
+                INSTALL_NODEJS="true"
+                install_method_display="全局安装 (npm)"
+                ;;
+            *)
+                export INSTALL_METHOD="docker"
+                INSTALL_DOCKER="true"
+                INSTALL_NODEJS="false"
+                install_method_display="Docker 容器 (推荐)"
+                ;;
+        esac
+    else
+        # 非交互模式默认 Docker
+        export INSTALL_METHOD="${INSTALL_METHOD:-docker}"
+        INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
+        INSTALL_NODEJS="${INSTALL_NODEJS:-false}"
+        install_method_display="Docker 容器 (默认)"
+    fi
+    
+    # 转换布尔值为显示文本
+    local docker_display="${INSTALL_DOCKER}"
+    local nodejs_display="${INSTALL_NODEJS}"
+    [[ "$docker_display" == "true" ]] && docker_display="是" || docker_display="跳过"
+    [[ "$nodejs_display" == "true" ]] && nodejs_display="是" || nodejs_display="跳过"
+    
+    echo "  安装方式:  ${install_method_display}"
+    echo "  Docker:    ${docker_display}"
+    echo "  Node.js:  ${nodejs_display}"
     echo ""
     
     if [[ -t 0 ]]; then
