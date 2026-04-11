@@ -602,7 +602,7 @@ install_openclaw() {
         log_info "使用 Docker 容器安装 OpenClaw..."
         if ! command -v docker &>/dev/null; then
             log_info "安装 Docker..."
-            install_docker
+            install_docker_oracle_arm
         fi
         mkdir -p "$OPENCLAW_DATA_DIR"
         chown -R "$OPENCLAW_USER:$OPENCLAW_USER" "$OPENCLAW_DATA_DIR" 2>/dev/null || true
