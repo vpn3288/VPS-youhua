@@ -796,6 +796,8 @@ net.ipv4.tcp_wmem = 4096 65536 ${TCP_BUF_MAX}
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_rfc1337 = 1
+net.ipv4.tcp_early_retrans = 3
+net.ipv4.tcp_orphan_retries = 1
 net.ipv4.tcp_keepalive_time = 60
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
@@ -834,6 +836,8 @@ net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
 net.ipv6.conf.all.disable_ipv6 = 0
 net.ipv6.conf.default.disable_ipv6 = 0
 net.ipv6.conf.default.forwarding = 1
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
 
 # 安全
 net.ipv4.conf.all.rp_filter = 1
