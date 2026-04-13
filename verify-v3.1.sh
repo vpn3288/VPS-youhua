@@ -250,6 +250,22 @@ check_sysctl_memory() {
     done
 
     echo ""
+    echo -e "  ${BOLD}[Armbian zram swap 状态]${RESET}"
+    local zram_swap_count
+    zram_swap_count=$(swapon --show 2>/dev/null | grep -c "^/dev/zram" || echo 0)
+    local zram_log_dev
+    zram_log_dev=$(df /var/log 2>/dev/null | tail -1 | awk "{print $1}" || echo "")
+    if [[ "$zram_swap_count" -gt 0 ]]; then
+        echo -e "    ${GREEN}✓${RESET} Armbian原生zram swap已启用 (压缩内存, 不写TF卡)"
+    fi
+    if [[ "$zram_log_dev" == *zram* ]]; then
+        echo -e "    ${GREEN}✓${RESET} armbian-ramlog /var/log在zram中 (零TF卡写入)"
+    fi
+    if swapon --show 2>/dev/null | grep -qE "^/swapfile|^/swap\.img"; then
+        echo -e "    ${RED}⚠ 物理swap文件已启用 (会写TF卡, 必须禁用!)${RESET}"
+    fi
+
+    echo ""
     echo -e "  ${BOLD}[OOM 保护]${RESET}"
     if [[ -f /etc/systemd/system/openclaw-gateway.service.d/oom.conf ]]; then
         echo -e "    ${GREEN}✓${RESET} OOM 配置文件存在"
