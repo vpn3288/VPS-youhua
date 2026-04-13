@@ -69,6 +69,7 @@ openclaw onboard --install-daemon
 | 平台 | CPU | 内存 | 存储 | 推荐脚本 |
 |------|-----|------|------|----------|
 | NanoPi R4S | RK3399 (ARM64) | 4GB | **TF卡** | `nanopi-r4s.sh` |
+| NanoPi T6 | RK3588 (ARM64) | 8-16GB | **eMMC** | `nanopi-t6.sh` |
 | Oracle Cloud ARM | Ampere Altra (ARM64) | 16GB | 云盘 | `oracle-arm.sh` |
 | N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | SSD | `n5105.sh` |
 | 通用 x86 VPS | 任意 x86_64 | 自动适配 | 自动检测 | `generic-x86.sh` |
@@ -95,6 +96,23 @@ TF卡写入寿命有限，脚本从系统层面最大限度减少随机写入：
 | conntrack timeout | 1800s | 减少连接表条目 |
 | CPU Governor | performance | ARM高频稳定运行 |
 | inotify watches | 524288 | 大量文件监控支持 |
+
+### NanoPi T6（eMMC 存储）
+
+eMMC 写入寿命比 TF 卡好得多，但仍需优化随机写入：
+
+| 优化项 | 配置值 | 说明 |
+|--------|--------|------|
+| 物理 swap | 禁用文件，保留 zswap | 16GB RAM + zswap 压缩，eMMC 不怕写 |
+| dirty_ratio | 20 | 减少回写频率 |
+| dirty_background_ratio | 10 | 后台合并写入 |
+| dirty_writeback_centisecs | 6000（6秒） | 减少 eMMC 随机写入 |
+| vm.swappiness | 10 | 减少 swap 倾向 |
+| netdev_max_backlog | 65535 | 大吞吐量队列 |
+| conntrack timeout | 3600s | 长连接优化 |
+| CPU Governor | performance | RK3588 高频稳定运行 |
+| inotify watches | 1048576 | 大量文件监控支持 |
+
 
 ### Oracle Cloud ARM（云环境）
 
