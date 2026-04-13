@@ -825,6 +825,7 @@ vm.zone_reclaim_mode = 0
 
 # 连接追踪
 net.netfilter.nf_conntrack_max = ${CT_MAX}
+net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 1800
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
 

@@ -629,6 +629,7 @@ vm.vfs_cache_pressure = 50
 
 # === 连接追踪 (云环境需要更多) ===
 net.netfilter.nf_conntrack_max = ${CT_MAX}
+net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 3600
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
 net.netfilter.nf_conntrack_tcp_timeout_close_wait = 5
