@@ -1012,7 +1012,11 @@ optimize_ssh() {
 
     sed -i 's/^PermitEmptyPasswords.*/PermitEmptyPasswords no/' "$sshd_config" 2>/dev/null || true
     sed -i 's/^PermitRootLogin.*/PermitRootLogin prohibit-password/' "$sshd_config" 2>/dev/null || true
-
+    sed -i 's/^PubkeyAuthentication.*/PubkeyAuthentication no/' "$sshd_config" 2>/dev/null || true
+    grep -q "^ClientAliveInterval" "$sshd_config" 2>/dev/null || echo "ClientAliveInterval 3600" >> "$sshd_config"
+    sed -i 's/^ClientAliveInterval.*/ClientAliveInterval 3600/' "$sshd_config" 2>/dev/null || true
+    sed -i 's/^ClientAliveCountMax.*/ClientAliveCountMax 3/' "$sshd_config" 2>/dev/null || true
+    sed -i 's/^X11Forwarding.*/X11Forwarding no/' "$sshd_config" 2>/dev/null || true
     log_info "SSH 加固完成"
 }
 
