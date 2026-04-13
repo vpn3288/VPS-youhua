@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# 通用 x86_64 VPS 优化安装脚本 v3.0
+# 通用 x86_64 VPS 优化安装脚本 v3.1
 # 硬件: 通用 x86_64 架构
 # 特点: 自适应内存配置，通用性强
 # =============================================================================
@@ -494,7 +494,7 @@ EOF
 }
 
 # =============================================================================
-# sysctl 优化 (v3.0)
+# sysctl 优化 (v3.1)
 # =============================================================================
 configure_sysctl_generic() {
     log_step "配置 sysctl (通用 x86 v3.0)..."
@@ -503,7 +503,7 @@ configure_sysctl_generic() {
     backup_file "$sysctl_file"
 
     cat > "$sysctl_file" <<EOF
-# 通用 x86_64 VPS OpenClaw 优化配置 v3.0
+# 通用 x86_64 VPS OpenClaw 优化配置 v3.1
 # ${PROFILE_DESC}
 
 # === 网络缓冲区 ===
@@ -580,13 +580,18 @@ net.ipv6.conf.default.accept_redirects = 0
 # === IPv6 ===
 net.ipv6.conf.all.disable_ipv6 = 0
 net.ipv6.conf.default.disable_ipv6 = 0
+net.ipv6.conf.default.forwarding = 1
+
+# === 网关转发 ===
+net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1
 EOF
 
     # 加载 BBR 模块
     modprobe tcp_bbr 2>/dev/null || true
     modprobe tcp_dctcp 2>/dev/null || true
     sysctl -p "$sysctl_file" 2>/dev/null || true
-    log_info "sysctl 通用 x86 v3.0 优化完成"
+    log_info "sysctl 通用 x86 v3.1 优化完成"
 }
 
 # =============================================================================

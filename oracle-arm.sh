@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.0
+# Oracle Cloud ARM 专用优化安装脚本 v3.1
 # 硬件: Ampere Altra, 2核16GB, 100GB
 # 特点: 云计算环境优化，稳定长期运行
 # =============================================================================
@@ -573,7 +573,7 @@ optimize_memory_oracle_arm() {
 }
 
 # =============================================================================
-# sysctl 优化（v3.0 云环境专用）
+# sysctl 优化（v3.1 云环境专用）
 # =============================================================================
 configure_sysctl_oracle_arm() {
     log_step "配置 sysctl (Oracle Cloud ARM v3.0)..."
@@ -582,7 +582,7 @@ configure_sysctl_oracle_arm() {
     backup_file "$sysctl_file"
 
     cat > "$sysctl_file" <<EOF
-# Oracle Cloud ARM OpenClaw 优化配置 v3.0
+# Oracle Cloud ARM OpenClaw 优化配置 v3.1
 # Ampere Altra, 16GB RAM
 
 # === 网络缓冲区 (云环境优化 - 32MB) ===
@@ -599,6 +599,7 @@ net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
 net.ipv4.tcp_wmem = 4096 131072 ${TCP_BUF_MAX}
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_rfc1337 = 1
 net.ipv4.tcp_keepalive_time = 60
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
@@ -639,6 +640,7 @@ net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 # === IPv6 ===
 net.ipv6.conf.all.disable_ipv6 = 0
 net.ipv6.conf.default.disable_ipv6 = 0
+net.ipv6.conf.default.forwarding = 1
 
 # === 安全 ===
 net.ipv4.conf.all.rp_filter = 1
@@ -668,7 +670,7 @@ EOF
     modprobe tcp_bbr 2>/dev/null || true
     modprobe tcp_dctcp 2>/dev/null || true
     sysctl -p "$sysctl_file" 2>/dev/null || true
-    log_info "sysctl Oracle Cloud ARM v3.0 优化完成"
+    log_info "sysctl Oracle Cloud ARM v3.1 优化完成"
 }
 
 # =============================================================================

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.0
+# NanoPi R4S 专用优化安装脚本 v3.1
 # 硬件: RK3399 ARM64, 4GB RAM, 双网口, TF卡
 # 特点: TF卡保护为核心，安全/稳定/长期运行
 # =============================================================================
@@ -332,7 +332,7 @@ EOFDOCKERLIM
 }
 
 # =============================================================================
-# TF卡保护核心优化 v3.0
+# TF卡保护核心优化 v3.1
 # =============================================================================
 configure_tf_card_protection() {
     log_step "TF卡保护核心优化..."
@@ -778,7 +778,7 @@ configure_sysctl_r4s() {
     backup_file "$sysctl_file"
 
     cat > "$sysctl_file" <<EOFSYSCTL
-# NanoPi R4S OpenClaw 优化配置 v3.0
+# NanoPi R4S OpenClaw 优化配置 v3.1
 # RK3399 ARM64, 4GB RAM, TF卡存储
 
 # 网络缓冲区 (R4S - 8MB)
@@ -795,6 +795,7 @@ net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
 net.ipv4.tcp_wmem = 4096 65536 ${TCP_BUF_MAX}
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_rfc1337 = 1
 net.ipv4.tcp_keepalive_time = 60
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
@@ -832,6 +833,7 @@ net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
 # IPv6
 net.ipv6.conf.all.disable_ipv6 = 0
 net.ipv6.conf.default.disable_ipv6 = 0
+net.ipv6.conf.default.forwarding = 1
 
 # 安全
 net.ipv4.conf.all.rp_filter = 1
@@ -861,7 +863,7 @@ EOFSYSCTL
     modprobe tcp_bbr 2>/dev/null || true
     modprobe tcp_dctcp 2>/dev/null || true
     sysctl -p "$sysctl_file" 2>/dev/null || true
-    log_info "sysctl R4S v3.0 优化完成"
+    log_info "sysctl R4S v3.1 优化完成"
 }
 
 # =============================================================================

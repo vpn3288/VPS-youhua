@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# N5105/N5095 小主机专用优化安装脚本 v3.0
+# N5105/N5095 小主机专用优化安装脚本 v3.1
 # 硬件: Intel N5105/N5095 x86_64, 低功耗小主机
 # 特点: SSD优先，性能与静音平衡
 # =============================================================================
@@ -498,7 +498,7 @@ EOF
 }
 
 # =============================================================================
-# sysctl 优化 (v3.0)
+# sysctl 优化 (v3.1)
 # =============================================================================
 configure_sysctl_n5105() {
     log_step "配置 sysctl (N5105 v3.0)..."
@@ -507,7 +507,7 @@ configure_sysctl_n5105() {
     backup_file "$sysctl_file"
 
     cat > "$sysctl_file" <<EOF
-# N5105/N5095 小主机 OpenClaw 优化配置 v3.0
+# N5105/N5095 小主机 OpenClaw 优化配置 v3.1
 # Intel x86_64 低功耗平台
 
 # === 网络缓冲区 (N5105 - 24MB) ===
@@ -581,13 +581,20 @@ kernel.yama.ptrace_scope = 1
 # === IPv6 ===
 net.ipv6.conf.all.disable_ipv6 = 0
 net.ipv6.conf.default.disable_ipv6 = 0
+net.ipv6.conf.default.forwarding = 1
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
+
+# === 网关转发 ===
+net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1
 EOF
 
     # 加载 BBR 模块
     modprobe tcp_bbr 2>/dev/null || true
     modprobe tcp_dctcp 2>/dev/null || true
     sysctl -p "$sysctl_file" 2>/dev/null || true
-    log_info "sysctl N5105 v3.0 优化完成"
+    log_info "sysctl N5105 v3.1 优化完成"
 }
 
 # =============================================================================
