@@ -557,12 +557,20 @@ net.netfilter.nf_conntrack_tcp_timeout_time_wait = 15
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
 net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.default.secure_redirects = 0
 net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
 net.ipv4.tcp_syncookies = 1
 kernel.dmesg_restrict = 1
 kernel.kptr_restrict = 1
 kernel.yama.ptrace_scope = 1
+# IPv6 安全
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
 
 # === IPv6 ===
 net.ipv6.conf.all.disable_ipv6 = 0
