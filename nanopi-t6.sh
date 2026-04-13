@@ -535,6 +535,35 @@ EOF
     log_info "系统限制配置完成"
 }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SSH 安全加固
+# ─────────────────────────────────────────────────────────────────────────────
+optimize_ssh_t6() {
+    log_step "SSH 安全加固 (T6)..."
+
+    local sshd_config="/etc/ssh/sshd_config"
+    [[ ! -f "$sshd_config" ]] && { log_warn "sshd_config 不存在，跳过"; return 0; }
+
+    backup_file "$sshd_config"
+
+    # 允许密码登录（AIagent 可能需要），但加固其他安全项
+    local changes=0
+    for param_val in         "MaxAuthTries 3"         "ClientAliveInterval 3600"         "ClientAliveCountMax 3"         "X11Forwarding no"         "PermitRootLogin prohibit-password"         "PubkeyAuthentication no"         "PasswordAuthentication yes"; do
+        local param="${param_val% *}"
+        local val="${param_val#* }"
+        if grep -q "^${param}[[:space:]]" "$sshd_config" 2>/dev/null; then
+            sed -i "s/^${param}[[:space:]].*/${param} ${val}/" "$sshd_config"
+        else
+            echo "${param} ${val}" >> "$sshd_config"
+        fi
+        ((changes++))
+    done
+
+    systemctl reload sshd 2>/dev/null || true
+    log_info "SSH 加固完成 (${changes} 项已更新)"
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 安装 Node.js
 # ─────────────────────────────────────────────────────────────────────────────
@@ -772,6 +801,7 @@ SWAPPINESS=10       # 低 swappiness，内存充足
 TCP_BUF_MAX=33554432  # 32MB TCP 缓冲
 TCP_TW_BUCKETS=65536
 CT_MAX=131072
+CT_HASH_SIZE=65536  # conntrack hash size (与 CT_MAX 成比例)
 INOTIFY_WATCHES=1048576  # 完整 inotify
 
 detect_nanopi_t6() {
@@ -782,14 +812,16 @@ detect_nanopi_t6() {
         model=$(cat /proc/device-tree/model 2>/dev/null || echo "")
         if echo "$model" | grep -qi "T6"; then
             log_info "检测到: $model"
-            # 检测是 T6 还是 T6S
+            # 自动检测真实内存（不要硬编码，让 line 81 的检测结果生效）
+            # T6 通常 8-16GB，T6S 通常 4GB
             if echo "$model" | grep -qi "S"; then
-                PLATFORM_DESC="RK3588S ARM64, 4-8GB RAM"
-                SYS_MEM_MB=4096  # T6S 通常 4GB
+                PLATFORM_DESC="RK3588S ARM64, 自动检测内存"
+                SYS_MEM_MB=${SYS_MEM_MB:-4096}  # T6S fallback
             else
-                PLATFORM_DESC="RK3588 ARM64, 8GB RAM"
-                SYS_MEM_MB=8192
+                PLATFORM_DESC="RK3588 ARM64, 自动检测内存"
+                SYS_MEM_MB=${SYS_MEM_MB:-8192}  # T6 fallback
             fi
+            log_info "内存将自动检测: ${SYS_MEM_MB}MB (实际以系统检测为准)"
             return 0
         fi
     fi
@@ -809,19 +841,19 @@ detect_nanopi_t6() {
 
 optimize_memory_t6() {
     log_step "配置内存优化 (T6 ${SYS_MEM_MB}MB)..."
-    
-    # 清理旧 swap
+
+    # 清理物理swap文件（eMMC 不怕，但物理 swap 文件会占用 eMMC 空间）
     for sw in /swapfile /swap.img; do
         swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
     sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
-    
-    # 8GB 足够，跳过 ZRAM
-    [[ -f /sys/module/zswap/parameters/enabled ]] && echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
-    
+
+    # 保留 zswap：16GB RAM 充足，zswap 压缩 swap 很有用；eMMC 不怕写，无需禁用
+    log_info "zswap 保持原状（16GB RAM 充足，eMMC 不怕写）"
+
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
-    log_info "内存优化完成 (8GB 足够，跳过 ZRAM)"
+    log_info "内存优化完成 (eMMC存储, 保留zswap)"
 }
 
 configure_sysctl_t6() {
@@ -831,58 +863,97 @@ configure_sysctl_t6() {
     backup_file "$sysctl_file"
     
     cat > "$sysctl_file" <<EOF
-# NanoPi T6/T6S OpenClaw 优化配置
-# RK3588 ARM64, ${SYS_MEM_MB}MB RAM
+# NanoPi T6/T6S 环境优化配置
+# RK3588 ARM64, ${SYS_MEM_MB}MB RAM, 64GB eMMC
 
-# 网络缓冲区 (T6 优化 - 32MB)
+# ===== TCP 核心优化 =====
+net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
+net.ipv4.tcp_wmem = 4096 131072 ${TCP_BUF_MAX}
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_keepalive_time = 1800
+net.ipv4.tcp_keepalive_intvl = 30
+net.ipv4.tcp_keepalive_probes = 3
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_max_syn_backlog = 65535
+net.ipv4.tcp_max_tw_buckets = ${TCP_TW_BUCKETS}
+net.ipv4.tcp_rfc1337 = 1
+net.ipv4.tcp_early_retrans = 3
+net.ipv4.tcp_orphan_retries = 1
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_notsent_lowat = 16384
+net.ipv4.tcp_timestamps = 1
+net.ipv4.tcp_sack = 1
+
+# ===== 网络队列与缓冲 =====
 net.core.rmem_max = ${TCP_BUF_MAX}
 net.core.wmem_max = ${TCP_BUF_MAX}
 net.core.rmem_default = 262144
 net.core.wmem_default = 262144
 net.core.netdev_max_backlog = 65535
 net.core.somaxconn = 65535
+net.ipv4.ip_local_port_range = 10240 65535
 
-# TCP (T6 优化)
-net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
-net.ipv4.tcp_wmem = 4096 131072 ${TCP_BUF_MAX}
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_fin_timeout = 15
-net.ipv4.tcp_keepalive_time = 60
-net.ipv4.tcp_keepalive_intvl = 10
-net.ipv4.tcp_keepalive_probes = 3
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_fastopen = 3
-net.ipv4.tcp_max_syn_backlog = 65535
-net.ipv4.tcp_max_tw_buckets = ${TCP_TW_BUCKETS}
-
-# BBR
+# ===== BBR 拥塞控制 =====
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 
-# 文件描述符 (T6 内存充足)
-fs.file-max = 1048576
-fs.nr_open = 1048576
-
-# 内存 (T6 充足)
-vm.swappiness = ${SWAPPINESS}
-vm.dirty_ratio = 20
-vm.dirty_background_ratio = 10
-vm.min_free_kbytes = 32768
-vm.overcommit_memory = 1
-
-# 连接追踪
-net.netfilter.nf_conntrack_max = ${CT_MAX}
-net.netfilter.nf_conntrack_tcp_timeout_established = 3600
-
-# IPv6
-net.ipv6.conf.all.disable_ipv6 = 0
-net.ipv6.conf.default.disable_ipv6 = 0
-
-# 安全
+# ===== 安全加固 =====
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.default.secure_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+net.ipv4.conf.all.log_martians = 0
+net.ipv4.conf.default.log_martians = 0
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
+net.ipv4.tcp_syncookies = 1
 kernel.dmesg_restrict = 1
 kernel.kptr_restrict = 1
+kernel.yama.ptrace_scope = 1
+
+# ===== IPv6 =====
+net.ipv6.conf.all.disable_ipv6 = 0
+net.ipv6.conf.default.disable_ipv6 = 0
+net.ipv6.conf.all.forwarding = 1
+net.ipv6.conf.default.forwarding = 1
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
+net.ipv4.ip_forward = 1
+
+# ===== 连接追踪 conntrack =====
+net.netfilter.nf_conntrack_max = ${CT_MAX}
+net.netfilter.nf_conntrack_hashsize = ${CT_HASH_SIZE}
+net.netfilter.nf_conntrack_tcp_timeout_established = 3600
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
+net.netfilter.nf_conntrack_tcp_timeout_close_wait = 5
+net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
+
+# ===== 内存管理 =====
+vm.swappiness = \${SWAPPINESS}
+vm.overcommit_memory = 1
+vm.zone_reclaim_mode = 0
+vm.vfs_cache_pressure = 50
+
+# eMMC 保护：dirty_writeback 调优（减少随机写入，延长 eMMC 寿命）
+vm.dirty_ratio = 20
+vm.dirty_background_ratio = 10
+vm.dirty_writeback_centisecs = 6000
+vm.dirty_expire_centisecs = 60000
+
+# 内存充足，min_free_kbytes 适当调高
+vm.min_free_kbytes = 32768
+
+# ===== 文件描述符 =====
+fs.file-max = 1048576
+fs.nr_open = 1048576
+fs.inotify.max_user_watches = 1048576
+fs.inotify.max_user_instances = 8192
 EOF
     
     sysctl -p "$sysctl_file" 2>/dev/null || true
@@ -996,6 +1067,7 @@ main() {
     optimize_memory_t6
     configure_sysctl_t6
     configure_limits
+    optimize_ssh_t6
     configure_dns
     configure_time_sync
     configure_timezone
