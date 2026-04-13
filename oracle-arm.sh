@@ -11,6 +11,12 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# 提高当前shell的文件描述符限制（立即生效）
+ulimit -n 1048576
+ulimit -u 131072
+ulimit -m unlimited
+[[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
+
 # =============================================================================
 # 通用函数库
 # =============================================================================
@@ -644,6 +650,9 @@ kernel.kptr_restrict = 1
 kernel.yama.ptrace_scope = 1
 EOF
 
+    # 加载 BBR 模块
+    modprobe tcp_bbr 2>/dev/null || true
+    modprobe tcp_dctcp 2>/dev/null || true
     sysctl -p "$sysctl_file" 2>/dev/null || true
     log_info "sysctl Oracle Cloud ARM v3.0 优化完成"
 }

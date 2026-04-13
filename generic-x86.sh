@@ -11,6 +11,12 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+# 提高当前shell的文件描述符限制（立即生效）
+ulimit -n 1048576
+ulimit -u 131072
+ulimit -m unlimited
+[[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
+
 # 颜色
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'
@@ -562,6 +568,9 @@ net.ipv6.conf.all.disable_ipv6 = 0
 net.ipv6.conf.default.disable_ipv6 = 0
 EOF
 
+    # 加载 BBR 模块
+    modprobe tcp_bbr 2>/dev/null || true
+    modprobe tcp_dctcp 2>/dev/null || true
     sysctl -p "$sysctl_file" 2>/dev/null || true
     log_info "sysctl 通用 x86 v3.0 优化完成"
 }
