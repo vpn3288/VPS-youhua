@@ -428,15 +428,20 @@ EOFSYSCTL
 EOFLOGROTATE
     log_info "logrotate 已配置"
 
-    # 9. 禁用swap
-    log_step "禁用 swap（保护TF卡）..."
+    # 9. TF卡保护：禁用物理swap但不破坏Armbian原生zram
+    log_step "TF卡保护：检查物理swap... "
+    # 只禁用物理swap文件（会写TF卡），不碰zram
     for sw in /swapfile /swap.img; do
-        swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
-        [[ -f "$sw" ]] && rm -f "$sw"
+        if swapon --show 2>/dev/null | grep -q "$sw"; then
+            swapoff "$sw" 2>/dev/null || true
+            rm -f "$sw"
+            log_info "物理swap $sw 已禁用"
+        fi
     done
     sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
-    [[ -f /sys/module/zswap/parameters/enabled ]] && echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
-    log_info "swap 已禁用"
+    # 注意：不禁用zswap — Armbian原生zram-config依赖zswap压缩
+    # Armbian的zram swap是压缩内存，零TF卡写入，完全安全
+    log_info "Armbian原生zram swap保持启用（压缩内存，不写TF卡）"
 
     # 10. 清理定时任务
     configure_cleanup_cron
@@ -737,11 +742,15 @@ detect_nanopi_r4s() {
 optimize_memory_r4s() {
     log_step "配置内存优化 (R4S 4GB)..."
     for sw in /swapfile /swap.img; do
-        swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
-        [[ -f "$sw" ]] && rm -f "$sw"
+        if swapon --show 2>/dev/null | grep -q "$sw"; then
+            swapoff "$sw" 2>/dev/null || true
+            rm -f "$sw"
+            log_info "物理swap $sw 已禁用"
+        fi
     done
     sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
-    [[ -f /sys/module/zswap/parameters/enabled ]] && echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
+    # 注意：不禁用zswap — Armbian原生zram-config依赖zswap压缩，零TF卡写入
+    log_info "Armbian原生zram swap保持启用（压缩内存，不写TF卡）"
 
     if [[ $SYS_MEM_MB -ge 4096 ]]; then
         log_info "内存 >= 4GB，ZRAM ${ZRAM_SIZE}MB (紧急备用)"
@@ -750,18 +759,12 @@ optimize_memory_r4s() {
         log_info "内存 < 4GB，ZRAM 调整为 ${ZRAM_SIZE}MB"
     fi
 
-    if modinfo zram >/dev/null 2>&1 || [[ -d /sys/block/zram0 ]]; then
-        apt-get remove --purge -y zram-config >> "$APT_LOG" 2>&1 || true
-        apt-get install -y --no-install-recommends zram-tools >> "$APT_LOG" 2>&1 || true
-        cat > /etc/default/zramswap <<EOFZRAM
-ALGO=${ZRAM_ALGO}
-SIZE=${ZRAM_SIZE}
-PRIORITY=100
-EOFZRAM
-        systemctl enable zramswap 2>/dev/null || true
-        systemctl restart zramswap 2>/dev/null || true
-        sleep 2
-        lsblk | grep -q zram && log_info "ZRAM ${ZRAM_SIZE}MB (${ZRAM_ALGO}) 已启用"
+    if [[ -d /sys/block/zram0 ]]; then
+        # Armbian 原生自带 armbian-zram-config + armbian-ramlog
+        # 不要卸载！armbian-ramlog 负责 /var/log ramlog（写内存不写TF卡）
+        # 只需调整 vm.swappiness 让系统优先回收page cache而非用swap
+        log_info "Armbian zram-config 已存在，保持原状（armbian-ramlog 管/var/log）"
+        log_info "armbian-ramlog 将/var/log写入zram，零TF卡写入"
     else
         log_warn "ZRAM 不可用"
     fi
@@ -1099,7 +1102,7 @@ main() {
     echo "  - log2ram: 64MB RAM日志缓冲"
     echo "  - /tmp: tmpfs (减少TF卡写入)"
     echo "  - ext4: commit=600 (5分钟批量写)"
-    echo "  - swap: 已禁用 (保护TF卡)"
+    echo "  - swap: 物理swap已禁用, Armbian原生zram保持启用(压缩内存)"
     echo "  - 每日清理: 自动执行"
     echo ""
     echo -e "${CYAN}后续步骤:${NC}"
