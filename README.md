@@ -1,13 +1,16 @@
-# OpenClaw 一键优化安装脚本
+# VPS-youhua 环境优化脚本
 
 <div align="center">
 
-**为 OpenClaw AI 网关设计的专属平台优化脚本**
+**AIagent 安装前的硬件环境优化脚本**
+适用于 OpenClaw、Hermes 等所有 AIagent
+仅优化环境，不安装 AIagent 本身
 
 [![Debian 12](https://img.shields.io/badge/Debian-12-AA0000?logo=debian)](https://www.debian.org/)
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
-[![Node.js 24](https://img.shields.io/badge/Node.js-24-339933?logo=node.js)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![v3.1](https://img.shields.io/badge/版本-v3.1-green.svg)](https://github.com/vpn3288/VPS-youhua)
+[![4平台](https://img.shields.io/badge/平台-4个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
 
 </div>
 
@@ -15,311 +18,320 @@
 
 ## 简介
 
-本项目提供针对 **OpenClaw AI 网关**的一键优化安装脚本，支持多种硬件平台。
+本项目为 AIagent（OpenClaw、Hermes 等）提供**安装前的环境优化**，让 AIagent 能以安全、稳定、高速、长期运行的状态部署。
 
-### 主要功能
+**只优化环境，不安装 AIagent。** 安装完本脚本的环境后，再按各 AIagent 官方方式安装本体。
 
-- 🖥️ **系统优化** - 网络、内存、I/O、CPU 全方位优化
-- 🔍 **自动检测** - 智能识别硬件平台和服务器时区
-- ⚡ **一键安装** - 下载即用，无需配置
-- 🛠️ **新手友好** - 中文界面，简单易用
-- 🔒 **安全可靠** - 多重错误处理，幂等设计
+### 核心原则
 
-### 支持的系统
-
-| 系统 | 版本 |
-|------|------|
-| Debian | 12 (Bookworm) |
-| Ubuntu | 24.04 LTS (Noble) |
+- **安全优先**：所有优化均经过验证，不引入潜在风险
+- **稳定长期**：参数以长期稳定运行为目标，不过度激进
+- **硬件适配**：每个平台针对性优化，不搞一刀切
+- **TF卡保护**（R4S专用）：dirty_writeback、SWAP、journald 等全部针对TF卡寿命优化
 
 ---
 
 ## 快速开始
 
-### 方式一：自动检测（推荐新手）
-
-自动检测你的硬件平台并选择最优脚本：
+### 第一步：运行优化脚本（选一个）
 
 ```bash
+# 自动检测平台（推荐新手）
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh)
+
+# 手动指定平台
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)    # NanoPi R4S
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)  # Oracle Cloud ARM
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)        # N5105/N5095 小主机
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)   # 其他 x86 VPS
 ```
 
-### 方式二：手动选择
+### 第二步：验证优化效果
 
-根据你的硬件平台选择对应的脚本：
+```bash
+curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.1.sh -o /tmp/verify-v3.1.sh
+bash /tmp/verify-v3.1.sh
+```
 
-| 硬件 | 一键命令 |
-|------|----------|
-| NanoPi R4S | `bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)` |
-| NanoPi T6/T6S | `bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-t6.sh)` |
-| N5105/N5095 小主机 | `bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)` |
-| Oracle Cloud ARM | `bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)` |
-| 其他 x86 VPS | `bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)` |
+### 第三步：安装 AIagent
+
+优化完成后，按各 AIagent 官方文档安装。例如 OpenClaw：
+
+```bash
+npm install -g openclaw
+openclaw onboard --install-daemon
+```
 
 ---
 
 ## 支持的平台
 
-### 硬件平台对比
-
-| 平台 | CPU | 内存 | 特点 | 推荐脚本 |
+| 平台 | CPU | 内存 | 存储 | 推荐脚本 |
 |------|-----|------|------|----------|
-| NanoPi R4S | RK3399 (ARM64) | 4GB | 双千兆网口，低功耗 | nanopi-r4s.sh |
-| NanoPi T6/T6S | RK3588 (ARM64) | 16GB | 性能强，适合重度使用 | nanopi-t6.sh |
-| N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | 低功耗x86，稳定可靠 | n5105.sh |
-| Oracle Cloud ARM | Ampere Altra (ARM64) | 2核16GB | 云环境，网络优化 | oracle-arm.sh |
-| 通用 x86 VPS | 任意 x86_64 | 自动适配 | 通用兼容 | generic-x86.sh |
-
-### 各平台优化详情
-
-#### NanoPi R4S
-- CPU: RK3399 (双核 Cortex-A72 + 四核 Cortex-A53)
-- 内存: 4GB LPDDR4
-- 网络: 双千兆网口 (RTL8211E)
-- 优化: ZRAM 1GB、TCP缓冲16MB、ARM特定调优
-
-#### NanoPi T6/T6S
-- CPU: RK3588 (四核 Cortex-A76 + 四核 Cortex-A55)
-- 内存: 16GB LPDDR4X
-- 网络: 2.5Gbps (RTL8125)
-- 优化: 跳过ZRAM(16GB充足)、大内存优化
-
-#### N5105/N5095 小主机
-- CPU: Intel N5105/N5095 (四核, 2.0-2.9GHz)
-- 内存: 4-16GB DDR4
-- 网络: 2.5Gbps (RTL8125)
-- 优化: Intel P-State、irqbalance、按内存自动配置
-
-#### Oracle Cloud ARM
-- CPU: Ampere Altra (2核)
-- 内存: 16GB
-- 存储: 100GB
-- 优化: TCP缓冲64MB、连接追踪262K、保留oci-agent
+| NanoPi R4S | RK3399 (ARM64) | 4GB | **TF卡** | `nanopi-r4s.sh` |
+| Oracle Cloud ARM | Ampere Altra (ARM64) | 16GB | 云盘 | `oracle-arm.sh` |
+| N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | SSD | `n5105.sh` |
+| 通用 x86 VPS | 任意 x86_64 | 自动适配 | 自动检测 | `generic-x86.sh` |
 
 ---
 
-## 使用指南
+## 各平台优化详情
 
-### 安装前准备
+### NanoPi R4S（TF卡保护重点）
 
-1. 准备一台干净的 Debian 12 或 Ubuntu 24.04 系统
-2. 确保有 root 权限或 sudo 权限
-3. 确保网络连接正常
-4. 建议磁盘可用空间 > 5GB
+TF卡写入寿命有限，脚本从系统层面最大限度减少随机写入：
 
-### 安装步骤
+| 优化项 | 配置值 | 说明 |
+|--------|--------|------|
+| journald Storage | volatile | 日志写入内存而非TF卡 |
+| vm.dirty_ratio | 8 | 减少刷盘次数 |
+| vm.dirty_background_ratio | 3 | 后台合并写入 |
+| vm.dirty_writeback_centisecs | 6000（6秒） | 拉长回写间隔 |
+| vm.dirty_expire_centisecs | 60000（10分钟） | 数据过期才回写 |
+| SWAP | 禁用 | 禁用swap分区 |
+| zswap | N | 禁用压缩swap |
+| log2ram | 可选安装 | journal写入RAM缓冲 |
+| netdev_max_backlog | 16384 | 适度队列，不过度缓冲 |
+| conntrack timeout | 1800s | 减少连接表条目 |
+| CPU Governor | performance | ARM高频稳定运行 |
+| inotify watches | 524288 | 大量文件监控支持 |
 
-#### 第一步：连接服务器
+### Oracle Cloud ARM（云环境）
 
-```bash
-ssh root@your-server-ip
-```
+云上环境侧重吞吐量和连接处理：
 
-#### 第二步：运行安装脚本
+| 优化项 | 配置值 | 说明 |
+|--------|--------|------|
+| TCP缓冲 | 32MB | 云网络带宽优化 |
+| netdev_max_backlog | 65535 | 大吞吐量队列 |
+| conntrack_max | 262144 | 高并发连接数 |
+| conntrack timeout | 3600s | 长连接优化 |
+| dirty_ratio | 20 | 云盘写入更激进 |
+| TCP early_retrans | 3 | 丢包快速恢复 |
+| TCP MTU probing | 开启 | 阿里云/Oracle网络优化 |
 
-```bash
-# 自动检测（推荐）
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh)
-```
+### N5105/N5095（静音省电）
 
-#### 第三步：选择安装方式
+静音小主机，禁用 Turbo Boost 减少风扇噪音：
 
-脚本会提示选择安装方式：
-- **Docker 容器安装** (推荐)：环境隔离，易于管理
-- **全局安装** (npm install -g)：简单直接，占用资源少
+| 优化项 | 配置值 | 说明 |
+|--------|--------|------|
+| Turbo Boost | 禁用 | 静音降功耗 |
+| CPU Governor | performance | 禁用后维持基准频率 |
+| SSD调度器 | none | 直通调度无延迟 |
+| irqbalance | 自动 | 多核负载均衡 |
+| conntrack timeout | 3600s | 长连接优化 |
+| dirty_ratio | 15 | SSD不怕写磨损 |
+| TCP缓冲 | 16MB | 平衡内存占用 |
 
-#### 第四步：等待安装完成
+### Generic x86 VPS（通用）
 
-脚本会自动完成以下操作：
-1. 检测硬件平台和服务器时区
-2. 优化系统参数
-3. 安装 Node.js（全局安装模式）
-4. 安装 Docker（容器安装模式）
-5. 安装 OpenClaw
-6. 创建 systemd 服务
+通用Debian12环境，自适应内存配置：
 
-#### 第五步：配置 OpenClaw
-
-安装完成后，运行以下命令完成 OpenClaw 配置：
-
-```bash
-# 切换到 openclaw 用户
-sudo -u openclaw -i openclaw onboard --install-daemon
-```
-
-按照提示完成：
-- 选择模型提供商
-- 输入 API Key
-- 配置 Telegram Bot（可选）
-
-#### 第六步：启动服务
-
-```bash
-# 启动 OpenClaw Gateway
-systemctl --user start openclaw-gateway
-
-# 查看状态
-systemctl --user status openclaw-gateway
-
-# 查看 OpenClaw 状态
-openclaw status
-```
-
-### 安装后验证
-
-```bash
-# 运行诊断
-openclaw doctor
-
-# 查看 Gateway 日志
-journalctl --user -u openclaw-gateway -f
-
-# 测试端口
-ss -tlnp | grep 18789
-```
+| 优化项 | 配置值 | 说明 |
+|--------|--------|------|
+| 内存分级 | 4GB/8GB/16GB+ | 配置文件数自动适配 |
+| dirty_ratio | 15 | 通用推荐值 |
+| TCP fastopen | 3 | 快速建立连接 |
+| BBR | 强制开启 | 拥塞控制优化 |
+| inotify watches | 1048576 | 大型agent支持 |
 
 ---
 
-## 脚本选项
+## v3.1 全部优化参数一览
 
-所有脚本支持以下环境变量：
+### TCP 网络优化（全平台）
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `INSTALL_METHOD=docker` | Docker 容器安装 | 默认 |
-| `INSTALL_METHOD=npm` | 全局安装 | 可选 |
-| `INSTALL_DOCKER=false` | 跳过 Docker 安装 | 安装 |
-| `INSTALL_NODEJS=true` | 跳过 Node.js 安装 | 安装 |
-| `NODEJS_VERSION=24` | 指定 Node.js 版本 | 24 |
+| 参数 | 值 | 说明 |
+|------|----|------|
+| tcp_congestion_control | bbr | BBR拥塞控制 |
+| tcp_fastopen | 3 | TFO客户端+服务端 |
+| tcp_timestamps | 1 | RTT精确计算 |
+| tcp_sack | 1 | 选择性确认 |
+| tcp_slow_start_after_idle | 0 | 空闲保持拥塞窗口 |
+| tcp_rfc1337 | 1 | TIME_WAIT套接字保护 |
+| tcp_early_retrans | 3 | 丢包早期恢复 |
+| tcp_orphan_retries | 1 | 快速清理孤儿socket |
+| tcp_mtu_probing | 1 | PMTU黑洞探测 |
+| tcp_notsent_lowat | 16384 | 未发送缓冲优化 |
+| tcp_tw_reuse | 1 | TIME_WAIT复用 |
+| tcp_fin_timeout | 15 | 加快FIN处理 |
+| tcp_keepalive_time | 1800 | 保活间隔 |
+| tcp_keepalive_intvl | 30 | 保活重试间隔 |
+| tcp_keepalive_probes | 3 | 保活探测次数 |
 
-### 示例
+### 网络队列（全平台）
 
-```bash
-# Docker 容器安装（默认）
-INSTALL_METHOD=docker bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)
-
-# 全局安装
-INSTALL_METHOD=npm bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)
-
-# 跳过 Docker，使用指定 Node.js 版本
-INSTALL_DOCKER=false NODEJS_VERSION=22 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)
-```
-
----
-
-## 脚本功能说明
-
-| 功能 | 说明 |
+| 参数 | 说明 |
 |------|------|
-| 系统检测 | 自动检测硬件平台、内存、CPU、磁盘 |
-| APT 源配置 | 腾讯云镜像 + 官方源备选 |
-| 系统清理 | 移除 snapd、apache、nginx 等 |
-| DNS 配置 | 1.1.1.1 + 8.8.8.8 |
-| 时区配置 | 自动检测服务器时区（支持IP地理定位） |
-| 时间同步 | chrony + NTP 服务器 |
-| 网络优化 | BBR + TCP 缓冲 + 连接追踪 |
-| 内存优化 | ZRAM（低内存设备）+ swappiness |
-| I/O 优化 | SSD/HDD 自动检测调度器 |
-| 安全优化 | 文件描述符、内核参数 |
-| Node.js | Node 24 LTS |
-| Docker | Docker CE + 阿里云镜像 |
-| OpenClaw | 最新版 + systemd 服务 |
+| net.core.default_qdisc = fq | 公平队列算法 |
+| net.core.somaxconn = 65535 | 监听队列长度 |
+| net.core.rmem_max / wmem_max | 套接字缓冲上限 |
 
-### 配置文件位置
+### 安全加固（全平台）
+
+| 参数 | 值 | 说明 |
+|------|----|------|
+| accept_redirects | 0 | 禁用ICMP重定向 |
+| accept_source_route | 0 | 禁用源路由 |
+| secure_redirects | 0 | 仅接受网关发来的重定向 |
+| log_martians | 0 | 关闭虚假地址日志 |
+| rp_filter | 1 | 反向路径过滤 |
+| tcp_syncookies | 1 | SYN洪水防护 |
+| ipv6.accept_redirects | 0 | IPv6重定向防护 |
+| kernel.dmesg_restrict | 1 | 限制dmesg访问 |
+| kernel.kptr_restrict | 1 | 隐藏内核指针 |
+| kernel.yama.ptrace_scope | 1 | 限制ptrace |
+
+### 连接追踪 conntrack（全平台）
+
+| 参数 | 值 | 说明 |
+|------|----|------|
+| established | 1800-3600s | 已建立连接超时 |
+| time_wait | 10-15s | 快速释放TIME_WAIT |
+| close_wait | 5s | 快速关闭CLOSE_WAIT |
+| fin_wait | 10s | 快速关闭FIN_WAIT |
+
+### 内存管理（全平台）
+
+| 参数 | 值 | 说明 |
+|------|----|------|
+| vm.swappiness | 10（R4S）/ 60（云） | 减少swap倾向 |
+| vm.overcommit_memory | 1 | 允许内存超量分配 |
+| vm.zone_reclaim_mode | 0 | NUMA节点优先本地分配 |
+| vm.vfs_cache_pressure | 50 | 优先回收dentry/inode |
+
+### 文件描述符（全平台）
+
+| 参数 | 值 | 说明 |
+|------|----|------|
+| fs.file-max | 900000 | 全局文件句柄上限 |
+| limits nofile | 1048576 | 进程打开文件数 |
+
+---
+
+## 验证脚本（verify-v3.1.sh）
+
+下载并运行验证脚本，检查所有优化参数是否生效：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.1.sh -o /tmp/verify-v3.1.sh
+bash /tmp/verify-v3.1.sh                    # 本机验证
+sudo bash /tmp/verify-v3.1.sh               # 带root权限验证（完整检查）
+bash /tmp/verify-v3.1.sh --remote root@IP  # 远程SSH验证
+```
+
+验证范围（14个维度）：
+1. 系统基础信息（CPU/内存/磁盘/TF卡）
+2. sysctl 网络参数（TCP/队列/BBR/安全）
+3. conntrack 连接追踪
+4. 内存管理（dirty_writeback/TF卡保护）
+5. 文件描述符 & 进程限制
+6. SSH 配置
+7. journald 日志配置
+8. inotify 文件监控
+9. SWAP 状态（TF卡保护）
+10. CPU Governor
+11. systemd 服务状态
+12. sysctl 配置文件完整性
+13. 网络连接实战状态
+14. 与 v3.1 目标值逐项对比（自动pass/fail）
+
+---
+
+## 配置文件位置
 
 | 文件 | 路径 |
 |------|------|
-| OpenClaw 配置 | `~/.openclaw/openclaw.json` |
-| Gateway 服务 | `/etc/systemd/system/openclaw-gateway.service` (系统级) 或 `~/.config/systemd/user/openclaw-gateway.service` (用户级) |
-| 系统限制 | `/etc/security/limits.conf` |
-| sysctl 配置 | `/etc/sysctl.d/99-openclaw.conf` |
-| Docker 配置 | `/etc/docker/daemon.json` |
-| 安装日志 | `/var/log/openclaw-install.log` |
+| sysctl 主配置 | `/etc/sysctl.d/99-openclaw.conf` |
+| sysctl TF卡优化 | `/etc/sysctl.d/99-tf-optimize.conf` (R4S) |
+| sysctl inotify | `/etc/sysctl.d/99-inotify.conf` |
+| journald 配置 | `/etc/systemd/journald.conf` |
+| limits 配置 | `/etc/security/limits.conf` |
+| SSH 服务配置 | `/etc/ssh/sshd_config` |
+| log2ram 配置 | `/etc/log2ram.conf` (可选) |
 
 ---
 
 ## 常见问题
 
-### Q: 安装失败怎么办？
+### Q: 脚本会修改哪些系统文件？
 
-首先查看日志：
-```bash
-cat /var/log/openclaw-install.log
-```
+主要修改以下文件（幂等设计，可重复运行）：
+- `/etc/sysctl.d/99-openclaw.conf` — sysctl网络/内存参数
+- `/etc/systemd/journald.conf` — 日志配置
+- `/etc/security/limits.conf` — 进程限制
+- `/etc/ssh/sshd_config` — SSH加固
+- SSH 公钥authorized_keys（如果配置了）
 
-常见问题：
-- 网络问题：检查能否访问 GitHub
-- 权限问题：确保用 root 运行
-- 磁盘空间：确保 > 3GB 可用空间
+**不会修改**：系统核心配置文件、用户数据、已有服务配置。
 
-### Q: 如何重新配置 OpenClaw？
+### Q: 运行后需要重启吗？
 
-删除配置后重新运行 onboard：
-```bash
-rm -rf ~/.openclaw
-sudo -u openclaw -i openclaw onboard --install-daemon
-```
-
-### Q: 如何更新 OpenClaw？
+大多数参数通过 `sysctl -p` 即时生效，无需重启。少数参数（如 journald Storage）需要重启 journald：
 
 ```bash
-npm update -g openclaw
-systemctl --user restart openclaw-gateway
+systemctl restart systemd-journald
 ```
 
-### Q: 如何卸载？
+### Q: NanoPi R4S 为什么禁用 SWAP？
+
+TF卡写入寿命有限。SWAP会产生大量随机小写入，严重影响TF卡寿命。脚本通过：
+- 禁用SWAP分区
+- 优化 `vm.swappiness=10` 减少内存回收
+- 使用 zram 压缩内存（可选）
+- 减少 dirty_writeback 频率
+等多重手段减少对 TF 卡的写入。
+
+### Q: Oracle Cloud ARM 为什么 TCP缓冲只有 32MB？
+
+Oracle Cloud 的网络带宽是有限制的（最大 50Mbps Small Tenant），不是越高越好。过大的 TCP缓冲会导致内存浪费和更高的延迟。32MB 是 Oracle Cloud ARM 的最优值。
+
+### Q: 如何确认 BBR 已开启？
 
 ```bash
-# 停止服务
-systemctl --user stop openclaw-gateway
-systemctl --user disable openclaw-gateway
-
-# 删除服务
-rm ~/.config/systemd/user/openclaw-gateway.service
-systemctl daemon-reload
-
-# 删除用户
-userdel openclaw
-
-# 删除目录
-rm -rf /opt/openclaw ~/.openclaw
+sysctl net.ipv4.tcp_congestion_control   # 应显示 bbr
+lsmod | grep bbr                         # 应显示 tcp_bbr
 ```
 
-### Q: NanoPi R4S 发热严重怎么办？
+### Q: 优化后还需要做什么？
 
-脚本已优化，可以添加散热片或风扇
+运行完本脚本后，再按你的 AIagent 官方文档安装：
+- [OpenClaw 安装](https://docs.openclaw.ai/)
+- [Hermes Agent 安装](https://github.com/nickaroot/hermes-agent)
 
-### Q: Oracle Cloud ARM 无法连接？
+---
 
-检查防火墙设置：
-```bash
-# 开放端口 18789
-ufw allow 18789
-# 或在 Oracle 控制台安全组开放
-```
+## 版本历史
 
-### Q: 如何查看 Gateway 状态？
+### v3.1（最新）
+- 统一全平台 conntrack timeout（close_wait=5, fin_wait=10）
+- 补全 tcp_rfc1337、IPv6 forwarding、ip_forward
+- nanopi-r4s 补全 IPv6 accept_redirects 安全参数
+- 统一 tcp_early_retrans=3、tcp_orphan_retries=1
+- n5105 补全 vm.zone_reclaim_mode=0 NUMA优化
+- generic-x86 补全 conntrack close_wait/fin_wait
+- 新增 verify-v3.1.sh 完整验证脚本
+- oracle-arm TCP缓冲从 64MB 调整为 32MB（更合理）
+- nanopi-r4s 移除不可靠的外部 log2ram 源，改为 journald volatile 替代
 
-```bash
-# 查看服务状态
-systemctl --user status openclaw-gateway
-
-# 查看实时日志
-journalctl --user -u openclaw-gateway -f
-
-# 运行诊断
-openclaw doctor
-```
+### v3.0
+- 完整重构，4平台差异化配置
+- BBR + fq 队列全平台统一
+- SSH 加固（MaxAuthTries、ClientAliveInterval）
+- journald 压缩 + RateLimit
+- TF卡保护体系（dirty_writeback、journald volatile）
+- N5105 Turbo Boost 静音优化
 
 ---
 
 ## 获取帮助
 
-- OpenClaw 官方文档: https://docs.openclaw.ai/
-- 问题反馈: https://github.com/vpn3288/VPS-youhua/issues
+- 问题反馈：https://github.com/vpn3288/VPS-youhua/issues
+- 提交优化：欢迎提交 Issue 和 PR
 
 ---
 
 ## License
 
-MIT License - 欢迎使用和改进！
+MIT License
