@@ -552,6 +552,7 @@ vm.dirty_background_ratio = 5
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.overcommit_memory = 1
 vm.vfs_cache_pressure = 50
+vm.zone_reclaim_mode = 0
 
 # === 连接追踪 ===
 net.netfilter.nf_conntrack_max = ${CT_MAX}
