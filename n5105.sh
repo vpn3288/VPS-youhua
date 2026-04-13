@@ -535,6 +535,7 @@ net.ipv4.tcp_max_syn_backlog = 65535
 net.ipv4.tcp_max_tw_buckets = ${TCP_TW_BUCKETS}
 net.ipv4.tcp_notsent_lowat = 16384
 net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_rfc1337 = 1
 
 # === BBR ===
 net.core.default_qdisc = fq
