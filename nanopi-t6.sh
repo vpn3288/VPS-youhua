@@ -787,8 +787,34 @@ optimize_io_scheduler() {
     for dev in /sys/block/*/queue/read_ahead_kb; do
         [[ -f "$dev" ]] && echo 4096 > "$dev" 2>/dev/null || true
     done
+
+    # eMMC 批量写优化：减少 ext4 元数据同步次数
+    configure_ext4_commit
 }
 
+
+configure_ext4_commit() {
+    local fstab_file="/etc/fstab"
+    [[ ! -f "$fstab_file" ]] && { log_warn "/etc/fstab 不存在"; return 1; }
+    backup_file "$fstab_file"
+
+    local line has_ext4=false
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[^#].*[[:space:]]ext4[[:space:]] ]]; then
+            has_ext4=true
+            if [[ "$line" =~ noatime ]]; then
+                if [[ ! "$line" =~ commit= ]]; then
+                    line=$(echo "$line" | sed 's/\(ext4[^,]*\)/\1,commit=600/')
+                fi
+            else
+                line=$(echo "$line" | sed 's/\(ext4[^,]*\)/\1,noatime,commit=600/')
+            fi
+        fi
+        echo "$line"
+    done < "$fstab_file" > "${fstab_file}.new"
+    mv "${fstab_file}.new" "$fstab_file"
+    log_info "ext4 挂载参数已优化 (commit=600)"
+}
 
 readonly PLATFORM_NAME="NanoPi T6/T6S"
 readonly PLATFORM_DESC="RK3588 ARM64, 8GB RAM"
