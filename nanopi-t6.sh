@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPi T6 专用优化安装脚本
-# 硬件: RK3588 ARM64, 8GB RAM (T6) / 4-8GB RAM (T6S)
+# NanoPC T6/T6S (FriendlyELEC) 专用优化脚本
+# 硬件: RK3588S ARM64, 8GB RAM (T6) / 4GB RAM (T6S), eMMC, 1×GbE + 2×2.5GbE
 # 特点: 性能更强, 8GB大内存, 适合重度使用
 # =============================================================================
 #
@@ -813,10 +813,10 @@ detect_nanopi_t6() {
             # 自动检测真实内存（不要硬编码，让 line 81 的检测结果生效）
             # T6 通常 8-16GB，T6S 通常 4GB
             if echo "$model" | grep -qi "S"; then
-                PLATFORM_DESC="RK3588S ARM64, 自动检测内存"
-                SYS_MEM_MB=${SYS_MEM_MB:-4096}  # T6S fallback
+                PLATFORM_DESC="RK3588S ARM64 (4GB RAM), 自动检测"
+                SYS_MEM_MB=${SYS_MEM_MB:-4096}  # T6S: 4GB RAM
             else
-                PLATFORM_DESC="RK3588 ARM64, 自动检测内存"
+                PLATFORM_DESC="RK3588S ARM64 (8GB RAM), 自动检测"
                 SYS_MEM_MB=${SYS_MEM_MB:-8192}  # T6 fallback
             fi
             log_info "内存将自动检测: ${SYS_MEM_MB}MB (实际以系统检测为准)"
@@ -861,8 +861,8 @@ configure_sysctl_t6() {
     backup_file "$sysctl_file"
     
     cat > "$sysctl_file" <<EOF
-# NanoPi T6/T6S 环境优化配置
-# RK3588 ARM64, ${SYS_MEM_MB}MB RAM, 64GB eMMC
+# NanoPC T6/T6S 环境优化配置
+# RK3588S ARM64, ${SYS_MEM_MB}MB RAM, 64GB eMMC
 
 # ===== TCP 核心优化 =====
 net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}

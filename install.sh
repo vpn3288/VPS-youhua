@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # AIagent 环境优化脚本（通用入口）
-# 支持平台: NanoPi R4S, NanoPi T6, Oracle ARM, N5105, 通用 x86 VPS
+# 支持平台: NanoPi R4S, NanoPC T6, Oracle ARM, N5105, 通用 x86 VPS
 # 功能: 只优化环境，不安装 AIagent（安装 AIagent 请参考其官方文档）
 # =============================================================================
 
@@ -35,7 +35,7 @@ detect_platform() {
         aarch64)
             if echo "$model" | grep -qi "NanoPi R4S"; then
                 echo "nanopi-r4s"
-            elif echo "$model" | grep -qi "NanoPi T6"; then
+            elif echo "$model" | grep -qiE "NanoPC.?T6|T6"; then
                 echo "nanopi-t6"
             elif echo "$model" | grep -qi "Rockchip"; then
                 echo "generic-arm"
@@ -90,7 +90,7 @@ main() {
             echo -e "${BLUE}  存储: TF卡 (已针对TF卡写入保护优化)${NC}"
             ;;
         nanopi-t6)
-            echo -e "${BLUE}  平台: NanoPi T6${NC}"
+            echo -e "${BLUE}  平台: NanoPC T6${NC}"
             echo -e "${BLUE}  CPU:  RK3588 ARM64${NC}"
             echo -e "${BLUE}  特点: 大内存, 64GB eMMC${NC}"
             echo -e "${BLUE}  存储: eMMC (已针对eMMC写入优化)${NC}"
