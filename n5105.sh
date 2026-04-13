@@ -778,7 +778,10 @@ optimize_ssh() {
     sed -i 's/^ClientAliveInterval.*/ClientAliveInterval 3600/' "$sshd_config" 2>/dev/null || true
     sed -i 's/^ClientAliveCountMax.*/ClientAliveCountMax 3/' "$sshd_config" 2>/dev/null || true
     sed -i 's/^X11Forwarding.*/X11Forwarding no/' "$sshd_config" 2>/dev/null || true
-    log_info "SSH 加固完成"
+    log_info "SSH 已配置 (ClientAliveInterval=3600, 空密码已禁止)"
+    # 显示上次登录信息（发现异常登录时能立刻看到）
+    echo -e "  \${CYAN}上次登录记录:\${RESET}"
+    last -n 3 2>/dev/null | grep -v "^$" | head -3 | sed "s/^/    /" || true
 }
 
 # =============================================================================

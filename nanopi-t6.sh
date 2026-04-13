@@ -547,21 +547,19 @@ optimize_ssh_t6() {
 
     backup_file "$sshd_config"
 
-    # 允许密码登录（AIagent 可能需要），但加固其他安全项
-    local changes=0
-    for param_val in         "MaxAuthTries 3"         "ClientAliveInterval 3600"         "ClientAliveCountMax 3"         "X11Forwarding no"         "PermitRootLogin prohibit-password"         "PubkeyAuthentication no"         "PasswordAuthentication yes"; do
-        local param="${param_val% *}"
-        local val="${param_val#* }"
-        if grep -q "^${param}[[:space:]]" "$sshd_config" 2>/dev/null; then
-            sed -i "s/^${param}[[:space:]].*/${param} ${val}/" "$sshd_config"
-        else
-            echo "${param} ${val}" >> "$sshd_config"
-        fi
-        ((changes++))
-    done
-
+    # 只做必要的安全配置，不强制关闭密码登录
+    sed -i 's/^PermitEmptyPasswords.*/PermitEmptyPasswords no/' "$sshd_config" 2>/dev/null || true
+    grep -q "^ClientAliveInterval" "$sshd_config" 2>/dev/null || echo "ClientAliveInterval 3600" >> "$sshd_config"
+    sed -i 's/^ClientAliveInterval.*/ClientAliveInterval 3600/' "$sshd_config" 2>/dev/null || true
+    sed -i 's/^ClientAliveCountMax.*/ClientAliveCountMax 3/' "$sshd_config" 2>/dev/null || true
+    sed -i 's/^X11Forwarding.*/X11Forwarding no/' "$sshd_config" 2>/dev/null || true
+    # 保留系统原有 PermitRootLogin 和 PubkeyAuthentication 设置
     systemctl reload sshd 2>/dev/null || true
-    log_info "SSH 加固完成 (${changes} 项已更新)"
+    log_info "SSH 已配置 (ClientAliveInterval=3600, 空密码已禁止)"
+
+    # 显示上次登录信息（发现异常登录时能立刻看到）
+    echo -e "  \${CYAN}上次登录记录:\${RESET}"
+    last -n 3 2>/dev/null | grep -v "^$" | head -3 | sed "s/^/    /" || true
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
