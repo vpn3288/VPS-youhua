@@ -23,13 +23,15 @@ readonly SEP="══════════════════════
 #-------------------------------------------------------------------------------
 detect_platform() {
     local cpu_info
-    cpu_info=$(cat /proc/cpuinfo 2>/dev/null | grep -m1 "model name" | cut -d: -f2 | xargs)
-    local board_info
-    board_info=$(cat /proc/device-tree/model 2>/dev/null | xargs || echo "")
+    cpu_info=$(cat /proc/cpuinfo 2>/dev/null | grep -m1 "model name" | cut -d: -f2 | tr -d '\0' | xargs)
 
-    if [[ "$board_info" == *"NanoPi R4S"* ]] || grep -qi "rockchip" /proc/cpuinfo 2>/dev/null && [[ -d /sys/class/net/eth0 ]]; then
+    # Use tr -d '\0' to strip NUL chars (ARM device-tree model has embedded NUL)
+    local board_info
+    board_info=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\0' | xargs 2>/dev/null || echo "")
+
+    if [[ "$board_info" == *"NanoPi R4S"* ]] || [[ "$board_info" == *"R4S"* ]]; then
         echo "nanopi-r4s"
-    elif [[ "$cpu_info" == *"Ampere"* ]] || grep -qi "cpu.*arm.*neon" /proc/cpuinfo 2>/dev/null; then
+    elif [[ "$cpu_info" == *"Ampere"* ]]; then
         if curl -s --connect-timeout 2 169.254.169.254 >/dev/null 2>&1; then
             echo "oracle-arm"
         else
@@ -39,6 +41,9 @@ detect_platform() {
         echo "n5105"
     elif [[ -f /etc/oracle-auto-detect ]] || hostnamectl 2>/dev/null | grep -qi "oracle"; then
         echo "oracle-arm"
+    elif grep -qi "rockchip\|rk3399" /proc/cpuinfo 2>/dev/null && [[ -d /sys/class/net/eth0 ]]; then
+        # Fallback: RK3399 chip with eth0 interface (NanoPi R4S detected by CPU)
+        echo "nanopi-r4s"
     else
         echo "generic-x86"
     fi
