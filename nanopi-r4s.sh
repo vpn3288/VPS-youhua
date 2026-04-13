@@ -834,6 +834,8 @@ net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 1800
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
+    net.netfilter.nf_conntrack_tcp_timeout_close_wait = 10
+    net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 
 # IPv6
 net.ipv6.conf.all.disable_ipv6 = 0
