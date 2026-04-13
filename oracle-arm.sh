@@ -32,7 +32,7 @@ log_error() { echo -e "${RED}[✗]${NC} $1"; }
 log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
 
 # 全局变量
-readonly SCRIPT_VERSION="3.0"
+readonly SCRIPT_VERSION="3.1"
 readonly APT_LOG="/var/log/openclaw-install.log"
 readonly LOCK_FILE="/var/lock/openclaw-install.lock"
 

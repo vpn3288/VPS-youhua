@@ -26,7 +26,7 @@ log_warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1"; }
 log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
 
-readonly SCRIPT_VERSION="3.0"
+readonly SCRIPT_VERSION="3.1"
 readonly APT_LOG="/var/log/openclaw-install.log"
 readonly LOCK_FILE="/var/lock/openclaw-install.lock"
 
@@ -884,6 +884,7 @@ optimize_network_r4s() {
 optimize_arm() {
     log_step "ARM 特定优化..."
     local gov_changed=false
+    # CPU governor（强制performance，AIagent需要稳定响应速度）
     for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
         [[ -f "$cpu" && -w "$cpu" ]] || continue
         echo "performance" > "$cpu" 2>/dev/null || true

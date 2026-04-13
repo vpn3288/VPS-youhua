@@ -28,7 +28,7 @@ log_error() { echo -e "${RED}[✗]${NC} $1"; }
 log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
 
 # 全局变量
-readonly SCRIPT_VERSION="3.0"
+readonly SCRIPT_VERSION="3.1"
 readonly APT_LOG="/var/log/openclaw-install.log"
 readonly LOCK_FILE="/var/lock/openclaw-install.lock"
 
@@ -637,7 +637,7 @@ optimize_x86_generic() {
         log_info "Intel P-State: performance"
     fi
 
-    # CPU 频率
+    # CPU 频率（强制performance，避免降频影响AIagent响应速度）
     for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
         [[ -f "$cpu" && -w "$cpu" ]] || continue
         echo "performance" > "$cpu" 2>/dev/null || true

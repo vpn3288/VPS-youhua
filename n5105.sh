@@ -28,7 +28,7 @@ log_error() { echo -e "${RED}[✗]${NC} $1"; }
 log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
 
 # 全局变量
-readonly SCRIPT_VERSION="3.0"
+readonly SCRIPT_VERSION="3.1"
 readonly APT_LOG="/var/log/openclaw-install.log"
 readonly LOCK_FILE="/var/lock/openclaw-install.lock"
 
@@ -630,15 +630,10 @@ optimize_x86() {
         log_info "Intel P-State: performance"
     fi
 
-    # CPU 频率
+    # CPU 频率（强制performance，避免降频影响AIagent响应速度）
     for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
         [[ -f "$cpu" && -w "$cpu" ]] || continue
-        # 先检查是否已经是performance
-        if grep -q "powersave" "$cpu" 2>/dev/null; then
-            echo "ondemand" > "$cpu" 2>/dev/null || true
-        else
-            echo "performance" > "$cpu" 2>/dev/null || true
-        fi
+        echo "performance" > "$cpu" 2>/dev/null || true
     done
 
     # Turbo Boost 控制（静音优化，发热控制）
