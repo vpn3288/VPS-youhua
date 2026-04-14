@@ -627,17 +627,15 @@ optimize_x86() {
         echo "performance" > "$cpu" 2>/dev/null || true
     done
 
-    # Turbo Boost 控制（静音优化，发热控制）
+    # Turbo Boost 监控（默认保持启用，有风扇可全力跑）
     local turbo_boost="/sys/devices/system/cpu/intel_pstate/no_turbo"
     if [[ -f "$turbo_boost" ]]; then
-        # 默认关闭Turbo Boost以控制发热（小主机散热有限）
-        echo "1" > "$turbo_boost" 2>/dev/null || true
         local turbo_state
         turbo_state=$(cat "$turbo_boost" 2>/dev/null || echo "unknown")
         if [[ "$turbo_state" == "1" ]]; then
-            log_info "Turbo Boost: 已禁用 (静音模式)"
+            log_info "Turbo Boost: 已禁用"
         else
-            log_info "Turbo Boost: 启用"
+            log_info "Turbo Boost: 启用 (性能模式)"
         fi
     fi
 
@@ -744,7 +742,7 @@ optimize_ssh() {
     backup_file "$sshd_config"
     sed -i 's/^PermitEmptyPasswords.*/PermitEmptyPasswords no/' "$sshd_config" 2>/dev/null || true
     sed -i 's/^PermitRootLogin.*/PermitRootLogin prohibit-password/' "$sshd_config" 2>/dev/null || true
-    sed -i 's/^PubkeyAuthentication.*/PubkeyAuthentication no/' "$sshd_config" 2>/dev/null || true
+    # 保留系统原有 PubkeyAuthentication 设置
     grep -q "^ClientAliveInterval" "$sshd_config" 2>/dev/null || echo "ClientAliveInterval 3600" >> "$sshd_config"
     sed -i 's/^ClientAliveInterval.*/ClientAliveInterval 3600/' "$sshd_config" 2>/dev/null || true
     sed -i 's/^ClientAliveCountMax.*/ClientAliveCountMax 3/' "$sshd_config" 2>/dev/null || true

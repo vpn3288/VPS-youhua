@@ -724,12 +724,12 @@ optimize_ssh() {
     backup_file "$sshd_config"
     sed -i 's/^PermitEmptyPasswords.*/PermitEmptyPasswords no/' "$sshd_config" 2>/dev/null || true
     sed -i 's/^PermitRootLogin.*/PermitRootLogin prohibit-password/' "$sshd_config" 2>/dev/null || true
-    sed -i 's/^PubkeyAuthentication.*/PubkeyAuthentication no/' "$sshd_config" 2>/dev/null || true
+    # 保留系统原有 PubkeyAuthentication 设置
     grep -q "^ClientAliveInterval" "$sshd_config" 2>/dev/null || echo "ClientAliveInterval 3600" >> "$sshd_config"
     sed -i 's/^ClientAliveInterval.*/ClientAliveInterval 3600/' "$sshd_config" 2>/dev/null || true
     sed -i 's/^ClientAliveCountMax.*/ClientAliveCountMax 3/' "$sshd_config" 2>/dev/null || true
     sed -i 's/^X11Forwarding.*/X11Forwarding no/' "$sshd_config" 2>/dev/null || true
-    log_info "SSH 已配置 (ClientAliveInterval=3600, 空密码已禁止)"
+    log_info "SSH 已配置 (ClientAliveInterval=3600, 空密码已禁止)";
     # 显示上次登录信息（发现异常登录时能立刻看到）
     echo -e "  \${CYAN}上次登录记录:\${RESET}"
     last -n 3 2>/dev/null | grep -v "^$" | head -3 | sed "s/^/    /" || true
