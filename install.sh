@@ -12,11 +12,25 @@ readonly VERSION="3.1"
 readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 安全检查
+# SHA256 校验和（防止供应链污染）
+# ⚠️  脚本更新时必须同步更新对应 SHA256
+# ─────────────────────────────────────────────────────────────────────────────
+
+declare -A EXPECTED_SHA256=(
+    ["nanopi-r4s"]="685f94fe0e291cf26c9f84430cc2ab26cab62549221604c9f775b227f708ebbe"
+    ["nanopi-t6"]="5aed513ecd048c032f773c49a1116bd7017b05b9035988b86be6276a9114164b"
+    ["oracle-arm"]="ee5e239f79c09100c016de2f8a9523a72d8b3fec5e096dd12a341cc5bc6bed92"
+    ["n5105"]="01de248d963b1396942987014e84586768097833a7c5a7abf36d4a2417ea5d06"
+    ["generic-x86"]="04260d79a7b522e512778299d0c35e5e7cccdd5cc47aac446b096d0c54aab371"
+    ["verify-v3.1"]="d734d7b4a3cc933ce03021ac87279f8ecd20c4f0033a1c9b21a935f1df0ec5b4"
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 参数解析（非交互模式）
 # ─────────────────────────────────────────────────────────────────────────────
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "[✗] 请使用 root 运行: sudo bash $0 $*" >&2
+    echo "[✗] 请使用 root 运行: sudo bash \"$0\" \"$*\"" >&2
     exit 1
 fi
 
@@ -126,6 +140,21 @@ download_and_run() {
         log_error "下载失败: $script_url"
         rm -f "$tmpfile"
         exit 1
+    fi
+
+    # SHA256 校验（防止供应链污染）
+    local expected="${EXPECTED_SHA256[$platform]:-}"
+    if [[ -n "$expected" ]]; then
+        local actual
+        actual=$(sha256sum "$tmpfile" | awk '{print $1}')
+        if [[ "$actual" != "$expected" ]]; then
+            log_error "SHA256 校验失败！文件可能被篡改。"
+            log_error "期望: $expected"
+            log_error "实际: $actual"
+            rm -f "$tmpfile"
+            exit 1
+        fi
+        log_info "SHA256 校验通过"
     fi
 
     log_step "执行 ${platform}.sh..."
