@@ -92,7 +92,7 @@ main() {
         nanopi-t6)
             echo -e "${BLUE}  平台: NanoPC T6${NC}"
             echo -e "${BLUE}  CPU:  RK3588 ARM64${NC}"
-            echo -e "${BLUE}  特点: 大内存, 64GB eMMC${NC}"
+            echo -e "${BLUE}  特点: 3网口(1×GbE+2×2.5GbE), 16GB大内存${NC}"
             echo -e "${BLUE}  存储: eMMC (已针对eMMC写入优化)${NC}"
             ;;
         n5105)
