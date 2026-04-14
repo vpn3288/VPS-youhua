@@ -15,7 +15,7 @@ IFS=$'\n\t'
 ulimit -n 1048576
 ulimit -u 131072
 ulimit -m unlimited
-[[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
+[[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 1048576 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
 
 # 颜色
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -298,12 +298,12 @@ root soft memlock unlimited
 root hard memlock unlimited
 EOFLIMITS
 
-    [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches
+    [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 1048576 > /proc/sys/fs/inotify/max_user_watches
     [[ -f /proc/sys/fs/inotify/max_user_instances ]] && echo 4096 > /proc/sys/fs/inotify/max_user_instances
 
     mkdir -p /etc/sysctl.d
     cat > /etc/sysctl.d/99-inotify.conf <<'EOFINOTIFY'
-fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_watches = 1048576
 fs.inotify.max_user_instances = 4096
 EOFINOTIFY
 
@@ -671,7 +671,7 @@ ExecStop=/bin/kill -SIGTERM \$MAINPID
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
-LimitNOFILE=524288
+LimitNOFILE=1048576
 ${memory_max}
 OOMScoreAdjust=-200
 
@@ -818,8 +818,8 @@ net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 
 # 文件描述符
-fs.file-max = 524288
-fs.nr_open = 524288
+fs.file-max = 1048576
+fs.nr_open = 1048576
 
 # 内存
 vm.swappiness = ${SWAPPINESS}
