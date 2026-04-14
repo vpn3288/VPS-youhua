@@ -532,6 +532,31 @@ fs.inotify.max_user_watches = 1048576
 fs.inotify.max_user_instances = 8192
 EOF
     
+    # systemd 系统级限制
+    mkdir -p /etc/systemd/system.conf.d /etc/systemd/user.conf.d
+    cat > /etc/systemd/system.conf.d/99-ai-limits.conf <<'EOFSYSD'
+[Manager]
+DefaultLimitNOFILE=1048576
+DefaultLimitNPROC=131072
+DefaultLimitMEMLOCK=infinity
+EOFSYSD
+    cat > /etc/systemd/user.conf.d/99-ai-limits.conf <<'EOFUSRD'
+[Manager]
+DefaultLimitNOFILE=1048576
+DefaultLimitNPROC=65535
+EOFUSRD
+    
+    # Docker systemd limit
+    mkdir -p /etc/systemd/system/docker.service.d
+    cat > /etc/systemd/system/docker.service.d/override.conf <<'EOFDOCKERLIM'
+[Service]
+LimitNOFILE=1048576
+LimitNPROC=65535
+LimitMEMLOCK=infinity
+EOFDOCKERLIM
+    
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    
     log_info "系统限制配置完成"
 }
 
