@@ -518,8 +518,8 @@ configure_limits() {
 * hard nofile 524288
 * soft nproc 65535
 * hard nproc 65535
-root soft nofile 524288
-root hard nofile 524288
+root soft nofile 1048576
+root hard nofile 1048576
 EOF
     
     # inotify
