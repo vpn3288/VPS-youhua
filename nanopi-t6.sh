@@ -736,7 +736,7 @@ ExecStop=/bin/kill -SIGTERM \$MAINPID
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
-LimitNOFILE=524288
+LimitNOFILE=1048576
 MemoryMax=4G
 
 [Install]
