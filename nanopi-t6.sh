@@ -739,6 +739,7 @@ RestartSec=10
 TimeoutStopSec=30
 LimitNOFILE=1048576
 ${memory_max}
+OOMScoreAdjust=-200
 
 [Install]
 WantedBy=default.target
