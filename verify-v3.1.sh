@@ -2,7 +2,7 @@
 #===============================================================================
 # VPS-youhua v3.1 优化验证脚本
 # 用途：验证 AIagent 安装前环境优化是否正确生效
-# 支持：nanopi-r4s / oracle-arm / n5105 / generic-x86
+# 支持：nanopi-r4s / nanopi-t6 / oracle-arm / n5105 / generic-x86
 # 输出：所有优化参数的当前值 + 与目标值对比
 #===============================================================================
 set -uo pipefail
@@ -31,6 +31,8 @@ detect_platform() {
 
     if [[ "$board_info" == *"NanoPi R4S"* ]] || [[ "$board_info" == *"R4S"* ]]; then
         echo "nanopi-r4s"
+    elif [[ "$board_info" == *"NanoPC T6"* ]] || [[ "$board_info" == *"T6"* ]] && [[ "$board_info" == *"3588"* ]]; then
+        echo "nanopi-t6"
     elif [[ "$cpu_info" == *"Ampere"* ]]; then
         if curl -s --connect-timeout 2 169.254.169.254 >/dev/null 2>&1; then
             echo "oracle-arm"
@@ -602,6 +604,14 @@ check_vs_targets() {
         check_eq "vm.dirty_background_ratio"                           "10"   "dirty后台比例"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established" "3600"  "ESTABLISHED超时"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"   "10"   "TW超时(云)"
+    elif [[ "$platform" == "nanopi-t6" ]]; then
+        echo -e "  ${BOLD}[nanopi-t6 专用]${RESET}"
+        check_eq "net.core.netdev_max_backlog"                       "65535" "网卡队列"
+        check_eq "net.ipv4.tcp_max_syn_backlog"                      "65535" "SYN队列"
+        check_eq "vm.dirty_ratio"                                      "20"   "dirty比例(eMMC)"
+        check_eq "vm.dirty_background_ratio"                           "10"   "dirty后台比例"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_established" "3600"  "ESTABLISHED超时"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"   "10"   "TW超时"
     elif [[ "$platform" == "n5105" ]]; then
         echo -e "  ${BOLD}[n5105 专用]${RESET}"
         check_eq "net.core.netdev_max_backlog"                       "65535" "网卡队列"
