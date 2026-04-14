@@ -418,7 +418,7 @@ LimitNPROC=65535
 LimitMEMLOCK=infinity
 EOFDOCKERLIM
 
-    systemctl daemon-reload || echo "[WARN] daemon-reload failed, service may use stale config"
+    systemctl daemon-reload || log_warn "daemon-reload 失败，服务可能使用旧配置"
 
     log_info "系统限制配置完成"
 }

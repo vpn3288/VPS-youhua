@@ -876,13 +876,11 @@ net.ipv4.conf.default.send_redirects = 0
 vm.vfs_cache_pressure = 50
 EOFSYSCTL
 
-    # 加载 BBR 模块
     if modprobe tcp_bbr 2>/dev/null; then
         log_info "BBR 已加载"
     else
         log_warn "BBR 加载失败（内核可能不支持）"
     fi
-    modprobe tcp_dctcp 2>/dev/null || true
     sysctl -p "$sysctl_file" 2>/dev/null || true
     log_info "sysctl R4S v3.1 优化完成"
 }
