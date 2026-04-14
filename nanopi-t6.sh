@@ -342,24 +342,6 @@ EOF
 # 配置 locale
 # ─────────────────────────────────────────────────────────────────────────────
 configure_locale() {
-    log_step "配置 locale..."
-    
-    if locale -a 2>/dev/null | grep -qi "zh_CN"; then
-        log_info "中文 locale 已存在"
-        return 0
-    fi
-    
-    apt-get install -y locales >> "$APT_LOG" 2>&1 || true
-    sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen 2>/dev/null || true
-    locale-gen >> "$APT_LOG" 2>&1 || true
-    update-locale LANG=zh_CN.UTF-8 2>/dev/null || true
-    
-    log_info "中文 locale 配置完成"
-}
-
-
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl 基础配置 (通用)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -897,7 +879,7 @@ net.netfilter.nf_conntrack_tcp_timeout_close_wait = 5
 net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 
 # ===== 内存管理 =====
-vm.swappiness = \${SWAPPINESS}
+vm.swappiness = ${SWAPPINESS}
 vm.overcommit_memory = 1
 vm.vfs_cache_pressure = 50
 

@@ -253,7 +253,6 @@ configure_locale() {
 
     # 多层持久化：覆盖 login/non-login/login shell / systemd / PAM
     update-locale LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 2>/dev/null || true
-    echo "LANG=zh_CN.UTF-8" > /etc/locale.gen 2>/dev/null || true
     echo "LANG=zh_CN.UTF-8" > /etc/locale.alias 2>/dev/null || true
     cat > /etc/environment.d/90-chinese.conf <<'EOF'
 LANG=zh_CN.UTF-8

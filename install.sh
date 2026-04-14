@@ -37,10 +37,9 @@ detect_platform() {
                 echo "nanopi-r4s"
             elif echo "$model" | grep -qiE "NanoPC.?T6|T6"; then
                 echo "nanopi-t6"
-            elif echo "$model" | grep -qi "Rockchip"; then
-                echo "generic-arm"
             else
-                echo "generic-arm"
+                # 未知 ARM64 设备，使用 nanopi-r4s 脚本（内有平台自适应）
+                echo "nanopi-r4s"
             fi
             ;;
         armv7l|armv6l)
