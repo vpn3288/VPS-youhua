@@ -495,14 +495,36 @@ install_docker() {
         return 0
     fi
     
-    curl --max-time 120 -fsSL https://get.docker.com | sh -s -- --mirror Aliyun >> "$APT_LOG" 2>&1 || {
-        log_warn "Docker 安装失败，使用系统包"
+    local docker_install_script=$(mktemp)
+    curl --max-time 120 -fsSL https://get.docker.com -o "$docker_install_script" || {
+        log_warn "Docker 安装脚本下载失败，使用系统包"
+        rm -f "$docker_install_script"
+        apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || true
+        systemctl enable docker 2>/dev/null || true
+        systemctl start docker 2>/dev/null || true
+        local docker_ready=false
+        for i in {1..30}; do
+            if docker info >/dev/null 2>&1; then docker_ready=true; break; fi
+            sleep 1
+        done
+        [[ "$docker_ready" != "true" ]] && log_warn "Docker daemon 未就绪"
+        return 0
+    }
+    bash "$docker_install_script" --mirror Aliyun >> "$APT_LOG" 2>&1 || {
+        log_warn "Docker 安装脚本执行失败，使用系统包"
+        rm -f "$docker_install_script"
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || true
     }
-    
+    rm -f "$docker_install_script"
     systemctl enable docker 2>/dev/null || true
     systemctl start docker 2>/dev/null || true
-    
+    local docker_ready=false
+    for i in {1..30}; do
+        if docker info >/dev/null 2>&1; then docker_ready=true; break; fi
+        sleep 1
+    done
+    [[ "$docker_ready" != "true" ]] && log_warn "Docker daemon 未就绪"
+
     # Docker 配置
     mkdir -p /etc/docker
     cat > /etc/docker/daemon.json <<'EOF'
@@ -787,7 +809,7 @@ net.ipv4.tcp_wmem = 4096 131072 ${TCP_BUF_MAX}
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_keepalive_time = 300
-net.ipv4.tcp_keepalive_intvl = 30
+net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_slow_start_after_idle = 0
 net.ipv4.tcp_fastopen = 3

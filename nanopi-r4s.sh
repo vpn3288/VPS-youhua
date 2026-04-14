@@ -577,9 +577,24 @@ install_docker() {
     systemctl enable docker 2>/dev/null || true
     systemctl start docker 2>/dev/null || true
 
+    # 等待 Docker daemon 就绪（ARM 设备启动较慢）
+    local docker_ready=false
+    for i in {1..30}; do
+        if docker info >/dev/null 2>&1; then
+            docker_ready=true
+            break
+        fi
+        sleep 1
+    done
+    [[ "$docker_ready" != "true" ]] && log_warn "Docker daemon 未就绪"
+}
+
+configure_docker_daemon() {
+    log_step "配置 Docker daemon..."
+
     mkdir -p /etc/docker
     local docker_log_size="50m"
-    [[ $SYS_DISK_AVAIL_GB -lt 10 ]] && docker_log_size="20m" && log_warn "磁盘空间有限，Docker日志限制为20MB"
+    [[ $SYS_DISK_AVAIL_GB -lt 10 ]] && docker_log_size="20m" && log_warn "磁盘空间有限，Docker日志限制为20M"
     cat > /etc/docker/daemon.json <<EOFDOCKER
 {
     "storage-driver": "overlay2",

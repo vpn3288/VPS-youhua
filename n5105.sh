@@ -804,6 +804,17 @@ install_docker() {
     systemctl enable docker 2>/dev/null || true
     systemctl start docker 2>/dev/null || true
 
+    # 等待 Docker daemon 就绪
+    local docker_ready=false
+    for i in {1..30}; do
+        if docker info >/dev/null 2>&1; then
+            docker_ready=true
+            break
+        fi
+        sleep 1
+    done
+    [[ "$docker_ready" != "true" ]] && log_warn "Docker daemon 未就绪"
+
     mkdir -p /etc/docker
     cat > /etc/docker/daemon.json <<'EOF'
 {
