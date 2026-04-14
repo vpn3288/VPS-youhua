@@ -1211,27 +1211,43 @@ trap 'log_warn "被中断"; exit 130' INT TERM
 
 # OpenClaw 诊断
 run_doctor() {
-    log_step "运行 OpenClaw 诊断..."
+    log_step "运行诊断..."
     echo ""
-    echo "=== OpenClaw 诊断报告 ==="
+    echo "=== AIagent 环境诊断报告 (NanoPC T6) ==="
     echo ""
-    echo "1. Node.js 版本:"
-    node --version
+    echo "1. 系统信息:"
+    echo "   平台: $PLATFORM_NAME"
+    echo "   系统: $(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d'"' -f2)"
+    echo "   内核: $(uname -r)"
+    echo "   架构: $(uname -m)"
+    echo "   CPU: $SYS_CPU_CORES 核"
+    echo "   内存: ${SYS_MEM_MB}MB"
     echo ""
-    echo "2. OpenClaw 版本:"
-    openclaw --version || echo "  未安装"
+    echo "2. CPU:"
+    local gov; gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
+    echo "   Governor: $gov"
     echo ""
-    echo "3. Gateway 状态:"
-    systemctl is-active openclaw-gateway || echo "  未运行"
+    echo "3. Docker:"
+    if command -v docker &>/dev/null; then
+        echo "   版本: $(docker --version 2>/dev/null | cut -d' ' -f3 | tr -d ',')"
+        echo "   状态: $(systemctl is-active docker 2>/dev/null || echo 'inactive')"
+    else
+        echo "   未安装"
+    fi
     echo ""
-    echo "4. Gateway 日志 (最后10行):"
-    journalctl -u openclaw-gateway -n 10 --no-pager 2>/dev/null || echo "  无日志"
+    echo "4. Node.js:"
+    command -v node &>/dev/null && echo "   版本: $(node --version)" || echo "   未安装"
     echo ""
-    echo "5. 监听端口:"
-    ss -tlnp | grep 18789 || netstat -tlnp | grep 18789 || echo "  端口 18789 未监听"
+    echo "5. 端口监听:"
+    ss -tlnp 2>/dev/null | grep -E "18789|18790" || netstat -tlnp 2>/dev/null | grep -E "18789|18790" || echo "   无"
     echo ""
-    echo "6. 配置检查:"
-    openclaw doctor 2>/dev/null || echo "  doctor 命令不可用"
+    echo "6. 服务状态:"
+    systemctl --user is-active openclaw-gateway 2>/dev/null && echo "   openclaw-gateway: active" || echo "   openclaw-gateway: inactive"
+    systemctl is-active docker 2>/dev/null && echo "   docker: active" || echo "   docker: inactive"
+    systemctl is-active chronyd 2>/dev/null && echo "   chronyd: active" || echo "   chronyd: inactive"
+    echo ""
+    echo "7. 磁盘:"
+    df -h / | tail -1 | awk '{printf "   系统盘: %s 总, %s 已用, %s 可用 (%s)\n", $2, $3, $4, $5}'
     echo ""
     echo "=== 诊断完成 ==="
 }
