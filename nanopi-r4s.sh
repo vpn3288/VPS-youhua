@@ -236,37 +236,6 @@ EOFCHRONY
     log_info "时间同步配置完成"
 }
 
-detect_timezone() {
-    if command -v timedatectl &>/dev/null; then
-        local tz; tz=$(timedatectl show --property=Timezone --value 2>/dev/null || true)
-        [[ -n "$tz" && -f "/usr/share/zoneinfo/$tz" ]] && { echo "$tz"; return 0; }
-    fi
-    if [[ -f /etc/timezone ]] && [[ -n "$(cat /etc/timezone 2>/dev/null)" ]]; then
-        local tz; tz=$(cat /etc/timezone 2>/dev/null)
-        [[ -f "/usr/share/zoneinfo/$tz" ]] && { echo "$tz"; return 0; }
-    fi
-    for tz in "Asia/Shanghai" "America/New_York" "America/Los_Angeles" "UTC"; do
-        [[ -f "/usr/share/zoneinfo/$tz" ]] && { echo "$tz"; return 0; }
-    done
-    echo "UTC"
-}
-
-configure_timezone() {
-    log_step "配置时区..."
-    local server_tz; server_tz=$(detect_timezone)
-    local current_tz=""; [[ -f /etc/timezone ]] && current_tz=$(cat /etc/timezone 2>/dev/null || echo "")
-    if [[ "$current_tz" == "$server_tz" ]]; then log_info "时区已是 $server_tz"; return 0; fi
-    if command -v timedatectl &>/dev/null && timedatectl set-timezone "$server_tz" 2>/dev/null; then
-        log_info "时区已设置为 $server_tz"
-    elif [[ -f "/usr/share/zoneinfo/$server_tz" ]]; then
-        ln -sf "/usr/share/zoneinfo/$server_tz" /etc/localtime 2>/dev/null
-        echo "$server_tz" > /etc/timezone 2>/dev/null || true
-        log_info "时区已设置为 $server_tz"
-    else
-        log_warn "无法设置时区 $server_tz"
-    fi
-}
-
 configure_locale() {
     log_step "配置 locale..."
 
@@ -865,27 +834,22 @@ net.ipv6.conf.default.forwarding = 1
 net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
 
-# 安全
+# 转发（容器必需）
+net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1
+
+# 连接安全
+net.ipv4.tcp_syncookies = 1
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
-net.ipv4.conf.all.accept_source_route = 0
-net.ipv4.conf.default.accept_source_route = 0
 net.ipv4.conf.all.secure_redirects = 0
 net.ipv4.conf.default.secure_redirects = 0
-net.ipv4.ip_forward = 1
-net.ipv6.conf.all.forwarding = 1
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
-net.ipv4.tcp_syncookies = 1
-net.ipv4.conf.all.log_martians = 0
-net.ipv4.conf.default.log_martians = 0
-kernel.dmesg_restrict = 1
-kernel.kptr_restrict = 1
-kernel.yama.ptrace_scope = 1
 
-# ARM64 特定
+# ARM64 内存
 vm.vfs_cache_pressure = 50
 EOFSYSCTL
 
@@ -1097,7 +1061,6 @@ main() {
     configure_limits
     configure_dns
     configure_time_sync
-    configure_timezone
     configure_locale
     optimize_io_scheduler
     optimize_arm

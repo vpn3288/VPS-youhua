@@ -339,97 +339,6 @@ EOF
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 自动检测服务器时区
-# ─────────────────────────────────────────────────────────────────────────────
-detect_timezone() {
-    log_step "检测服务器时区..."
-    
-    local detected_tz=""
-    
-    # 方法1: timedatectl
-    if command -v timedatectl &>/dev/null; then
-        detected_tz=$(timedatectl show --property=Timezone --value 2>/dev/null || true)
-        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
-            echo "$detected_tz"
-            return 0
-        fi
-    fi
-    
-    # 方法2: /etc/timezone
-    if [[ -f /etc/timezone ]] && [[ -n "$(cat /etc/timezone 2>/dev/null)" ]]; then
-        detected_tz=$(cat /etc/timezone 2>/dev/null)
-        if [[ -f "/usr/share/zoneinfo/$detected_tz" ]]; then
-            echo "$detected_tz"
-            return 0
-        fi
-    fi
-    
-    # 方法3: /etc/localtime 符号链接
-    if [[ -L /etc/localtime ]]; then
-        detected_tz=$(readlink -f /etc/localtime 2>/dev/null | sed 's|/usr/share/zoneinfo/||')
-        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
-            echo "$detected_tz"
-            return 0
-        fi
-    fi
-    
-    # 方法4: IP 地理位置 API
-    if ping -c1 -W3 ip-api.com &>/dev/null; then
-        detected_tz=$(curl -s --max-time 5 http://ip-api.com/json/ 2>/dev/null | \
-            python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('timezone',''))" 2>/dev/null || true)
-        if [[ -n "$detected_tz" && -f "/usr/share/zoneinfo/$detected_tz" ]]; then
-            echo "$detected_tz"
-            return 0
-        fi
-    fi
-    
-    # 方法5: 美国时区 fallback
-    for tz in "America/New_York" "America/Los_Angeles" "America/Chicago" "America/Denver"; do
-        if [[ -f "/usr/share/zoneinfo/$tz" ]]; then
-            echo "$tz"
-            return 0
-        fi
-    done
-    
-    echo "UTC"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 配置时区
-# ─────────────────────────────────────────────────────────────────────────────
-configure_timezone() {
-    log_step "配置时区..."
-    
-    local server_tz
-    server_tz=$(detect_timezone)
-    
-    local current_tz=""
-    if [[ -f /etc/timezone ]]; then
-        current_tz=$(cat /etc/timezone 2>/dev/null || echo "")
-    fi
-    
-    if [[ "$current_tz" == "$server_tz" ]]; then
-        log_info "时区已是 $server_tz"
-        return 0
-    fi
-    
-    if command -v timedatectl &>/dev/null; then
-        timedatectl set-timezone "$server_tz" 2>/dev/null && {
-            log_info "时区已设置为 $server_tz"
-            return 0
-        }
-    fi
-    
-    if [[ -f "/usr/share/zoneinfo/$server_tz" ]]; then
-        ln -sf "/usr/share/zoneinfo/$server_tz" /etc/localtime 2>/dev/null
-        echo "$server_tz" > /etc/timezone 2>/dev/null || true
-        log_info "时区已设置为 $server_tz"
-    else
-        log_warn "无法设置时区 $server_tz"
-    fi
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 配置 locale
 # ─────────────────────────────────────────────────────────────────────────────
 configure_locale() {
@@ -962,20 +871,13 @@ net.ipv4.tcp_congestion_control = bbr
 # ===== 安全加固 =====
 net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
-net.ipv4.conf.all.accept_source_route = 0
-net.ipv4.conf.default.accept_source_route = 0
 net.ipv4.conf.all.secure_redirects = 0
 net.ipv4.conf.default.secure_redirects = 0
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
-net.ipv4.conf.all.log_martians = 0
-net.ipv4.conf.default.log_martians = 0
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 net.ipv4.tcp_syncookies = 1
-kernel.dmesg_restrict = 1
-kernel.kptr_restrict = 1
-kernel.yama.ptrace_scope = 1
 
 # ===== IPv6 =====
 net.ipv6.conf.all.disable_ipv6 = 0
@@ -997,7 +899,6 @@ net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 # ===== 内存管理 =====
 vm.swappiness = \${SWAPPINESS}
 vm.overcommit_memory = 1
-vm.zone_reclaim_mode = 0
 vm.vfs_cache_pressure = 50
 
 # eMMC 保护：dirty_writeback 调优（减少随机写入，延长 eMMC 寿命）
@@ -1200,7 +1101,6 @@ main() {
     optimize_ssh_t6
     configure_dns
     configure_time_sync
-    configure_timezone
     configure_locale
     optimize_io_scheduler
     optimize_arm() {
