@@ -683,6 +683,7 @@ install_openclaw() {
 
 create_systemd_service() {
     log_step "创建 systemd 服务..."
+    local memory_max="MemoryMax=8G"
     
     if [[ "${INSTALL_METHOD:-}" == "docker" ]]; then
         mkdir -p ~/.config/systemd/user
@@ -709,7 +710,7 @@ ExecStart=/usr/bin/docker run --rm \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
 ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
 
-MemoryMax=4G
+${memory_max}
 
 [Install]
 WantedBy=default.target
@@ -737,7 +738,7 @@ Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
 LimitNOFILE=1048576
-MemoryMax=4G
+${memory_max}
 
 [Install]
 WantedBy=default.target
