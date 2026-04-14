@@ -306,23 +306,32 @@ EOF
 # 配置中文 locale
 configure_locale() {
     log_step "配置 locale..."
-    
+
+    # 立即导出：解决 bash <(curl) 非login shell 的 locale 丢失问题
+    export LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 LANGUAGE=zh_CN.UTF-8
+
     # 检查是否已有中文 locale
     if locale -a 2>/dev/null | grep -qi "zh_CN"; then
         log_info "中文 locale 已存在"
-        return 0
+    else
+        apt-get install -y locales >> "$APT_LOG" 2>&1 || true
+        sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen 2>/dev/null || true
+        locale-gen >> "$APT_LOG" 2>&1 || true
     fi
-    
-    # 安装中文 locale
-    apt-get install -y locales >> "$APT_LOG" 2>&1 || true
-    
-    # 生置中文 locale
-    sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen 2>/dev/null || true
-    locale-gen >> "$APT_LOG" 2>&1 || true
-    
-    # 设置默认 locale
-    update-locale LANG=zh_CN.UTF-8 2>/dev/null || true
-    
+
+    # 多层持久化：覆盖 login/non-login/login shell / systemd / PAM
+    update-locale LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 2>/dev/null || true
+    echo "LANG=zh_CN.UTF-8" > /etc/locale.alias 2>/dev/null || true
+    cat > /etc/environment.d/90-chinese.conf <<'EOF'
+LANG=zh_CN.UTF-8
+LC_ALL=zh_CN.UTF-8
+LANGUAGE=zh_CN.UTF-8
+EOF
+
+    # 同步到 /etc/default/locale（update-locale 的实际写入位置）
+    echo "LANG=zh_CN.UTF-8" > /etc/default/locale
+    echo "LC_ALL=zh_CN.UTF-8" >> /etc/default/locale
+
     log_info "中文 locale 配置完成"
 }
 
@@ -732,6 +741,8 @@ ExecStart=/usr/bin/docker run --rm \
     -v ${OPENCLAW_DATA_DIR}:/root/.openclaw \
     -e OPENCLAW_DATA_DIR=/root/.openclaw \
     -e NODE_ENV=production \
+    -e LANG=zh_CN.UTF-8 \
+    -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
 ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
 
@@ -758,6 +769,7 @@ WorkingDirectory=${OPENCLAW_DATA_DIR}
 Environment="NODE_ENV=production"
 Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin"
 Environment="OPENCLAW_DATA_DIR=${OPENCLAW_DATA_DIR}"
+Environment="LANG=zh_CN.UTF-8"
 ExecStart=/usr/local/bin/openclaw gateway --port ${OPENCLAW_PORT}
 ExecStop=/bin/kill -SIGTERM \$MAINPID
 Restart=on-failure

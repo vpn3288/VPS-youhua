@@ -121,16 +121,105 @@ check_system_info() {
     echo -e "  ${BOLD}OS${RESET}      = $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | xargs || echo 'unknown')"
     echo -e "  ${BOLD}CPU 核数${RESET} = $(nproc 2>/dev/null || echo '?')"
     echo -e "  ${BOLD}内存${RESET}    = $(free -h 2>/dev/null | grep Mem | awk '{print $2}' || echo '?')"
-    echo -e "  ${BOLD}运行时间${RESET} = $(uptime -p 2>/dev/null || uptime)"
-    echo -e "  ${BOLD}磁盘(根)${RESET} = 总计 $(df -h / | tail -1 | awk '{print $2}') | 可用 $(df -h / | tail -1 | awk '{print $4}')"
+    echo ""
+}
 
-    if lsblk -d -n -o NAME,RO,TRAN 2>/dev/null | grep -q "mmc\|sd[a-z]"; then
-        echo ""
-        echo -e "  ${BOLD}存储设备${RESET}:"
-        lsblk -d -n -o NAME,RO,TRAN,SIZE,MODEL 2>/dev/null | while read -r line; do
-            echo -e "    $line"
-        done
+#------------------------------------------------------------------------------
+# 1b. locale 全链路 UTF-8 验证
+#------------------------------------------------------------------------------
+check_locale_chain() {
+    log_section "1b. locale 全链路 UTF-8"
+
+    local issues=0
+
+    # Layer 1: 当前 shell 环境变量
+    local current_lang="${LANG:-<未设置>}"
+    local current_lc="${LC_ALL:-<未设置>}"
+    echo -e "  ${DIM}Layer 1 - 当前shell环境:${RESET}"
+    echo -e "    LANG=${current_lang}"
+    echo -e "    LC_ALL=${current_lc}"
+    if [[ "$current_lang" == *"UTF-8"* || "$current_lang" == *"utf-8"* ]]; then
+        echo -e "    ${GREEN}✓${RESET} 当前shell UTF-8"
+    else
+        echo -e "    ${RED}✗${RESET} 当前shell 非UTF-8"
+        ((issues++))
     fi
+
+    # Layer 2: /etc/default/locale
+    echo -e "  ${DIM}Layer 2 - /etc/default/locale:${RESET}"
+    if [[ -f /etc/default/locale ]]; then
+        grep -v "^#" /etc/default/locale 2>/dev/null | grep -v "^$" | while read -r line; do
+            echo -e "    ${line}"
+        done
+        if grep -qi "UTF-8\|utf-8" /etc/default/locale 2>/dev/null; then
+            echo -e "    ${GREEN}✓${RESET} /etc/default/locale UTF-8"
+        else
+            echo -e "    ${RED}✗${RESET} /etc/default/locale 非UTF-8"
+            ((issues++))
+        fi
+    else
+        echo -e "    ${RED}✗${RESET} 文件不存在"
+        ((issues++))
+    fi
+
+    # Layer 3: /etc/environment.d/90-chinese.conf (systemd/PAM)
+    echo -e "  ${DIM}Layer 3 - /etc/environment.d/90-chinese.conf:${RESET}"
+    if [[ -f /etc/environment.d/90-chinese.conf ]]; then
+        grep -v "^#" /etc/environment.d/90-chinese.conf 2>/dev/null | grep -v "^$" | while read -r line; do
+            echo -e "    ${line}"
+        done
+        echo -e "    ${GREEN}✓${RESET} systemd环境配置存在"
+    else
+        echo -e "    ${DIM}  文件不存在（可选，非必须）${RESET}"
+    fi
+
+    # Layer 4: zh_CN.UTF-8 locale 已生成
+    echo -e "  ${DIM}Layer 4 - 可用的中文locale:${RESET}"
+    if locale -a 2>/dev/null | grep -qi "zh_CN"; then
+        echo -e "    $(locale -a 2>/dev/null | grep -i zh_CN | tr '\n' ' ')"
+        echo -e "    ${GREEN}✓${RESET} 中文locale已生成"
+    else
+        echo -e "    ${RED}✗${RESET} 系统中未生成zh_CN.UTF-8"
+        ((issues++))
+    fi
+
+    # Layer 5: Docker daemon locale（检查daemon.json）
+    echo -e "  ${DIM}Layer 5 - Docker daemon:${RESET}"
+    if command -v docker &>/dev/null; then
+        echo -e "    Docker: ${GREEN}已安装${RESET}"
+        if systemctl is-active docker &>/dev/null; then
+            echo -e "    Docker daemon: ${GREEN}运行中${RESET}"
+        else
+            echo -e "    Docker daemon: ${DIM}未运行${RESET}"
+        fi
+    else
+        echo -e "    Docker: ${DIM}未安装${RESET}"
+    fi
+
+    # Layer 6: systemd service 中的 LANG
+    echo -e "  ${DIM}Layer 6 - systemd service Environment:${RESET}"
+    local svc_file
+    for svc_file in ~/.config/systemd/user/openclaw-gateway.service \
+                    /etc/systemd/system/openclaw-gateway.service \
+                    /etc/systemd/user/openclaw-gateway.service; do
+        if [[ -f "$svc_file" ]]; then
+            local lang_env
+            lang_env=$(grep -i "LANG=" "$svc_file" 2>/dev/null | grep -v "^#" | head -1)
+            if [[ -n "$lang_env" ]]; then
+                echo -e "    ${GREEN}✓${RESET} ${svc_file#$HOME}: ${lang_env}"
+            else
+                echo -e "    ${YELLOW}!${RESET} ${svc_file#$HOME}: 无LANG环境变量"
+            fi
+        fi
+    done
+
+    echo ""
+    if [[ $issues -eq 0 ]]; then
+        echo -e "  ${GREEN}✓ locale全链路完整${RESET}"
+    else
+        echo -e "  ${RED}✗ locale全链路有${issues}处问题${RESET}"
+    fi
+    echo ""
 }
 
 #-------------------------------------------------------------------------------
@@ -649,6 +738,7 @@ check_vs_targets() {
 main() {
     log_header
     check_system_info
+    check_locale_chain
 
     echo ""
     echo -e "${YELLOW}提示: 部分检查需要 root 权限，建议: sudo $0${RESET}"
