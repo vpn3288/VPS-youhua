@@ -49,7 +49,7 @@ SYS_NET_IF=""
 # 安装选项
 INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
 INSTALL_NODEJS="${INSTALL_NODEJS:-true}"
-NODEJS_VERSION="${NODEJS_VERSION:-24}"
+NODEJS_VERSION="${NODEJS_VERSION:-22}"
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
 OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
 OPENCLAW_DATA_DIR="${OPENCLAW_DATA_DIR:-/opt/openclaw}"
@@ -599,6 +599,7 @@ ExecStart=/usr/bin/docker run --rm \
     -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
 ExecStop=/usr/bin/docker stop -t 10 openclaw-gateway
+ExecStopPost=/usr/bin/docker rm -f openclaw-gateway
 
 ${memory_max}
 OOMScoreAdjust=-200
@@ -742,28 +743,12 @@ detect_nanopi_t6() {
         if echo "$model" | grep -qi "T6"; then
             log_info "检测到: $model"
             # 自动检测真实内存（不要硬编码，让 line 81 的检测结果生效）
-            # T6 通常 8-16GB，T6S 通常 4GB
-            if echo "$model" | grep -qi "S"; then
-                PLATFORM_DESC="RK3588S ARM64 (4GB RAM), 自动检测"
-                SYS_MEM_MB=${SYS_MEM_MB:-4096}  # T6S: 4GB RAM
-            else
-                PLATFORM_DESC="RK3588S ARM64 (8GB RAM), 自动检测"
-                SYS_MEM_MB=${SYS_MEM_MB:-8192}  # T6 fallback
-            fi
-            log_info "内存将自动检测: ${SYS_MEM_MB}MB (实际以系统检测为准)"
+            # T6/T6S 统一走系统自动检测（detect_system 已正确获取）
+            PLATFORM_DESC="RK3588S ARM64, 自动检测"
+            log_info "检测到 RK3588 平台"
             return 0
         fi
     fi
-    
-    if grep -qi "rk3588" /proc/cpuinfo 2>/dev/null; then
-        log_info "检测到 RK3588 平台"
-        return 0
-    fi
-    
-    [[ "$(uname -m)" != "aarch64" ]] && {
-        log_error "NanoPi T6 需要 ARM64 架构"
-        return 1
-    }
     
     return 0
 }
@@ -902,8 +887,8 @@ optimize_network_t6() {
     if [[ $SYS_CPU_CORES -gt 1 ]]; then
         for rps in /sys/class/net/eth*/queues/rx-*/rps_cpus; do
             [[ -f "$rps" ]] || continue
-            local mask
-            mask=$(printf '%x' $(( (1 << SYS_CPU_CORES) - 1 )))
+            local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
+            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
             printf "%s" "$mask" > "$rps" 2>/dev/null || true
         done
         log_info "RPS 启用 (CPU mask: 0x$mask)"
@@ -1050,9 +1035,9 @@ main() {
     echo ""
     
     preflight_check
-    configure_logrotate
     configure_apt_sources
     clean_system
+    configure_logrotate
     optimize_memory_t6
     configure_sysctl_t6
     configure_limits
@@ -1070,7 +1055,7 @@ main() {
     configure_cleanup_cron
     
     install_base_tools
-    [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
+    install_docker
     install_nodejs
     install_openclaw
     create_systemd_service

@@ -99,10 +99,12 @@ detect_system() {
 # SSD检测
 # =============================================================================
 detect_ssd() {
-    if [[ -b "$SYS_ROOT_DISK" ]]; then
-        if cat /sys/block/*/queue/rotational 2>/dev/null | grep -q "0"; then
-            SYS_IS_SSD=true
-        fi
+    # 只检查根磁盘，避免多盘环境下误判
+    local root_dev
+    root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
+    root_dev=$(basename "$root_dev" 2>/dev/null)
+    if [[ -n "$root_dev" ]] && [[ -f "/sys/block/${root_dev}/queue/rotational" ]]; then
+        [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]] && SYS_IS_SSD=true
     fi
 }
 
@@ -591,7 +593,8 @@ optimize_network_generic() {
     fi
 
     if [[ $SYS_CPU_CORES -gt 1 ]]; then
-        local mask; mask=$(printf '%x' $(( (1 << SYS_CPU_CORES) - 1 )))
+        local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
+        local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
         for rps in /sys/class/net/*/queues/rx-*/rps_cpus; do
             [[ -f "$rps" ]] || continue
             printf "%s" "$mask" > "$rps" 2>/dev/null || true
@@ -635,15 +638,14 @@ optimize_x86_generic() {
         echo "performance" > "$cpu" 2>/dev/null || true
     done
 
-    # Turbo Boost 控制
+    # Turbo Boost（默认保持启用，有风扇可全力跑）
     local turbo_boost="/sys/devices/system/cpu/intel_pstate/no_turbo"
     if [[ -f "$turbo_boost" ]]; then
-        echo "1" > "$turbo_boost" 2>/dev/null || true
         local turbo_state; turbo_state=$(cat "$turbo_boost" 2>/dev/null || echo "unknown")
         if [[ "$turbo_state" == "1" ]]; then
-            log_info "Turbo Boost: 已禁用 (静音模式)"
+            log_info "Turbo Boost: 已禁用"
         else
-            log_info "Turbo Boost: 启用"
+            log_info "Turbo Boost: 启用 (性能模式)"
         fi
     fi
 
@@ -867,6 +869,7 @@ ExecStart=/usr/bin/docker run --rm \
     -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
 ExecStop=/usr/bin/docker stop -t 10 openclaw-gateway
+ExecStopPost=/usr/bin/docker rm -f openclaw-gateway
 
 ${memory_max}
 OOMScoreAdjust=-200

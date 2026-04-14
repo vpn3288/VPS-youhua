@@ -37,7 +37,7 @@ SYS_NET_IF=""; SYS_ROOT_DISK=""; SYS_IS_TF_CARD=false
 
 INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
 INSTALL_NODEJS="${INSTALL_NODEJS:-true}"
-NODEJS_VERSION="${NODEJS_VERSION:-24}"
+NODEJS_VERSION="${NODEJS_VERSION:-22}"
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
 OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
 OPENCLAW_DATA_DIR="${OPENCLAW_DATA_DIR:-/opt/openclaw}"
@@ -289,12 +289,12 @@ root hard memlock unlimited
 EOFLIMITS
 
     [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 1048576 > /proc/sys/fs/inotify/max_user_watches
-    [[ -f /proc/sys/fs/inotify/max_user_instances ]] && echo 4096 > /proc/sys/fs/inotify/max_user_instances
+    [[ -f /proc/sys/fs/inotify/max_user_instances ]] && echo 8192 > /proc/sys/fs/inotify/max_user_instances
 
     mkdir -p /etc/sysctl.d
     cat > /etc/sysctl.d/99-inotify.conf <<'EOFINOTIFY'
 fs.inotify.max_user_watches = 1048576
-fs.inotify.max_user_instances = 4096
+fs.inotify.max_user_instances = 8192
 EOFINOTIFY
 
     mkdir -p /etc/systemd/system.conf.d /etc/systemd/user.conf.d
@@ -322,8 +322,31 @@ EOFDOCKERLIM
 }
 
 # =============================================================================
-# TF卡保护核心优化 v3.1
+# journald 优化 (TF卡/flash 存储保护)
 # =============================================================================
+configure_journald() {
+    log_step "配置 journald..."
+
+    mkdir -p /etc/systemd
+    cat > /etc/systemd/journald.conf <<'EOF'
+[Journal]
+SystemMaxUse=100M
+SystemMaxFileSize=30M
+RuntimeMaxUse=80M
+MaxRetentionSec=3day
+Compress=yes
+Storage=volatile
+ForwardToSyslog=no
+MaxLevelStore=notice
+EOF
+
+    systemctl restart systemd-journald 2>/dev/null || true
+    log_info "journald 配置完成"
+}
+
+
+
+
 configure_tf_card_protection() {
     log_step "TF卡保护核心优化..."
     if [[ "$SYS_IS_TF_CARD" != "true" ]]; then
@@ -634,6 +657,7 @@ ExecStart=/usr/bin/docker run --rm \
     -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
 ExecStop=/usr/bin/docker stop -t 10 openclaw-gateway
+ExecStopPost=/usr/bin/docker rm -f openclaw-gateway
 
 ${memory_max}
 OOMScoreAdjust=-200
@@ -674,6 +698,7 @@ EOFSYSSERVICE
     fi
 
     systemctl --user daemon-reload
+    loginctl enable-linger "$OPENCLAW_USER" 2>/dev/null || true
     systemctl --user enable openclaw-gateway 2>/dev/null || true
     log_info "systemd 服务创建完成"
     log_step "提示: 运行以下命令启动服务:"
@@ -709,7 +734,7 @@ readonly PLATFORM_DESC="RK3399 ARM64, 4GB RAM, TF卡, 双千兆网口"
 ZRAM_SIZE=1024
 ZRAM_ALGO="lz4"
 SWAPPINESS=10
-TCP_BUF_MAX=8388608
+TCP_BUF_MAX=16777216  # 16MB TCP缓冲（R4S 作为网关需要足够的窗口）
 TCP_TW_BUCKETS=32768
 CT_MAX=524288
 MIN_FREE_KB=8192
@@ -877,7 +902,8 @@ optimize_network_r4s() {
         log_info "网卡 $name 优化完成 (Speed: $speed, TX: 10000)"
     done
     if [[ $SYS_CPU_CORES -gt 1 ]]; then
-        local mask; mask=$(printf '%x' $(( (1 << SYS_CPU_CORES) - 1 )) | tr 'a-z' 'A-Z')
+        local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
+        local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )) | tr 'a-z' 'A-Z')
         for rps in /sys/class/net/eth*/queues/rx-*/rps_cpus; do [[ -f "$rps" ]] || continue; printf "%s" "$mask" > "$rps" 2>/dev/null || true; done
         log_info "RPS 启用 (CPU mask: 0x$mask)"
     fi
@@ -1057,6 +1083,7 @@ main() {
     optimize_memory_r4s
     configure_sysctl_r4s
     configure_limits
+    configure_journald
     configure_dns
     configure_time_sync
     configure_locale

@@ -46,7 +46,7 @@ SYS_IS_SSD=false; SYS_IS_ORACLE_CLOUD=false
 # 安装选项
 INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
 INSTALL_NODEJS="${INSTALL_NODEJS:-true}"
-NODEJS_VERSION="${NODEJS_VERSION:-24}"
+NODEJS_VERSION="${NODEJS_VERSION:-22}"
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
 OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
 OPENCLAW_DATA_DIR="${OPENCLAW_DATA_DIR:-/opt/openclaw}"
@@ -464,7 +464,8 @@ optimize_oracle_cloud() {
 
         # RPS（所有RX队列）
         if [[ $SYS_CPU_CORES -gt 1 ]]; then
-            local mask; mask=$(printf '%x' $(( (1 << SYS_CPU_CORES) - 1 )))
+            local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
+            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
             for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                 [[ -f "$rps_file" ]] || continue
                 printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
@@ -482,14 +483,15 @@ optimize_oracle_cloud() {
 # 平台信息
 # =============================================================================
 readonly PLATFORM_NAME="Oracle Cloud ARM"
-readonly PLATFORM_DESC="Ampere Altra, 16GB RAM, 100GB"
+readonly PLATFORM_DESC="Ampere Altra ($(awk '/MemTotal/{printf "%.0fGB", $2/1024/1024}' /proc/meminfo), Oracle Cloud)"
 
 # =============================================================================
-# 平台变量（16GB优化）
+# 平台变量（根据实际内存动态调整）
 # =============================================================================
-ZRAM_SIZE=0         # 16GB 足够，不需要 ZRAM
-SWAPPINESS=10        # 低 swappiness
-TCP_BUF_MAX=33554432  # 32MB TCP缓冲（Oracle Cloud网络优化）
+# TCP缓冲：根据内存动态设置（Oracle Cloud网络优化）
+TCP_BUF_MAX=$(awk '/MemTotal/{mem=$2/1024/1024; if(mem>=14)print 33554432; else if(mem>=6)print 16777216; else print 8388608}' /proc/meminfo)
+ZRAM_SIZE=0
+SWAPPINESS=10
 TCP_TW_BUCKETS=131072
 CT_MAX=131072
 MIN_FREE_KB=32768
@@ -645,12 +647,13 @@ optimize_arm64() {
 optimize_io_scheduler() {
     log_step "优化 I/O 调度..."
 
+    # 只检查根磁盘的 rotational 标志，避免多盘环境下误判
+    local root_dev
+    root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
+    root_dev=$(basename "$root_dev" 2>/dev/null)
     local is_ssd=false
-
-    if [[ -b "$SYS_ROOT_DISK" ]]; then
-        if cat /sys/block/*/queue/rotational 2>/dev/null | grep -q "0"; then
-            is_ssd=true
-        fi
+    if [[ -n "$root_dev" ]] && [[ -f "/sys/block/${root_dev}/queue/rotational" ]]; then
+        [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]] && is_ssd=true
     fi
 
     if [[ "$is_ssd" == "true" ]]; then
@@ -794,8 +797,18 @@ install_openclaw() {
 create_systemd_service() {
     log_step "创建 systemd 服务..."
 
-    # 16GB内存限制
-    local memory_max="MemoryMax=8G"
+    # 内存限制（根据实际内存动态设置）
+    local total_mem_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    local total_mem_gb=$((total_mem_kb / 1024 / 1024))
+    local memory_max
+    if [[ "$total_mem_gb" -ge 14 ]]; then
+        memory_max="MemoryMax=16G"
+    elif [[ "$total_mem_gb" -ge 6 ]]; then
+        memory_max="MemoryMax=8G"
+    else
+        memory_max="MemoryMax=4G"
+    fi
+    log_info "Docker 内存限制: $memory_max (检测到 ${total_mem_gb}GB)"
 
     if [[ "${INSTALL_METHOD:-}" == "docker" ]]; then
         mkdir -p ~/.config/systemd/user
@@ -823,6 +836,7 @@ ExecStart=/usr/bin/docker run --rm \
     -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
 ExecStop=/usr/bin/docker stop -t 10 openclaw-gateway
+ExecStopPost=/usr/bin/docker rm -f openclaw-gateway
 
 ${memory_max}
 OOMScoreAdjust=-200

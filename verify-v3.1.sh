@@ -441,8 +441,8 @@ check_journald() {
 check_inotify() {
     log_section "8. inotify 文件监控"
 
-    log_pair "fs.inotify.max_user_watches"    "$(sysctl -n fs.inotify.max_user_watches 2>/dev/null || echo N/A)" "ARM:524288 / x86:1048576"
-    log_pair "fs.inotify.max_user_instances"   "$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo N/A)" "ARM:4096 / x86:8192"
+    log_pair "fs.inotify.max_user_watches"    "$(sysctl -n fs.inotify.max_user_watches 2>/dev/null || echo N/A)" "目标: 1048576 (所有平台)"
+    log_pair "fs.inotify.max_user_instances"   "$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo N/A)" "目标: 8192 (所有平台)"
 
     echo ""
     if [[ -f /etc/sysctl.d/99-inotify.conf ]]; then
