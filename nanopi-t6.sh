@@ -36,7 +36,7 @@ log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局变量
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="2.0"
+readonly SCRIPT_VERSION="3.1"
 readonly APT_LOG="/var/log/openclaw-install.log"
 readonly LOCK_FILE="/var/lock/openclaw-install.lock"
 
@@ -1015,6 +1015,46 @@ optimize_network_t6() {
     fi
 }
 
+# OOM Killer 保护 - 防止 AIagent 进程被 oomkill
+optimize_oom() {
+    log_step "配置 OOM Killer 保护..."
+    mkdir -p /etc/systemd/system/openclaw-gateway.service.d
+    cat > /etc/systemd/system/openclaw-gateway.service.d/oom.conf <<'EOFOOM'
+[Service]
+OOMScoreAdjust=-200
+EOFOOM
+    log_info "OOM Killer 保护已配置"
+}
+
+# 自动清理 - 定时清理日志/临时文件/旧镜像，减少 eMMC 写入
+configure_cleanup_cron() {
+    log_step "配置自动清理..."
+    mkdir -p /usr/local/bin
+    cat > /usr/local/bin/aiagent-cleanup.sh <<'EOTCLEANUP'
+#!/bin/bash
+# AIagent 清理脚本 - eMMC 保护版
+docker image prune -af --filter "until=168h" 2>/dev/null || true
+journalctl --vacuum-size=30M 2>/dev/null || true
+journalctl --vacuum-time=3d 2>/dev/null || true
+find /tmp -type f -mtime +1 -delete 2>/dev/null || true
+find /var/tmp -type f -mtime +1 -delete 2>/dev/null || true
+find /root/.openclaw/sessions -name "*.json" -mmin +10080 -delete 2>/dev/null || true
+find /root/.hermes/sessions -name "*.json" -mmin +10080 -delete 2>/dev/null || true
+npm cache clean --force 2>/dev/null || true
+exit 0
+EOTCLEANUP
+    chmod +x /usr/local/bin/aiagent-cleanup.sh
+
+    local cron_file="/var/spool/cron/crontabs/root"
+    mkdir -p "$(dirname "$cron_file")"
+    touch "$cron_file"
+    chmod 600 "$cron_file"
+    if ! grep -q "aiagent-cleanup" "$cron_file" 2>/dev/null; then
+        echo "0 3 * * * /usr/local/bin/aiagent-cleanup.sh >> /var/log/aiagent-cleanup.log 2>&1" >> "$cron_file"
+    fi
+    log_info "自动清理已配置"
+}
+
 main() {
     clear
     echo "═══════════════════════════════════════════════════════════════════════"
@@ -1107,6 +1147,10 @@ main() {
     optimize_arm
     optimize_network_t6
     
+    # OOM Killer 保护（重要：AIagent 进程被oomkill会导致会话中断）
+    optimize_oom
+    configure_cleanup_cron
+    
     install_base_tools
     install_nodejs
     install_openclaw
@@ -1118,7 +1162,7 @@ main() {
     
     echo ""
     echo "═══════════════════════════════════════════════════════════════════════"
-    echo -e "${GREEN}  ✅ NanoPi T6/T6S 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi T6/T6S v${SCRIPT_VERSION} 优化完成！${NC}"
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
     echo -e "${CYAN}后续步骤:${NC}"
