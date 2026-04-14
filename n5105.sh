@@ -478,7 +478,7 @@ EOF
 # sysctl 优化 (v3.1)
 # =============================================================================
 configure_sysctl_n5105() {
-    log_step "配置 sysctl (N5105 v3.0)..."
+    log_step "配置 sysctl (N5105 v3.1)..."
 
     local sysctl_file="/etc/sysctl.d/99-openclaw.conf"
     backup_file "$sysctl_file"
@@ -536,8 +536,8 @@ net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 3600
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 15
-    net.netfilter.nf_conntrack_tcp_timeout_close_wait = 10
-    net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
+net.netfilter.nf_conntrack_tcp_timeout_close_wait = 10
+net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 
 # === 安全 ===
 net.ipv4.conf.all.rp_filter = 1
@@ -610,10 +610,10 @@ optimize_network_n5105() {
 }
 
 # =============================================================================
-# x86 特定优化 (v3.0 - 静音优化)
+# x86 特定优化 (v3.1 - 性能模式)
 # =============================================================================
 optimize_x86() {
-    log_step "x86 特定优化 (v3.0 静音优化)..."
+    log_step "x86 特定优化 (v3.1 性能模式)..."
 
     # Intel P-State
     if [[ -d /sys/devices/system/cpu/intel_pstate ]]; then
@@ -884,7 +884,7 @@ ExecStart=/usr/bin/docker run --rm \
     -e LANG=zh_CN.UTF-8 \
     -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
-ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
+ExecStop=/usr/bin/docker stop -t 10 openclaw-gateway
 
 ${memory_max}
 OOMScoreAdjust=-200

@@ -11,7 +11,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # =============================================================================
 # OpenClaw 安装脚本 - 通用函数库
 # 所有平台共享的函数和变量
@@ -262,8 +262,10 @@ configure_dns() {
     mkdir -p /etc/systemd
     cat > /etc/systemd/resolved.conf <<'EOF'
 [Resolve]
-DNS=1.1.1.1 8.8.8.8
+DNS=1.1.1.1 8.8.8.8 223.5.5.5
 FallbackDNS=1.0.0.1 8.8.4.4
+DNSSEC=no
+DNSOverTLS=no
 DNSStubListener=no
 ReadEtcHosts=yes
 EOF
@@ -300,6 +302,31 @@ EOF
     
     log_info "时间同步配置完成"
 }
+
+
+# =============================================================================
+# journald 优化 (eMMC 存储保护)
+# =============================================================================
+configure_journald() {
+    log_step "配置 journald..."
+
+    mkdir -p /etc/systemd
+    cat > /etc/systemd/journald.conf <<'EOF'
+[Journal]
+SystemMaxUse=200M
+SystemMaxFileSize=50M
+RuntimeMaxUse=100M
+MaxRetentionSec=7day
+Compress=yes
+Storage=persistent
+ForwardToSyslog=no
+MaxLevelStore=notice
+EOF
+
+    systemctl restart systemd-journald 2>/dev/null || true
+    log_info "journald 配置完成"
+}
+
 
 
 
@@ -339,74 +366,14 @@ EOF
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 配置 locale
-# ─────────────────────────────────────────────────────────────────────────────
-configure_locale() {
-# ─────────────────────────────────────────────────────────────────────────────
-# sysctl 基础配置 (通用)
-# ─────────────────────────────────────────────────────────────────────────────
-configure_sysctl_base() {
-    local sysctl_file="/etc/sysctl.d/99-openclaw.conf"
-    backup_file "$sysctl_file"
-    
-    cat > "$sysctl_file" <<'EOF'
-# OpenClaw sysctl 配置
-
-# 网络缓冲区
-net.core.rmem_max = 16777216
-net.core.wmem_max = 16777216
-net.core.rmem_default = 262144
-net.core.wmem_default = 262144
-net.core.netdev_max_backlog = 65535
-net.core.somaxconn = 65535
-
-# TCP
-net.ipv4.tcp_rmem = 4096 131072 16777216
-net.ipv4.tcp_wmem = 4096 131072 16777216
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_fin_timeout = 15
-net.ipv4.tcp_keepalive_time = 60
-net.ipv4.tcp_keepalive_intvl = 10
-net.ipv4.tcp_keepalive_probes = 3
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_fastopen = 3
-net.ipv4.tcp_max_syn_backlog = 65535
-
-# BBR
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-
-# 内存
-vm.swappiness = 20
-vm.dirty_ratio = 15
-vm.dirty_background_ratio = 5
-vm.min_free_kbytes = 32768
-vm.overcommit_memory = 1
-
-# 连接追踪
-net.netfilter.nf_conntrack_max = 131072
-net.netfilter.nf_conntrack_tcp_timeout_established = 3600
-
-# 安全
-net.ipv4.conf.all.rp_filter = 1
-net.ipv4.conf.default.rp_filter = 1
-kernel.dmesg_restrict = 1
-kernel.kptr_restrict = 1
-EOF
-    
-    sysctl -p "$sysctl_file" 2>/dev/null || true
-    log_info "sysctl 基础配置完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 系统限制
 # ─────────────────────────────────────────────────────────────────────────────
 configure_limits() {
     log_step "配置系统限制..."
-    
+
     local limits_file="/etc/security/limits.conf"
     backup_file "$limits_file"
-    
+
     cat >> "$limits_file" <<'EOF'
 
 # OpenClaw 限制
@@ -417,17 +384,17 @@ configure_limits() {
 root soft nofile 1048576
 root hard nofile 1048576
 EOF
-    
+
     # inotify
     [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 1048576 > /proc/sys/fs/inotify/max_user_watches
     [[ -f /proc/sys/fs/inotify/max_user_instances ]] && echo 8192 > /proc/sys/fs/inotify/max_user_instances
-    
+
     mkdir -p /etc/sysctl.d
     cat > /etc/sysctl.d/99-inotify.conf <<'EOF'
 fs.inotify.max_user_watches = 1048576
 fs.inotify.max_user_instances = 8192
 EOF
-    
+
     # systemd 系统级限制
     mkdir -p /etc/systemd/system.conf.d /etc/systemd/user.conf.d
     cat > /etc/systemd/system.conf.d/99-ai-limits.conf <<'EOFSYSD'
@@ -441,7 +408,7 @@ EOFSYSD
 DefaultLimitNOFILE=1048576
 DefaultLimitNPROC=65535
 EOFUSRD
-    
+
     # Docker systemd limit
     mkdir -p /etc/systemd/system/docker.service.d
     cat > /etc/systemd/system/docker.service.d/override.conf <<'EOFDOCKERLIM'
@@ -450,9 +417,9 @@ LimitNOFILE=1048576
 LimitNPROC=65535
 LimitMEMLOCK=infinity
 EOFDOCKERLIM
-    
+
     systemctl daemon-reload >/dev/null 2>&1 || true
-    
+
     log_info "系统限制配置完成"
 }
 
@@ -631,7 +598,7 @@ ExecStart=/usr/bin/docker run --rm \
     -e LANG=zh_CN.UTF-8 \
     -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
-ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
+ExecStop=/usr/bin/docker stop -t 10 openclaw-gateway
 
 ${memory_max}
 OOMScoreAdjust=-200
@@ -719,6 +686,17 @@ optimize_io_scheduler() {
     configure_ext4_commit
 }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ARM 特定优化
+# ─────────────────────────────────────────────────────────────────────────────
+optimize_arm() {
+    log_step "ARM 特定优化..."
+    for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        [[ -f "$cpu" ]] && echo "performance" > "$cpu" 2>/dev/null || true
+    done
+    log_info "ARM 特定优化完成"
+}
 
 configure_ext4_commit() {
     local fstab_file="/etc/fstab"
@@ -1059,8 +1037,6 @@ main() {
     echo "  安装方式:  ${install_method_display}"
     echo "  Docker:    ${docker_display}"
     echo "  Node.js:  ${nodejs_display}"
-    echo "  Docker:    ${INSTALL_DOCKER}"
-    echo "  Node.js:  ${NODEJS_VERSION}"
     echo ""
     
     if [[ -t 0 ]]; then
@@ -1083,15 +1059,9 @@ main() {
     optimize_ssh_t6
     configure_dns
     configure_time_sync
+    configure_journald
     configure_locale
     optimize_io_scheduler
-    optimize_arm() {
-        log_step "ARM 特定优化..."
-        for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-            [[ -f "$cpu" ]] && echo "performance" > "$cpu" 2>/dev/null || true
-        done
-        log_info "ARM 特定优化完成"
-    }
     optimize_arm
     optimize_network_t6
     
@@ -1100,6 +1070,7 @@ main() {
     configure_cleanup_cron
     
     install_base_tools
+    [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
     install_nodejs
     install_openclaw
     create_systemd_service

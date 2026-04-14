@@ -474,7 +474,7 @@ EOF
 # sysctl 优化 (v3.1)
 # =============================================================================
 configure_sysctl_generic() {
-    log_step "配置 sysctl (通用 x86 v3.0)..."
+    log_step "配置 sysctl (通用 x86 v3.1)..."
 
     local sysctl_file="/etc/sysctl.d/99-openclaw.conf"
     backup_file "$sysctl_file"
@@ -866,7 +866,7 @@ ExecStart=/usr/bin/docker run --rm \
     -e LANG=zh_CN.UTF-8 \
     -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
-ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
+ExecStop=/usr/bin/docker stop -t 10 openclaw-gateway
 
 ${memory_max}
 OOMScoreAdjust=-200

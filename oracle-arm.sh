@@ -822,7 +822,7 @@ ExecStart=/usr/bin/docker run --rm \
     -e LANG=zh_CN.UTF-8 \
     -e LC_ALL=zh_CN.UTF-8 \
     openclaw/openclaw:latest gateway --port ${OPENCLAW_PORT}
-ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
+ExecStop=/usr/bin/docker stop -t 10 openclaw-gateway
 
 ${memory_max}
 OOMScoreAdjust=-200

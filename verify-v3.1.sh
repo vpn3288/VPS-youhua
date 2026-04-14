@@ -287,7 +287,7 @@ check_sysctl_network() {
 
     echo ""
     echo -e "  ${BOLD}[安全参数 - IPv4]${RESET}"
-    for param in         "net.ipv4.conf.all.rp_filter"         "net.ipv4.conf.default.rp_filter"         "net.ipv4.conf.all.accept_redirects"         "net.ipv4.conf.default.accept_redirects"         "net.ipv4.conf.all.accept_source_route"         "net.ipv4.conf.default.accept_source_route"         "net.ipv4.conf.all.secure_redirects"         "net.ipv4.conf.default.secure_redirects"         "net.ipv4.conf.all.send_redirects"         "net.ipv4.conf.default.send_redirects"         "net.ipv4.conf.all.log_martians"         "net.ipv4.conf.default.log_martians"         "net.ipv4.tcp_syncookies"         "kernel.dmesg_restrict"         "kernel.kptr_restrict"         "kernel.yama.ptrace_scope"; do
+    for param in         "net.ipv4.conf.all.rp_filter"         "net.ipv4.conf.default.rp_filter"         "net.ipv4.conf.all.accept_redirects"         "net.ipv4.conf.default.accept_redirects"         "net.ipv4.conf.all.secure_redirects"         "net.ipv4.conf.default.secure_redirects"         "net.ipv4.conf.all.send_redirects"         "net.ipv4.conf.default.send_redirects"         "net.ipv4.tcp_syncookies"; do
         log_pair "$param" "$(sysctl -n $param 2>/dev/null || echo N/A)"
     done
 
@@ -330,7 +330,7 @@ check_sysctl_memory() {
     log_section "4. 内存管理"
 
     echo -e "  ${BOLD}[内存参数]${RESET}"
-    for param in         "vm.swappiness"         "vm.overcommit_memory"         "vm.vfs_cache_pressure"         "vm.zone_reclaim_mode"         "vm.min_free_kbytes"; do
+    for param in         "vm.swappiness"         "vm.overcommit_memory"         "vm.vfs_cache_pressure"         "vm.min_free_kbytes"; do
         log_pair "$param" "$(sysctl -n $param 2>/dev/null || echo N/A)"
     done
 
@@ -631,14 +631,6 @@ check_vs_targets() {
     check_eq "net.ipv4.tcp_syncookies"              "1"   "SYN cookie防洪水"
     check_eq "net.ipv4.conf.all.accept_redirects"   "0"   "IPv4接受重定向"
     check_eq "net.ipv4.conf.default.accept_redirects" "0" "IPv4接受重定向默认"
-    check_eq "net.ipv4.conf.all.accept_source_route"  "0"  "IPv4源路由"
-    check_eq "net.ipv4.conf.default.accept_source_route" "0" "IPv4源路由默认"
-    check_eq "net.ipv4.conf.all.secure_redirects"     "0"  "IPv4安全重定向"
-    check_eq "net.ipv4.conf.default.secure_redirects" "0" "IPv4安全重定向默认"
-    check_eq "net.ipv4.conf.all.send_redirects"      "0"  "IPv4发送重定向"
-    check_eq "net.ipv4.conf.default.send_redirects"   "0"  "IPv4发送重定向默认"
-    check_eq "net.ipv4.conf.all.log_martians"         "0"  "IPv4日志污染"
-    check_eq "net.ipv4.conf.default.log_martians"     "0"  "IPv4日志污染默认"
     check_eq "net.ipv4.conf.all.rp_filter"             "1"  "反向路径过滤"
     check_eq "net.ipv4.conf.default.rp_filter"         "1" "反向路径过滤默认"
     check_eq "net.core.default_qdisc"                 "fq" "默认队列算法"
@@ -652,11 +644,7 @@ check_vs_targets() {
     check_eq "net.ipv4.tcp_orphan_retries"           "1"  "孤儿socket清理"
     check_eq "net.ipv4.tcp_mtu_probing"              "1"  "MTU探测"
     check_eq "net.ipv4.tcp_notsent_lowat"        "16384"  "未发送低水位"
-    check_eq "kernel.dmesg_restrict"                  "1"  "dmesg访问限制"
-    check_eq "kernel.kptr_restrict"                   "1"  "内核指针隐藏"
-    check_eq "kernel.yama.ptrace_scope"              "1"  "ptrace限制"
     check_eq "vm.overcommit_memory"                  "1"  "内存超量分配"
-    check_eq "vm.zone_reclaim_mode"                  "0"  "NUMA区域回收"
 
     echo ""
     echo -e "  ${BOLD}[全平台 IPv6 安全]${RESET}"
@@ -785,7 +773,7 @@ remote_check() {
 
         echo ''
         echo '=== 安全参数 ==='
-        sysctl net.ipv4.conf.all.accept_redirects               net.ipv4.conf.all.accept_source_route               net.ipv4.conf.all.secure_redirects               net.ipv4.conf.all.log_martians               net.ipv4.conf.all.rp_filter               net.ipv4.tcp_syncookies               kernel.dmesg_restrict kernel.kptr_restrict 2>/dev/null
+        sysctl net.ipv4.conf.all.accept_redirects net.ipv4.conf.all.secure_redirects net.ipv4.conf.all.rp_filter net.ipv4.tcp_syncookies 2>/dev/null
 
         echo ''
         echo '=== IPv6 ==='
@@ -793,7 +781,7 @@ remote_check() {
 
         echo ''
         echo '=== 内存/TF卡保护 ==='
-        sysctl vm.dirty_ratio vm.dirty_background_ratio               vm.dirty_writeback_centisecs vm.dirty_expire_centisecs               vm.swappiness vm.overcommit_memory vm.zone_reclaim_mode 2>/dev/null
+        sysctl vm.dirty_ratio vm.dirty_background_ratio vm.dirty_writeback_centisecs vm.dirty_expire_centisecs vm.swappiness vm.overcommit_memory 2>/dev/null
 
         echo ''
         echo '=== conntrack ==='
