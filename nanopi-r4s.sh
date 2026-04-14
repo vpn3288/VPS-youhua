@@ -778,7 +778,7 @@ configure_sysctl_r4s() {
 # NanoPi R4S OpenClaw 优化配置 v3.1
 # RK3399 ARM64, 4GB RAM, TF卡存储
 
-# 网络缓冲区 (R4S - 8MB)
+# 网络缓冲区
 net.core.rmem_max = ${TCP_BUF_MAX}
 net.core.wmem_max = ${TCP_BUF_MAX}
 net.ipv4.ip_local_port_range = 10240 65535
@@ -817,15 +817,14 @@ vm.dirty_ratio = 8
 vm.dirty_background_ratio = 3
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.overcommit_memory = 1
-vm.zone_reclaim_mode = 0
 
 # 连接追踪
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 1800
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
-    net.netfilter.nf_conntrack_tcp_timeout_close_wait = 10
-    net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
+net.netfilter.nf_conntrack_tcp_timeout_close_wait = 10
+net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 
 # IPv6
 net.ipv6.conf.all.disable_ipv6 = 0
