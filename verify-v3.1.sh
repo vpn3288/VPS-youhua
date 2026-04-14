@@ -220,7 +220,7 @@ check_sysctl_conntrack() {
     log_pair "当前连接数"                            "$ct_count"
     if [[ "$ct_count" != "N/A" ]] && [[ "$ct_max" != "N/A" ]]; then
         local pct
-        pct=$(awk "BEGIN {printf "%.1f", $ct_count/$ct_max*100}")
+        pct=$(awk -v c="$ct_count" -v m="$ct_max" 'BEGIN {printf "%.1f", c/m*100}')
         echo -e "    ${CYAN}使用率${RESET} = ${YELLOW}${pct}%${RESET}"
     fi
     log_pair "net.netfilter.nf_conntrack_hashsize"  "$(sysctl -n net.netfilter.nf_conntrack_hashsize 2>/dev/null || echo N/A)"
@@ -612,7 +612,7 @@ check_vs_targets() {
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"   "15"   "TW超时"
     else
         echo -e "  ${BOLD}[generic-x86 / 通用平台]${RESET}"
-        check_eq "net.core.netdev_maxbacklog"                        "65535" "网卡队列"
+        check_eq "net.core.netdev_max_backlog"                       "65535" "网卡队列"
         check_eq "net.ipv4.tcp_max_syn_backlog"                      "65535" "SYN队列"
         check_eq "vm.dirty_ratio"                                      "15"   "dirty比例"
         check_eq "vm.dirty_background_ratio"                           "5"   "dirty后台比例"
@@ -626,9 +626,9 @@ check_vs_targets() {
     echo -e "${SEP}"
     echo -e "  ${GREEN}✓ 通过: ${passed} 项${RESET}"
     if [[ $failed -gt 0 ]]; then
-        echo -e "  ${RED}✗ 失败: ${failed} 项  ← 需要修复${RESET}"
+        echo -e "  ${RED}✗ 有 ${failed} 项未通过 ← 需要修复${RESET}"
     else
-        echo -e "  ${GREEN}✗ 失败: 0 项  ← 全部通过!${RESET}"
+        echo -e "  ${GREEN}✓ 全部通过!${RESET} (失败: 0 项)"
     fi
     echo -e "${SEP}"
 }
