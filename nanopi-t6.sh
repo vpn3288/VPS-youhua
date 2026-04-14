@@ -736,6 +736,7 @@ ExecStart=/usr/bin/docker run --rm \
 ExecStop=/usr/bin/docker stop openclaw-gateway 2>/dev/null || true
 
 ${memory_max}
+OOMScoreAdjust=-200
 
 [Install]
 WantedBy=default.target
