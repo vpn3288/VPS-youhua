@@ -485,10 +485,6 @@ net.ipv4.tcp_max_syn_backlog = 65535
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 
-# 文件描述符
-fs.file-max = 1048576
-fs.nr_open = 1048576
-
 # 内存
 vm.swappiness = 20
 vm.dirty_ratio = 15
@@ -1013,9 +1009,7 @@ vm.dirty_expire_centisecs = 60000
 # 内存充足，min_free_kbytes 适当调高
 vm.min_free_kbytes = 32768
 
-# ===== 文件描述符 =====
-fs.file-max = 1048576
-fs.nr_open = 1048576
+# ===== inotify =====
 fs.inotify.max_user_watches = 1048576
 fs.inotify.max_user_instances = 8192
 EOF

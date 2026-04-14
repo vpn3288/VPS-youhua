@@ -377,8 +377,6 @@ check_limits() {
     log_pair "ulimit -n (软限制)"  "$(ulimit -Sn 2>/dev/null || echo N/A)"
     log_pair "ulimit -n (硬限制)"  "$(ulimit -Hn 2>/dev/null || echo N/A)"
     log_pair "ulimit -u (nproc)"   "$(ulimit -Su 2>/dev/null || echo N/A)"
-    log_pair "fs.file-max"          "$(sysctl -n fs.file-max 2>/dev/null || echo N/A)"
-    log_pair "fs.nr_open"           "$(sysctl -n fs.nr_open 2>/dev/null || echo N/A)"
 
     echo ""
     if grep -qE "nofile\|nproc" /etc/security/limits.conf 2>/dev/null; then
@@ -802,8 +800,8 @@ remote_check() {
         sysctl net.netfilter.nf_conntrack_max               net.netfilter.nf_conntrack_tcp_timeout_established               net.netfilter.nf_conntrack_tcp_timeout_time_wait               net.netfilter.nf_conntrack_tcp_timeout_close_wait               net.netfilter.nf_conntrack_tcp_timeout_fin_wait 2>/dev/null
 
         echo ''
-        echo '=== 文件描述符 ==='
-        ulimit -n && sysctl fs.file-max 2>/dev/null
+        echo '=== ulimit ==='
+        ulimit -n
 
         echo ''
         echo '=== journald ==='

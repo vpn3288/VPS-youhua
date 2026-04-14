@@ -842,10 +842,6 @@ net.ipv4.tcp_mtu_probing = 1
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 
-# 文件描述符
-fs.file-max = 1048576
-fs.nr_open = 1048576
-
 # 内存
 vm.swappiness = ${SWAPPINESS}
 vm.dirty_ratio = 8
