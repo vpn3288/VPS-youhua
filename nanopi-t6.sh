@@ -1026,6 +1026,37 @@ EOFOOM
     log_info "OOM Killer 保护已配置"
 }
 
+# 日志轮转配置 - 自动切割 openclaw 日志，防止 eMMC 存储被日志撑满
+configure_logrotate() {
+    log_step "配置 logrotate..."
+    mkdir -p /etc/logrotate.d
+    cat > /etc/logrotate.d/openclaw <<'EOFLOGROTATE'
+/var/log/openclaw/*.log {
+    daily
+    rotate 2
+    size 2M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+    postrotate
+        systemctl reload systemd-journald 2>/dev/null || true
+    endscript
+}
+/var/log/openclaw-install.log {
+    daily
+    rotate 3
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}
+EOFLOGROTATE
+    log_info "logrotate 已配置"
+}
+
 # 自动清理 - 定时清理日志/临时文件/旧镜像，减少 eMMC 写入
 configure_cleanup_cron() {
     log_step "配置自动清理..."
@@ -1126,6 +1157,7 @@ main() {
     echo ""
     
     preflight_check
+    configure_logrotate
     configure_apt_sources
     clean_system
     optimize_memory_t6
