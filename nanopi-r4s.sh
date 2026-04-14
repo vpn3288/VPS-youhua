@@ -54,6 +54,15 @@ init_script() {
     export DEBIAN_FRONTEND=noninteractive
     mkdir -p "$(dirname "$APT_LOG")"
     : > "$APT_LOG"
+
+    # OPENCLAW_USER 输入安全校验（防止注入和路径遍历）
+    if [[ -n "${OPENCLAW_USER:-}" ]]; then
+        if [[ ! "$OPENCLAW_USER" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]] || \
+           [[ "${#OPENCLAW_USER}" -gt 32 ]]; then
+            log_error "OPENCLAW_USER 非法: '$OPENCLAW_USER' (只允许 a-z/0-9/_/-，最多32字符)"
+            exit 1
+        fi
+    fi
 }
 
 # =============================================================================
@@ -326,7 +335,6 @@ EOFDOCKERLIM
 # =============================================================================
 configure_journald() {
     log_step "配置 journald..."
-
     mkdir -p /etc/systemd
     cat > /etc/systemd/journald.conf <<'EOF'
 [Journal]
@@ -339,9 +347,8 @@ Storage=volatile
 ForwardToSyslog=no
 MaxLevelStore=notice
 EOF
-
     systemctl restart systemd-journald 2>/dev/null || true
-    log_info "journald 配置完成"
+    log_info "journald 配置完成 (TF卡保护: 100M)"
 }
 
 
@@ -355,22 +362,15 @@ configure_tf_card_protection() {
     fi
     log_info "实施TF卡保护策略..."
 
-    # 1. journald压缩+大小限制
-    log_step "配置 journald..."
-    mkdir -p /etc/systemd
-    cat > /etc/systemd/journald.conf <<'EOFJOURNAL'
-[Journal]
-SystemMaxUse=50M
-SystemMaxFileSize=20M
-RuntimeMaxUse=50M
-MaxRetentionSec=1day
-Compress=yes
-Storage=volatile
-ForwardToSyslog=no
-MaxLevelStore=warning
-EOFJOURNAL
-    systemctl restart systemd-journald 2>/dev/null || true
-    log_info "journald 已优化 (压缩+50MB限制)"
+    # 1. TF卡保护（仅禁用物理swap，不碰 zram）
+    log_step "TF卡保护..."
+    for sw in /swapfile /swap.img; do
+        if swapon --show 2>/dev/null | grep -q "$sw"; then
+            swapoff "$sw" 2>/dev/null || true
+            rm -f "$sw"
+        fi
+    done
+    log_info "物理 swap 已禁用（保留 zram）"
 
     # 2. log2ram
     configure_log2ram_local
@@ -730,7 +730,9 @@ optimize_io_scheduler() {
         for dev in /sys/block/*/queue/scheduler; do [[ -f "$dev" ]] && echo "none" > "$dev" 2>/dev/null || true; done
         log_info "TF卡: none 调度器"
     elif [[ -b "$SYS_ROOT_DISK" ]]; then
-        if cat /sys/block/*/queue/rotational 2>/dev/null | grep -q "0"; then
+        local root_name; root_name=$(basename "$SYS_ROOT_DISK" 2>/dev/null)
+        if [[ -n "$root_name" && -f "/sys/block/$root_name/queue/rotational" ]] && \
+           [[ "$(cat "/sys/block/$root_name/queue/rotational" 2>/dev/null)" == "0" ]]; then
             for dev in /sys/block/*/queue/scheduler; do [[ -f "$dev" ]] && echo "none" > "$dev" 2>/dev/null || true; done
             log_info "SSD: none 调度器"
         else
@@ -1110,12 +1112,12 @@ main() {
     optimize_oom
     optimize_ssh
 
-    install_base_tools
-    install_nodejs
-    install_docker
-    install_openclaw
-    create_systemd_service
-    run_doctor
+    install_base_tools || exit 1
+    install_nodejs || exit 1
+    install_docker || exit 1
+    install_openclaw || exit 1
+    create_systemd_service || exit 1
+    run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
     apt-get autoclean >> "$APT_LOG" 2>&1 || true

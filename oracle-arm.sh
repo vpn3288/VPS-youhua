@@ -64,6 +64,15 @@ init_script() {
     export DEBIAN_FRONTEND=noninteractive
     mkdir -p "$(dirname "$APT_LOG")"
     : > "$APT_LOG"
+
+    # OPENCLAW_USER 输入安全校验（防止注入和路径遍历）
+    if [[ -n "${OPENCLAW_USER:-}" ]]; then
+        if [[ ! "$OPENCLAW_USER" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]] || \
+           [[ "${#OPENCLAW_USER}" -gt 32 ]]; then
+            log_error "OPENCLAW_USER 非法: '$OPENCLAW_USER' (只允许 a-z/0-9/_/-，最多32字符)"
+            exit 1
+        fi
+    fi
 }
 
 # =============================================================================
@@ -1153,12 +1162,12 @@ main() {
     configure_logrotate
     optimize_ssh
 
-    install_base_tools
-    install_nodejs
-    install_docker
-    install_openclaw
-    create_systemd_service
-    run_doctor
+    install_base_tools || exit 1
+    install_nodejs || exit 1
+    install_docker || exit 1
+    install_openclaw || exit 1
+    create_systemd_service || exit 1
+    run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
     apt-get autoclean >> "$APT_LOG" 2>&1 || true
