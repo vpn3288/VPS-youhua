@@ -697,8 +697,8 @@ WantedBy=default.target
 EOFSYSSERVICE
     fi
 
-    systemctl --user daemon-reload
-    loginctl enable-linger "$OPENCLAW_USER" 2>/dev/null || true
+    systemctl --user daemon-reload || log_warn "daemon-reload 失败"
+    loginctl enable-linger "$OPENCLAW_USER" 2>/dev/null || log_warn "loginctl enable-linger 失败，开机自启可能不生效"
     systemctl --user enable openclaw-gateway 2>/dev/null || true
     log_info "systemd 服务创建完成"
     log_step "提示: 运行以下命令启动服务:"
