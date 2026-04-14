@@ -418,7 +418,7 @@ LimitNPROC=65535
 LimitMEMLOCK=infinity
 EOFDOCKERLIM
 
-    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl daemon-reload || echo "[WARN] daemon-reload failed, service may use stale config"
 
     log_info "系统限制配置完成"
 }
@@ -541,8 +541,8 @@ install_openclaw() {
         mkdir -p "$OPENCLAW_DATA_DIR"
         chown -R "$OPENCLAW_USER:$OPENCLAW_USER" "$OPENCLAW_DATA_DIR" 2>/dev/null || true
         log_info "拉取 OpenClaw 镜像..."
-        docker pull openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
-            docker pull ghcr.io/openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
+        timeout 300 docker pull openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
+            timeout 300 docker pull ghcr.io/openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
                 log_error "Docker 镜像拉取失败"
                 return 1
             }
@@ -785,7 +785,7 @@ net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
 net.ipv4.tcp_wmem = 4096 131072 ${TCP_BUF_MAX}
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15
-net.ipv4.tcp_keepalive_time = 1800
+net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 30
 net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_slow_start_after_idle = 0
@@ -911,7 +911,7 @@ configure_logrotate() {
     log_step "配置 logrotate..."
     mkdir -p /etc/logrotate.d
     cat > /etc/logrotate.d/openclaw <<'EOFLOGROTATE'
-/var/log/openclaw/*.log {
+/var/log/openclaw/*.log /var/log/aiagent-cleanup.log {
     daily
     rotate 2
     size 2M

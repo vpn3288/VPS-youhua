@@ -317,7 +317,7 @@ LimitNPROC=65535
 LimitMEMLOCK=infinity
 EOFDOCKERLIM
 
-    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl daemon-reload || log_warn "daemon-reload 失败，服务可能使用旧配置"
     log_info "系统限制配置完成"
 }
 
@@ -416,7 +416,7 @@ EOFSYSCTL
     log_step "配置 logrotate..."
     mkdir -p /etc/logrotate.d
     cat > /etc/logrotate.d/openclaw <<'EOFLOGROTATE'
-/var/log/openclaw/*.log {
+/var/log/openclaw/*.log /var/log/aiagent-cleanup.log {
     daily
     rotate 2
     size 2M
@@ -607,8 +607,8 @@ install_openclaw() {
         mkdir -p "$OPENCLAW_DATA_DIR"
         chown -R "$OPENCLAW_USER:$OPENCLAW_USER" "$OPENCLAW_DATA_DIR" 2>/dev/null || true
         log_info "拉取 OpenClaw 镜像..."
-        docker pull openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
-            docker pull ghcr.io/openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || { log_error "Docker 镜像拉取失败"; return 1; }
+        timeout 300 docker pull openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || {
+            timeout 300 docker pull ghcr.io/openclaw/openclaw:latest >> "$APT_LOG" 2>&1 || { log_error "Docker 镜像拉取失败"; return 1; }
         }
         log_info "OpenClaw 容器安装完成"
     else
@@ -819,7 +819,7 @@ net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_rfc1337 = 1
 net.ipv4.tcp_early_retrans = 3
 net.ipv4.tcp_orphan_retries = 1
-net.ipv4.tcp_keepalive_time = 60
+net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_slow_start_after_idle = 0
@@ -877,7 +877,11 @@ vm.vfs_cache_pressure = 50
 EOFSYSCTL
 
     # 加载 BBR 模块
-    modprobe tcp_bbr 2>/dev/null || true
+    if modprobe tcp_bbr 2>/dev/null; then
+        log_info "BBR 已加载"
+    else
+        log_warn "BBR 加载失败（内核可能不支持）"
+    fi
     modprobe tcp_dctcp 2>/dev/null || true
     sysctl -p "$sysctl_file" 2>/dev/null || true
     log_info "sysctl R4S v3.1 优化完成"
