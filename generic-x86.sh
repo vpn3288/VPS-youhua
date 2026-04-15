@@ -22,7 +22,8 @@ readonly PLATFORM_DESC="x86_64 ($(uname -r | cut -d'.' -f1-3))"
 # 平台差异变量（generic-x86 自适应）
 # ─────────────────────────────────────────────────────────────────────────────
 readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-generic.conf"
-readonly JOURNALD_VOLATILE="false"
+# journald persistent for generic VPS
+readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="512M"
 
@@ -188,7 +189,8 @@ SystemMaxUse=${JOURNALD_MAX_USE}
 SystemMaxFileSize=50M
 MaxRetentionSec=14day
 Compress=yes
-Storage=${JOURNALD_VOLATILE}
+Storage=${JOURNALD_STORAGE}
+RuntimeMaxUse=100M
 Seal=yes
 EOF
     systemctl restart systemd-journald 2>/dev/null || true

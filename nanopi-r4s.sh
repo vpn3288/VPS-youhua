@@ -25,7 +25,8 @@ readonly PLATFORM_DESC="RK3399 ARM64 | 3.8GB RAM | TF卡 | Armbian 24.04"
 readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-r4s.conf"
 
 # TF 卡保护变量
-readonly JOURNALD_VOLATILE="true"          # TF 卡必须用 volatile
+# journald volatile for TF card
+readonly JOURNALD_STORAGE="volatile"
 readonly JOURNALD_MAX_USE="50M"             # 限制 journald 磁盘占用
 readonly TMPFS_SIZE="512M"                  # /tmp tmpfs 大小
 readonly MIN_FREE_KB=65536                   # 4GB 机器 OOM 防线
@@ -214,11 +215,12 @@ SystemMaxUse=${JOURNALD_MAX_USE}
 SystemMaxFileSize=50M
 MaxRetentionSec=7day
 Compress=yes
-Storage=${JOURNALD_VOLATILE}
+Storage=${JOURNALD_STORAGE}
+RuntimeMaxUse=50M
 Seal=yes
 EOF
     systemctl restart systemd-journald 2>/dev/null || true
-    log_info "journald 配置完成（volatile=${JOURNALD_VOLATILE}）"
+    log_info "journald 配置完成（Storage=${JOURNALD_STORAGE}）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -22,7 +22,8 @@ readonly PLATFORM_DESC="Intel N5105 | x86_64 | SSD | 有风扇"
 # 平台差异变量
 # ─────────────────────────────────────────────────────────────────────────────
 readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-n5105.conf"
-readonly JOURNALD_VOLATILE="false"
+# journald persistent for local SSD
+readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="1024M"
 
@@ -186,7 +187,8 @@ SystemMaxUse=${JOURNALD_MAX_USE}
 SystemMaxFileSize=50M
 MaxRetentionSec=14day
 Compress=yes
-Storage=${JOURNALD_VOLATILE}
+Storage=${JOURNALD_STORAGE}
+RuntimeMaxUse=100M
 Seal=yes
 EOF
     systemctl restart systemd-journald 2>/dev/null || true

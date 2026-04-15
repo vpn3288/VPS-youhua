@@ -22,7 +22,8 @@ readonly PLATFORM_DESC="Ampere Altra ($(awk '/MemTotal/{printf "%.0fGB", $2/1024
 # 平台差异变量（Oracle ARM 专项）
 # ─────────────────────────────────────────────────────────────────────────────
 readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-oracle.conf"
-readonly JOURNALD_VOLATILE="false"
+# journald persistent for cloud server
+readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="512M"
 
@@ -213,7 +214,8 @@ SystemMaxUse=${JOURNALD_MAX_USE}
 SystemMaxFileSize=50M
 MaxRetentionSec=14day
 Compress=yes
-Storage=${JOURNALD_VOLATILE}
+Storage=${JOURNALD_STORAGE}
+RuntimeMaxUse=100M
 Seal=yes
 EOF
     systemctl restart systemd-journald 2>/dev/null || true

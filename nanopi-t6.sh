@@ -22,7 +22,8 @@ readonly PLATFORM_DESC="RK3588S ARM64 | 16GB RAM | eMMC | Armbian 24.04"
 # 平台差异变量（T6 专项）
 # ─────────────────────────────────────────────────────────────────────────────
 readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-t6.conf"
-readonly JOURNALD_VOLATILE="false"          # eMMC 不需要 volatile
+# journald persistent for eMMC
+readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"             # eMMC 可以用更多日志
 readonly TMPFS_SIZE="1024M"                  # 16GB 机器 /tmp 可以更大
 
@@ -203,11 +204,12 @@ SystemMaxUse=${JOURNALD_MAX_USE}
 SystemMaxFileSize=50M
 MaxRetentionSec=14day
 Compress=yes
-Storage=${JOURNALD_VOLATILE}
+Storage=${JOURNALD_STORAGE}
+RuntimeMaxUse=100M
 Seal=yes
 EOF
     systemctl restart systemd-journald 2>/dev/null || true
-    log_info "journald 配置完成（persistent=${JOURNALD_VOLATILE}）"
+    log_info "journald 配置完成（Storage=${JOURNALD_STORAGE}）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
