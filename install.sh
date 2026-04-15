@@ -96,9 +96,9 @@ detect_platform() {
                 echo "nanopi-t6"
             elif echo "$cpu_model" | grep -qi "RK3399"; then
                 echo "nanopi-r4s"
-            # 4. 未知 ARM64 → generic-arm（无 NanoPi 专属优化）
+            # 4. 未知 ARM64 → fallback 到 nanopi-r4s（脚本内有平台自检）
             else
-                echo "generic-arm"
+                echo "nanopi-r4s"
             fi
             ;;
         x86_64)

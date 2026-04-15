@@ -10,7 +10,7 @@
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![v3.1](https://img.shields.io/badge/版本-v3.1-green.svg)](https://github.com/vpn3288/VPS-youhua)
-[![4平台](https://img.shields.io/badge/平台-4个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
+[![5平台](https://img.shields.io/badge/平台-5个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
 
 </div>
 
