@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AIagent 环境优化脚本（通用入口）v3.1
+# AIagent 环境优化脚本（统一入口） v3.1
 # 支持平台: NanoPi R4S, NanoPC T6, Oracle ARM, N5105, 通用 x86 VPS
-# 功能: 环境优化 + 可选 Docker / Node.js / OpenClaw 安装（默认全量）
 # =============================================================================
 
 set -euo pipefail
@@ -14,21 +13,20 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 # SHA256 校验和（防止供应链污染）
 # ⚠️  脚本更新时必须同步更新对应 SHA256
-# R52: DNS锁定(chattr)/lo防火墙/npm缓存tmpfs/systemd内存统计/journald vacuum对齐
-# R53: backup_all备份回滚/全程reboot提示/governor schedutil三层fallback/dirty_writeback降频
+# R54: 新手友好交互菜单(纯优化/全量安装/自定义), install.sh作为统一入口
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="30f53420740cb348165714689a704a7c534063cb7409da3a79f423411f1c1a5b"
-    ["nanopi-t6"]="22cde750ec1cc9075093e4a2338db1aee213db41a9612177e7f5d2a0f27c5d75"
-    ["oracle-arm"]="89c182bd254076aff291dc9a346c9d9af9e0c3a0b6d04bd4871f86ad4ecd66ca"
-    ["n5105"]="ab7f63f6a7d9df3e3f1c394c5a242363cceddd2ac987be332359c1b3fdf8fafc"
-    ["generic-x86"]="3b0e6639da527ed50b7438e85615073b03c79e1f7e5d7a60d4e19a8b18c09075"
+    ["nanopi-r4s"]="a8a085c3c2dbee14efa66662c9967b55eb89c46b0fc4e655a614346d1f202409"
+    ["nanopi-t6"]="ab54fdd96f41bdeaa37acaa9b6c1c0ae2f27a1c0efac150c342d82669f8a303b"
+    ["oracle-arm"]="2595d1d5953d8b986bbaa7aa71a8814581d38b4d52371a759f8d8ecab48936a7"
+    ["n5105"]="50c57730a047c057ec7216375b3e8f65f87a219a946d66449d48d49bd4cc24ca"
+    ["generic-x86"]="b68935265101416d813b30761c762ee4263bda352578bbb25453247818e5e88f"
     ["verify-v3.1"]="95760662417b601103a63512b6bb204bc8b56136e2337ea206b322f8d509ebc4"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 参数解析（非交互模式）
+# root 检查
 # ─────────────────────────────────────────────────────────────────────────────
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -37,41 +35,50 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 参数解析（操作模式 + 非交互模式）
+# 全局状态（菜单选择结果）
 # ─────────────────────────────────────────────────────────────────────────────
 
-MODE="install"
+SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | n5105 | generic-x86
+SELECTED_MODE=""          # optimize | full | custom
+INSTALL_DOCKER="ask"      # true | false | ask
+INSTALL_NODEJS="ask"      # true | false | ask
 INTERACTIVE=true
-OPTIMIZE_ONLY=false
-CLEAN_SYSTEM=false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 参数解析
+# ─────────────────────────────────────────────────────────────────────────────
+
+FORCE_MODE=""
+FORCE_PLATFORM=""
 
 for arg in "$@"; do
     case "$arg" in
-        --uninstall)
-            MODE="uninstall"
-            ;;
-        --non-interactive|-y|--yes)
-            INTERACTIVE=false
-            ;;
-        --optimize-only)
-            OPTIMIZE_ONLY=true
-            ;;
-        --clean-system)
-            CLEAN_SYSTEM=true
+        --optimize|--optimize-only) FORCE_MODE="optimize" ;;
+        --full|--install-all)        FORCE_MODE="full" ;;
+        --non-interactive|-y|--yes)  INTERACTIVE=false ;;
+        --with-docker)    INSTALL_DOCKER="true" ;;
+        --without-docker) INSTALL_DOCKER="false" ;;
+        --with-npm)       INSTALL_NODEJS="true" ;;
+        --without-npm)    INSTALL_NODEJS="false" ;;
+        --no-software)    FORCE_MODE="optimize" ;;
+        --clean-system)    CLEAN_SYSTEM="true" ;;
+        --uninstall)       MODE="uninstall" ;;
+        --help|-h)         show_help; exit 0 ;;
+        --platform)        ;;  # skip, handled below
+        *)
+            if [[ "$arg" == --platform=* ]]; then
+                FORCE_PLATFORM="${arg#*=}"
+            fi
             ;;
     esac
 done
-
-# 透传参数给平台脚本（子脚本通过 curl | bash 启动，无法继承父 shell 变量）
-[[ "$OPTIMIZE_ONLY" == "true" ]] && export OPTIMIZE_ONLY="true"
-[[ "$CLEAN_SYSTEM" == "true" ]] && export CLEAN_SYSTEM="true"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 颜色
 # ─────────────────────────────────────────────────────────────────────────────
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
 
 log_info()  { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
@@ -79,41 +86,68 @@ log_error() { echo -e "${RED}[✗]${NC} $1" >&2; }
 log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 平台检测（统一显式分流）
+# 帮助信息
+# ─────────────────────────────────────────────────────────────────────────────
+
+show_help() {
+    cat << 'EOF'
+用法: bash install.sh [选项]
+
+选项:
+  运行模式（二选一，不选则交互询问）:
+    --optimize         只做底层系统优化，不安装任何软件
+    --full             做系统优化 + 安装全部软件（Docker + Node.js + OpenClaw）
+
+  软件选择（仅 --full 时有效）:
+    --with-docker      安装 Docker（默认: 询问或安装）
+    --without-docker   不安装 Docker
+    --with-npm         安装 Node.js（默认: 询问或安装）
+    --without-npm      不安装 Node.js
+    --no-software      跳过所有软件安装（等价于 --optimize）
+
+  其他:
+    --non-interactive   非交互模式，使用默认选项
+    --clean-system      优化前清理系统缓存
+    --uninstall         卸载所有优化配置
+    --help, -h          显示本帮助信息
+
+示例:
+    bash install.sh                    # 交互式菜单（新手推荐）
+    bash install.sh --optimize         # 只做优化，不装软件
+    bash install.sh --full             # 优化 + 全量安装
+    bash install.sh --full --without-docker   # 优化 + 安装但跳过 Docker
+EOF
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 平台检测
 # ─────────────────────────────────────────────────────────────────────────────
 
 detect_platform() {
     local arch=$(uname -m)
-    local cpu_model=$(cat /proc/cpuinfo | grep "model name" | head -1 | cut -d: -f2 | sed 's/^ //' || echo "")
+    local cpu_model
+    cpu_model=$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^ //' 2>/dev/null || echo "")
     local model
     model=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\0' | xargs 2>/dev/null || echo "")
 
-    # 32位 ARM 未支持，直接报错退出
     if [[ "$arch" == "armv7l" ]] || [[ "$arch" == "armv6l" ]]; then
         log_error "不支持 32位 ARM (${arch})，请使用 ARM64 设备"
         exit 1
     fi
 
-    # aarch64_be（部分 big-endian ARM64 变体）按 aarch64 处理
-    # 注意：部分国产 ARM 服务器使用 aarch64_be，内核仍兼容普通 aarch64 二进制
-
     case "$arch" in
         aarch64|aarch64_be)
-            # 1. 按设备树判断 NanoPi 系列（最精确）
             if echo "$model" | grep -qi "NanoPi R4S"; then
                 echo "nanopi-r4s"
             elif echo "$model" | grep -qiE "NanoPC.?T6|T6"; then
                 echo "nanopi-t6"
-            # 2. 按 DMI/sys_vendor 判断云厂商 ARM
             elif grep -qiE "oracle|oraclecloud" /sys/class/dmi/id/sys_vendor 2>/dev/null || \
                  echo "$cpu_model" | grep -qiE "Ampere|Altra"; then
                 echo "oracle-arm"
-            # 3. 按 CPU model 判断其他已知 ARM 设备
             elif echo "$cpu_model" | grep -qi "RK3588"; then
                 echo "nanopi-t6"
             elif echo "$cpu_model" | grep -qi "RK3399"; then
                 echo "nanopi-r4s"
-            # 4. 未知 ARM64 → fallback 到 nanopi-r4s（脚本内有平台自检）
             else
                 echo "nanopi-r4s"
             fi
@@ -139,14 +173,12 @@ detect_platform() {
 check_network() {
     log_step "检测网络连通性..."
 
-    # 第一层：DNS 解析验证（最可靠，不依赖ICMP）
     if ! host -W 3 cloudflare.com >/dev/null 2>&1 && \
        ! getent hosts github.com >/dev/null 2>&1; then
         log_error "DNS 解析失败，请检查 /etc/resolv.conf 和 nameserver 配置"
         exit 1
     fi
 
-    # 第二层：HTTPS HEAD 验证（测实际可达性，Cloudflare/GitHub 都有标准路径）
     if ! curl --silent --head --fail --connect-timeout 5 \
         -H "Host: www.cloudflare.com" https://104.16.123.96 >/dev/null 2>&1 && \
        ! curl --silent --head --fail --connect-timeout 5 \
@@ -163,16 +195,228 @@ check_network() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 下载 → SHA256 校验 → 执行
+# 交互式主菜单
+# ─────────────────────────────────────────────────────────────────────────────
+
+show_banner() {
+    clear
+    echo -e "${GREEN}"
+    echo "╔═══════════════════════════════════════════════════════════════════════╗"
+    echo "║                                                                       ║"
+    echo "║              AIagent 环境优化脚本 v${VERSION}                             ║"
+    echo "║              新手友好 · 自由选择 · 安全可控                           ║"
+    echo "║                                                                       ║"
+    echo "╚═══════════════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    echo ""
+}
+
+show_platform_info() {
+    local platform="$1"
+    echo -e "  ${BLUE}检测到平台: ${BOLD}${platform}${NC}"
+    case "$platform" in
+        nanopi-r4s)
+            echo -e "  ${BLUE}设备:     NanoPi R4S (RK3399 ARM64)${NC}"
+            echo -e "  ${BLUE}存储:     TF卡（已针对写入保护优化）${NC}"
+            echo -e "  ${BLUE}特点:     双千兆网口，低功耗${NC}"
+            ;;
+        nanopi-t6)
+            echo -e "  ${BLUE}设备:     NanoPC T6 (RK3588 ARM64)${NC}"
+            echo -e "  ${BLUE}存储:     eMMC（已针对eMMC优化）${NC}"
+            echo -e "  ${BLUE}特点:     3网口(1×GbE+2×2.5GbE)，16GB大内存${NC}"
+            ;;
+        oracle-arm)
+            echo -e "  ${BLUE}设备:     Oracle Cloud ARM (Ampere Altra)${NC}"
+            echo -e "  ${BLUE}存储:     云盘（高IOPS）${NC}"
+            echo -e "  ${BLUE}特点:     32MB TCP缓冲优化${NC}"
+            ;;
+        n5105)
+            echo -e "  ${BLUE}设备:     N5105/N5095 小主机 (x86_64)${NC}"
+            echo -e "  ${BLUE}存储:     SSD${NC}"
+            echo -e "  ${BLUE}特点:     低功耗，有风扇${NC}"
+            ;;
+        generic-x86)
+            echo -e "  ${BLUE}设备:     通用 x86_64 VPS${NC}"
+            echo -e "  ${BLUE}特点:     自动适配${NC}"
+            ;;
+    esac
+    echo ""
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 菜单步骤
+# ─────────────────────────────────────────────────────────────────────────────
+
+step1_choose_platform() {
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  Step 1/3：选择你的设备类型${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  ${GREEN}[1]${NC} ARM 开发板（NanoPi R4S / NanoPC T6）"
+    echo -e "  ${GREEN}[2]${NC} 云服务器（Oracle Cloud ARM）"
+    echo -e "  ${GREEN}[3]${NC} 小主机（N5105 / N5095）"
+    echo -e "  ${GREEN}[4]${NC} 通用 x86_64 VPS"
+    echo ""
+    echo -n "请输入选项 [1/2/3/4]: "
+    read -r choice
+    case "$choice" in
+        1) PLATFORM_CATEGORY="arm" ;;
+        2) PLATFORM_CATEGORY="oracle" ;;
+        3) PLATFORM_CATEGORY="n5105" ;;
+        4) PLATFORM_CATEGORY="generic" ;;
+        *) echo -e "${YELLOW}无效选项${NC}"; step1_choose_platform; return ;;
+    esac
+}
+
+step2_choose_subplatform() {
+    echo ""
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  Step 2/3：选择具体设备${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    case "$PLATFORM_CATEGORY" in
+        arm)
+            echo -e "  ${GREEN}[1]${NC} NanoPi R4S"
+            echo -e "       RK3399 ARM64 | 双千兆网口 | TF卡存储 | 3.8GB RAM"
+            echo ""
+            echo -e "  ${GREEN}[2]${NC} NanoPC T6 / T6S"
+            echo -e "       RK3588 ARM64 | 3网口 | eMMC存储 | 16GB RAM"
+            echo ""
+            echo -n "请输入选项 [1/2]: "
+            read -r choice
+            case "$choice" in
+                1) SELECTED_PLATFORM="nanopi-r4s" ;;
+                2) SELECTED_PLATFORM="nanopi-t6" ;;
+                *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
+            esac
+            ;;
+        oracle)
+            echo -e "  ${GREEN}[1]${NC} Oracle Cloud ARM"
+            echo -e "       Ampere Altra | 1-4核 | 最高64GB RAM | 云盘存储"
+            echo ""
+            echo -n "请输入选项 [1]: "
+            read -r choice
+            SELECTED_PLATFORM="oracle-arm"
+            ;;
+        n5105)
+            echo -e "  ${GREEN}[1]${NC} N5105 / N5095 小主机"
+            echo -e "       x86_64 | 低功耗 | 有风扇 | SSD存储"
+            echo ""
+            echo -n "请输入选项 [1]: "
+            read -r choice
+            SELECTED_PLATFORM="n5105"
+            ;;
+        generic)
+            echo -e "  ${GREEN}[1]${NC} 通用 x86_64 VPS"
+            echo -e "       任何 x86_64 云服务器均可"
+            echo ""
+            echo -n "请输入选项 [1]: "
+            read -r choice
+            SELECTED_PLATFORM="generic-x86"
+            ;;
+    esac
+
+    show_platform_info "$SELECTED_PLATFORM"
+}
+
+step3_choose_mode() {
+    echo ""
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  Step 3/3：选择运行模式${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  ${GREEN}[1]${NC} ${BOLD}纯系统优化（新手推荐）${NC}"
+    echo -e "       只做底层优化: sysctl参数 / journald / DNS / CPU调频 / 防火墙"
+    echo -e "       ${YELLOW}不安装 Docker / Node.js / OpenClaw${NC}"
+    echo -e "       适合: 只想优化环境，后续自己装其他软件（Xray / Nginx / Docker Compose 等）"
+    echo ""
+    echo -e "  ${GREEN}[2]${NC} ${BOLD}全量安装（一步到位）${NC}"
+    echo -e "       系统优化 + 自动安装: Docker + Node.js + OpenClaw AIagent"
+    echo -e "       ${YELLOW}适合: 想一条命令搞定所有，直接跑 AIagent${NC}"
+    echo ""
+    echo -e "  ${GREEN}[0]${NC}  退出"
+    echo ""
+    echo -n "请输入选项 [1/2/0，默认 1]: "
+    read -r choice
+    choice="${choice:-1}"
+    case "$choice" in
+        1) SELECTED_MODE="optimize" ;;
+        2) SELECTED_MODE="full" ;;
+        0) echo "已退出。"; exit 0 ;;
+        *) echo -e "${YELLOW}无效选项${NC}"; step3_choose_mode; return ;;
+    esac
+}
+
+resolve_full_extras() {
+    echo ""
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  全量安装 — 确认安装内容${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # Docker
+    if [[ "$INSTALL_DOCKER" == "ask" ]]; then
+        echo -e "  ${GREEN}[✓]${NC} ${BOLD}Docker${NC}（容器引擎，用于运行 OpenClaw 等）"
+        echo -e "      ${CYAN}建议安装，输入 y 或直接回车${NC}"
+        echo -n "  是否安装 Docker？[y/n，默认 y]: "
+        read -r yn
+        yn="${yn:-y}"
+        case "$yn" in
+            n|N) INSTALL_DOCKER="false" ;;
+            *)   INSTALL_DOCKER="true" ;;
+        esac
+    fi
+
+    # Node.js
+    if [[ "$INSTALL_NODEJS" == "ask" ]]; then
+        echo ""
+        echo -e "  ${GREEN}[✓]${NC} ${BOLD}Node.js${NC}（运行环境，用于全局安装 OpenClaw）"
+        echo -n "  是否安装 Node.js？[y/n，默认 y]: "
+        read -r yn
+        yn="${yn:-y}"
+        case "$yn" in
+            n|N) INSTALL_NODEJS="false" ;;
+            *)   INSTALL_NODEJS="true" ;;
+        esac
+    fi
+
+    echo ""
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  最终确认${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  平台:     ${BOLD}${SELECTED_PLATFORM}${NC}"
+
+    if [[ "$SELECTED_MODE" == "optimize" ]]; then
+        echo -e "  模式:     ${BOLD}纯系统优化${NC}"
+        echo -e "  软件:     ${YELLOW}不安装${NC}"
+    else
+        echo -e "  模式:     ${BOLD}全量安装${NC}"
+        local docker_yn="是"; [[ "$INSTALL_DOCKER" == "false" ]] && docker_yn="否"
+        local nodejs_yn="是"; [[ "$INSTALL_NODEJS" == "false" ]] && nodejs_yn="否"
+        echo -e "  Docker:   ${docker_yn}"
+        echo -e "  Node.js:  ${nodejs_yn}"
+        echo -e "  OpenClaw: 是"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}即将开始执行，是否继续？${NC}"
+    echo -n "按回车继续，或 Ctrl+C 取消: "
+    [[ "$INTERACTIVE" == "true" ]] && read -r dummy || true
+    echo ""
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 下载 → SHA256 校验 → 执行平台脚本
 # ─────────────────────────────────────────────────────────────────────────────
 
 download_and_run() {
     local platform="$1"
-    local script_url="${RAW_BASE}/${platform}.sh"
-    local tmpfile
-    tmpfile=$(mktemp)
+    local mode="$2"   # optimize | full
+    local tmpfile; tmpfile=$(mktemp)
 
-    # 下载前先检查 URL 是否存在
+    local script_url="${RAW_BASE}/${platform}.sh"
     log_step "检查 ${platform}.sh..."
     if ! curl --head --silent --fail "$script_url" >/dev/null 2>&1; then
         log_error "平台脚本不存在: $script_url"
@@ -187,11 +431,9 @@ download_and_run() {
         exit 1
     fi
 
-    # SHA256 校验（防止供应链污染）
     local expected="${EXPECTED_SHA256[$platform]:-}"
     if [[ -n "$expected" ]]; then
-        local actual
-        actual=$(sha256sum "$tmpfile" | awk '{print $1}')
+        local actual; actual=$(sha256sum "$tmpfile" | awk '{print $1}')
         if [[ "$actual" != "$expected" ]]; then
             log_error "SHA256 校验失败！文件可能被篡改。"
             log_error "期望: $expected"
@@ -200,16 +442,34 @@ download_and_run() {
             exit 1
         fi
         log_info "SHA256 校验通过"
+    else
+        log_warn "SHA256 占位符，跳过校验"
     fi
 
     log_step "执行 ${platform}.sh..."
-    # 执行临时文件后自动清理（trap 在 main 里设置）
-    bash "$tmpfile"
+
+    # 透传环境变量给平台脚本
+    export SKIP_SOFTWARE_SCRIPT="false"
+    export INSTALL_DOCKER="$INSTALL_DOCKER"
+    export INSTALL_NODEJS="$INSTALL_NODEJS"
+    export INSTALL_DOCKER_SCRIPT="$INSTALL_DOCKER"
+    export INSTALL_NODEJS_SCRIPT="$INSTALL_NODEJS"
+    export INSTALL_METHOD="docker"
+
+    if [[ "$mode" == "optimize" ]]; then
+        export SKIP_SOFTWARE_SCRIPT="true"
+        bash "$tmpfile" --optimize-only
+    else
+        bash "$tmpfile"
+    fi
+
+    local ret=$?
     rm -f "$tmpfile"
+    return $ret
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 统一卸载（检测平台后调用对应平台脚本的 uninstall）
+# 卸载
 # ─────────────────────────────────────────────────────────────────────────────
 
 uninstall_all() {
@@ -223,41 +483,25 @@ uninstall_all() {
     echo -e "${NC}"
     echo ""
 
-    # root 检查已在上方完成
-    # 并发锁
-    local lock_file="/var/lock/vps-youhua-uninstall.lock"
-    exec 9>"$lock_file"
-    if ! flock -n 9; then
-        log_error "另一个实例正在运行，退出"
-        exit 1
-    fi
-
     check_network
 
-    local platform
-    platform=$(detect_platform)
-
+    local platform; platform=$(detect_platform)
     log_info "检测到平台: $platform"
     echo ""
 
-    # 确认
     if [[ "$INTERACTIVE" == "true" ]]; then
-        echo -e "${YELLOW}警告：此操作将清理本脚本安装的所有环境优化配置！${NC}"
+        echo -e "${RED}警告：此操作将清理本脚本安装的所有环境优化配置！${NC}"
         echo ""
         echo -n "确认卸载？(输入 'yes' 继续): "
         read -r confirm
         [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
-    else
-        log_info "非交互模式，自动确认"
     fi
 
     echo ""
     log_step "调用 ${platform}.sh --uninstall..."
     echo ""
 
-    # 下载平台脚本并执行 uninstall
-    local tmpfile
-    tmpfile=$(mktemp)
+    local tmpfile; tmpfile=$(mktemp)
     trap 'rm -f "$tmpfile"' EXIT
 
     local script_url="${RAW_BASE}/${platform}.sh"
@@ -266,15 +510,11 @@ uninstall_all() {
         exit 1
     fi
 
-    # SHA256 校验（防止供应链污染，即使是卸载也要验证）
     local expected="${EXPECTED_SHA256[$platform]:-}"
     if [[ -n "$expected" ]]; then
-        local actual
-        actual=$(sha256sum "$tmpfile" | awk '{print $1}')
+        local actual; actual=$(sha256sum "$tmpfile" | awk '{print $1}')
         if [[ "$actual" != "$expected" ]]; then
             log_error "SHA256 校验失败！文件可能被篡改。"
-            log_error "期望: $expected"
-            log_error "实际: $actual"
             rm -f "$tmpfile"
             exit 1
         fi
@@ -283,7 +523,6 @@ uninstall_all() {
 
     bash "$tmpfile" --uninstall
     local ret=$?
-
     rm -f "$tmpfile"
     trap - EXIT
 
@@ -304,85 +543,69 @@ uninstall_all() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 main() {
-    if [[ "$MODE" == "uninstall" ]]; then
+    if [[ "${MODE:-}" == "uninstall" ]]; then
         uninstall_all
         return
     fi
 
-    # 清理临时文件
     trap 'rm -f /tmp/vps-youhua-*.sh' EXIT
 
-    clear
-    echo -e "${GREEN}"
-    echo "╔═══════════════════════════════════════════════════════════════════════╗"
-    echo "║                                                                       ║"
-    echo "║            AIagent 环境优化脚本 v${VERSION}                             ║"
-    echo "║                                                                       ║"
-    echo "╚═══════════════════════════════════════════════════════════════════════╝"
-    echo -e "${NC}"
-    echo ""
-
+    show_banner
     check_network
 
-    local platform
-    platform=$(detect_platform)
+    # 自动检测平台（允许用户修改）
+    local auto_platform; auto_platform=$(detect_platform)
+    show_platform_info "$auto_platform"
 
-    log_info "检测到平台: $platform"
-    echo ""
-
-    case "$platform" in
-        nanopi-r4s)
-            echo -e "${BLUE}  平台: NanoPi R4S${NC}"
-            echo -e "${BLUE}  CPU:  RK3399 ARM64${NC}"
-            echo -e "${BLUE}  特点: 双千兆网口, 低功耗${NC}"
-            echo -e "${BLUE}  存储: TF卡 (已针对TF卡写入保护优化)${NC}"
-            ;;
-        nanopi-t6)
-            echo -e "${BLUE}  平台: NanoPC T6${NC}"
-            echo -e "${BLUE}  CPU:  RK3588 ARM64${NC}"
-            echo -e "${BLUE}  特点: 3网口(1×GbE+2×2.5GbE), 16GB大内存${NC}"
-            echo -e "${BLUE}  存储: eMMC (已针对eMMC写入优化)${NC}"
-            ;;
-        n5105)
-            echo -e "${BLUE}  平台: N5105/N5095 小主机${NC}"
-            echo -e "${BLUE}  CPU:  Intel N5105 x86_64${NC}"
-            echo -e "${BLUE}  特点: 低功耗, 有风扇${NC}"
-            echo -e "${BLUE}  存储: SSD${NC}"
-            ;;
-        oracle-arm)
-            echo -e "${BLUE}  平台: Oracle Cloud ARM${NC}"
-            echo -e "${BLUE}  CPU:  Ampere Altra${NC}"
-            echo -e "${BLUE}  特点: 云环境, 32MB TCP缓冲优化${NC}"
-            ;;
-        generic-arm)
-            echo -e "${BLUE}  平台: 通用 ARM64 设备${NC}"
-            echo -e "${BLUE}  特点: 自动适配（无硬件专属优化）${NC}"
-            ;;
-        generic-x86)
-            echo -e "${BLUE}  平台: 通用 x86_64 VPS${NC}"
-            echo -e "${BLUE}  特点: 自动适配${NC}"
-            ;;
-    esac
-    echo ""
-
-    if [[ "$INTERACTIVE" == "true" ]]; then
-        echo -e "${YELLOW}即将开始环境优化（不安装 AIagent）${NC}"
-        echo ""
-        read -p "按回车继续，或 Ctrl+C 取消: "
+    # ── 如果有 --platform= 强制标志，直接用 ─────────────────────────────
+    if [[ -n "$FORCE_PLATFORM" ]]; then
+        SELECTED_PLATFORM="$FORCE_PLATFORM"
+        SELECTED_MODE="${FORCE_MODE:-optimize}"
+        echo -e "${GREEN}使用指定平台: ${SELECTED_PLATFORM}${NC}"
+        echo -e "${GREEN}使用指定模式: ${SELECTED_MODE}${NC}"
     else
-        log_info "非交互模式，自动继续"
+        # ── 交互式菜单 ─────────────────────────────────────────────────────
+        PLATFORM_CATEGORY=""
+        step1_choose_platform
+        step2_choose_subplatform
+        step3_choose_mode
+
+        # full 模式：询问 Docker / Node.js
+        if [[ "$SELECTED_MODE" == "full" ]]; then
+            resolve_full_extras
+        fi
     fi
 
-    download_and_run "$platform"
+    # 纯优化时强制跳过软件
+    if [[ "$SELECTED_MODE" == "optimize" ]]; then
+        INSTALL_DOCKER="false"
+        INSTALL_NODEJS="false"
+        SKIP_SOFTWARE_SCRIPT="true"
+    fi
 
-    echo ""
-    log_step "环境优化完成!"
-    echo ""
-    echo -e "${GREEN}✓ 系统已针对 AIagent 运行优化完毕${NC}"
-    echo ""
-    echo "下一步: 安装你的 AIagent（OpenClaw / Hermes / 其他）"
-    echo ""
-    echo -e "${CYAN}验证优化效果: bash <(curl -fsSL ${RAW_BASE}/verify-v3.1.sh)${NC}"
+    download_and_run "$SELECTED_PLATFORM" "$SELECTED_MODE"
+    local ret=$?
+
+    if [[ $ret -eq 0 ]]; then
+        echo ""
+        log_step "环境优化完成!"
+        echo ""
+        if [[ "$SELECTED_MODE" == "optimize" ]]; then
+            echo -e "${GREEN}✓ 系统已针对 ${SELECTED_PLATFORM} 优化完毕${NC}"
+            echo ""
+            echo "下一步: 安装你的软件（Docker / Xray / Nginx / OpenClaw 等）"
+        else
+            echo -e "${GREEN}✓ 全量安装完成！${NC}"
+            echo ""
+            echo "下一步: 重启后运行 OpenClaw AIagent"
+        fi
+        echo ""
+        echo -e "${CYAN}验证优化效果: bash <(curl -fsSL ${RAW_BASE}/verify-v3.1.sh)${NC}"
+    else
+        log_error "平台脚本执行失败 (exit $ret)"
+    fi
+
+    exit $ret
 }
 
 main "$@"

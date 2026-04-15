@@ -1310,6 +1310,7 @@ uninstall_openclaw() {
     exit 0
 }
 
+# ── T6 main() ─────────────────────────────────────────────────────────────────
 main() {
     clear
     echo "═══════════════════════════════════════════════════════════════════════"
@@ -1317,73 +1318,47 @@ main() {
     echo "═══════════════════════════════════════════════════════════════════════"
     echo -e "${BLUE}平台: ${PLATFORM_DESC}${NC}"
     echo ""
-    
+
     # 解析参数
     for arg in "$@"; do
         case "$arg" in
-            --optimize-only) OPTIMIZE_ONLY=true ;;
+            --optimize-only) export SKIP_SOFTWARE_SCRIPT="true" ;;
             --uninstall) ;;
         esac
     done
 
+    # install.sh 透传的环境变量优先
+    : "${SKIP_SOFTWARE_SCRIPT:=false}"
+    : "${INSTALL_DOCKER:=true}"
+    : "${INSTALL_NODEJS:=false}"
+
     uninstall_openclaw "$@" || exit 1
-        init_script
+    init_script
     detect_system
     check_network
     detect_nanopi_t6 || exit 1
-    
+
     echo ""
     echo -e "${BLUE}优化计划:${NC}"
     echo "  平台:      ${PLATFORM_DESC}"
     echo "  系统:      ${SYS_OS_ID} ${SYS_OS_VERSION}"
     echo "  架构:      ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
-    echo "  ZRAM:      跳过 (内存充足)"
-    # 安装方式选择 (交互式)
-    if [[ -t 0 ]]; then
-        echo ""
-        echo -e "${YELLOW}请选择 OpenClaw 安装方式:${NC}"
-        echo "  1) Docker 容器安装 (推荐，默认)"
-        echo "  2) 全局安装 (npm install -g)"
-        echo -n "选择 (1/2，默认 1): "
-        read -r install_choice
-        case "$install_choice" in
-            2)
-                export INSTALL_METHOD="npm"
-                INSTALL_DOCKER="false"
-                INSTALL_NODEJS="true"
-                install_method_display="全局安装 (npm)"
-                ;;
-            *)
-                export INSTALL_METHOD="docker"
-                INSTALL_DOCKER="true"
-                INSTALL_NODEJS="false"
-                install_method_display="Docker 容器 (推荐)"
-                ;;
-        esac
+
+    if [[ "${SKIP_SOFTWARE_SCRIPT}" == "true" ]]; then
+        echo "  模式:      ${YELLOW}纯优化（不安装任何软件）${NC}"
     else
-        export INSTALL_METHOD="${INSTALL_METHOD:-docker}"
-        INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
-        INSTALL_NODEJS="${INSTALL_NODEJS:-false}"
-        install_method_display="Docker 容器 (默认)"
+        echo "  Docker:    ${INSTALL_DOCKER}"
+        echo "  Node.js:   ${INSTALL_NODEJS}"
+        echo "  模式:      全量安装"
     fi
-    
-    local docker_display="${INSTALL_DOCKER}"
-    local nodejs_display="${INSTALL_NODEJS}"
-    [[ "$docker_display" == "true" ]] && docker_display="是" || docker_display="跳过"
-    [[ "$nodejs_display" == "true" ]] && nodejs_display="是" || nodejs_display="跳过"
-    
-    echo "  安装方式:  ${install_method_display}"
-    echo "  Docker:    ${docker_display}"
-    echo "  Node.js:  ${nodejs_display}"
-    [[ "$OPTIMIZE_ONLY" == "true" ]] && echo "  模式:      ${YELLOW}纯优化（跳过安装）${NC}" || echo "  模式:      全量安装"
     echo ""
-    
+
     if [[ -t 0 ]]; then
         echo -n "继续执行？(y/n，默认 y): "
         read -r confirm
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && exit 0
     fi
-    
+
     echo ""
     log_step "开始优化..."
     echo ""
@@ -1407,20 +1382,22 @@ main() {
     optimize_io_scheduler
     optimize_arm
     optimize_network_t6
-
-    # OOM Killer 保护（重要：AIagent 进程被oomkill会导致会话中断）
     optimize_oom
     configure_cleanup_cron
 
-    if [[ "$OPTIMIZE_ONLY" != "true" ]]; then
+    # ── 软件安装（受 install.sh 环境变量控制）─────────────────────────────
+    if [[ "${SKIP_SOFTWARE_SCRIPT}" != "true" ]]; then
         install_base_tools || exit 1
         install_docker || exit 1
         install_nodejs || exit 1
         install_openclaw || exit 1
         create_systemd_service || exit 1
+        local did_install=true
     else
         log_info "纯优化模式，跳过 Docker / Node.js / OpenClaw 安装"
+        local did_install=false
     fi
+
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
@@ -1431,17 +1408,40 @@ main() {
     echo -e "${GREEN}  ✅ NanoPi T6/T6S v${SCRIPT_VERSION} 优化完成！${NC}"
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
-    echo -e "${CYAN}后续步骤:${NC}"
-    echo "  0. reboot  ← 必须重启！sysctl/journald/内核参数不重启不生效"
-    echo "  1. sudo -u ${OPENCLAW_USER} -i openclaw onboard"
-    echo "  2. systemctl start openclaw-gateway"
-    echo "  3. openclaw status"
+    echo -e "${CYAN}系统优化内容:${NC}"
+    echo "  - sysctl 网络/内存/内核参数"
+    echo "  - journald 日志压缩 + 100MB 限制"
+    echo "  - DNS 锁定（chattr +i）"
+    echo "  - CPU governor 持久化（schedutil 三层自动）"
+    echo "  - 防火墙（仅 lo 接口放行）"
+    echo "  - /tmp tmpfs（减少磁盘写入）"
+    echo "  - swap 优化（zram 保留，物理 swap 已清理）"
+
+    if [[ "$did_install" == "true" ]]; then
+        echo ""
+        echo -e "${CYAN}后续步骤:${NC}"
+        echo "  1. reboot  ← 必须重启！sysctl/CPU governor/journald 不重启不生效"
+        echo "  2. sudo -u ${OPENCLAW_USER} -i openclaw onboard"
+        echo "  3. systemctl --user start openclaw-gateway"
+        echo "  4. systemctl --user enable openclaw-gateway  # 开机自启"
+    else
+        echo ""
+        echo -e "${CYAN}后续步骤:${NC}"
+        echo "  1. reboot  ← 必须重启！sysctl/CPU governor/journald 不重启不生效"
+        echo "  2. 接下来安装你的软件（Docker / Xray / Nginx / OpenClaw 等）"
+    fi
+
     echo ""
-    echo -e "${YELLOW}⚠️  必须重启才能使所有优化生效！未重启时 sysctl/journald 均未就位${NC}"
+    echo -e "${YELLOW}⚠️  必须重启才能使所有优化生效！${NC}"
     echo ""
+
+    return 0
 }
 
 trap 'log_error "脚本异常退出 (行: ${LINENO})"; exit 1' ERR
+trap 'log_warn "被中断"; exit 130' INT TERM
+
+# OpenClaw 诊断
 trap 'log_warn "被中断"; exit 130' INT TERM
 
 
