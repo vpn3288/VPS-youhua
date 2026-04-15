@@ -1024,6 +1024,139 @@ run_doctor() {
 # =============================================================================
 # 主函数
 # =============================================================================
+
+# =============================================================================
+# 卸载 / 回滚
+# =============================================================================
+uninstall_openclaw() {
+    echo ""
+    echo "========================================================================"
+    echo -e "${RED}  OpenClaw 环境卸载 / 回滚${NC}"
+    echo "========================================================================"
+    echo ""
+
+    # 参数解析：支持 --uninstall 或 OPENCLAW_UNINSTALL=1
+    local do_uninstall=false
+    if [[ "${1:-}" == "--uninstall" ]] || [[ "${OPENCLAW_UNINSTALL:-}" == "1" ]]; then
+        do_uninstall=true
+    fi
+
+    if [[ "$do_uninstall" != "true" ]]; then
+        return 0
+    fi
+
+    # root 权限检查
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}[✗] 卸载需要 root 权限${NC}"
+        exit 1
+    fi
+
+    # 并发锁（防止卸载时脚本正在安装）
+    local lock_file="/var/lock/openclaw-uninstall.lock"
+    exec 9>"$lock_file"
+    if ! flock -n 9; then
+        echo -e "${RED}[✗] 另一个实例正在运行，退出${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}警告：此操作将删除 OpenClaw 相关配置和服务！${NC}"
+    echo ""
+    echo "将执行以下清理："
+    echo "  - 停止并禁用 openclaw-gateway 服务"
+    echo "  - 删除 systemd service 文件"
+    echo "  - 删除 /usr/local/bin/aiagent-cleanup.sh"
+    echo "  - 清理 cron 中的 aiagent-cleanup 条目"
+    echo "  - 删除 /etc/sysctl.d/99-openclaw.conf"
+    echo "  - 删除 /etc/logrotate.d/openclaw"
+    echo "  - 清理 Docker daemon.json（保留其他 Docker 配置）"
+    echo "  - 删除 openclaw 用户（保留 home 目录）"
+    echo "  - 删除 /etc/apt/sources.list.d/openclaw.list"
+    echo "  - 删除 /etc/apt/preferences.d/openclaw*"
+    echo ""
+    echo -n "确认卸载？(输入 'yes' 继续): "
+    read -r confirm
+    if [[ "$confirm" != "yes" ]]; then
+        echo "已取消卸载。"
+        exit 0
+    fi
+
+    echo ""
+    echo -e "${CYAN}[➜] 开始卸载...${NC}"
+
+    echo -e "${GREEN}[✓]${NC} 停止 openclaw-gateway 服务..."
+    systemctl --user stop openclaw-gateway 2>/dev/null || true
+    systemctl stop openclaw-gateway 2>/dev/null || true
+    echo -e "${GREEN}[✓]${NC} 停止 docker 容器..."
+    docker stop openclaw-gateway 2>/dev/null || true
+
+    echo -e "${GREEN}[✓]${NC} 禁用开机自启..."
+    systemctl --user disable openclaw-gateway 2>/dev/null || true
+    systemctl disable openclaw-gateway 2>/dev/null || true
+
+    echo -e "${GREEN}[✓]${NC} 删除 systemd service 文件..."
+    rm -f /etc/systemd/system/openclaw-gateway.service
+    rm -f /etc/systemd/system/openclaw-gateway.service.d
+    systemctl daemon-reload 2>/dev/null || true
+
+    echo -e "${GREEN}[✓]${NC} 删除 aiagent-cleanup.sh..."
+    rm -f /usr/local/bin/aiagent-cleanup.sh
+
+    echo -e "${GREEN}[✓]${NC} 清理 cron 条目..."
+    local cron_file="/var/spool/cron/crontabs/root"
+    if [[ -f "$cron_file" ]]; then
+        sed -i '/aiagent-cleanup/d' "$cron_file" 2>/dev/null || true
+        if [[ ! -s "$cron_file" ]]; then
+            rm -f "$cron_file"
+        fi
+    fi
+
+    echo -e "${GREEN}[✓]${NC} 删除 sysctl 配置..."
+    rm -f /etc/sysctl.d/99-openclaw.conf
+
+    echo -e "${GREEN}[✓]${NC} 删除 logrotate 配置..."
+    rm -f /etc/logrotate.d/openclaw
+
+    echo -e "${GREEN}[✓]${NC} 清理 Docker daemon.json..."
+    if [[ -f /etc/docker/daemon.json ]]; then
+        local tmp_daemon="/tmp/daemon.json.$$"
+        grep -v 'registry-mirrors' /etc/docker/daemon.json > "$tmp_daemon" 2>/dev/null || true
+        if [[ -s "$tmp_daemon" ]]; then
+            if command -v python3 &>/dev/null; then
+                if python3 -c "import json; json.load(open('$tmp_daemon'))" 2>/dev/null; then
+                    mv "$tmp_daemon" /etc/docker/daemon.json
+                    systemctl restart docker 2>/dev/null || true
+                else
+                    echo -e "${YELLOW}[!]${NC} Docker daemon.json JSON 无效，保留原文件"
+                    rm -f "$tmp_daemon"
+                fi
+            else
+                mv "$tmp_daemon" /etc/docker/daemon.json
+            fi
+        else
+            rm -f "$tmp_daemon" /etc/docker/daemon.json
+        fi
+    fi
+
+    echo -e "${GREEN}[✓]${NC} 删除 apt sources..."
+    rm -f /etc/apt/sources.list.d/openclaw.list
+    rm -f /etc/apt/preferences.d/openclaw
+
+    echo -e "${GREEN}[✓]${NC} 删除 openclaw 用户（保留 home 目录）..."
+    id openclaw &>/dev/null && userdel openclaw 2>/dev/null || true
+
+    echo ""
+    echo "========================================================================"
+    echo -e "${GREEN}  ✅ OpenClaw 卸载完成${NC}"
+    echo "========================================================================"
+    echo ""
+    echo "提示："
+    echo "  - Docker 保留在系统中"
+    echo "  - Node.js 保留在系统中"
+    echo "  - /home/openclaw 数据目录已保留（如需删除，请手动 rm -rf /home/openclaw）"
+    echo ""
+    exit 0
+}
+
 main() {
     clear
     echo "═══════════════════════════════════════════════════════════════════════"
@@ -1032,7 +1165,8 @@ main() {
     echo -e "${BLUE}平台: ${PLATFORM_DESC}${NC}"
     echo ""
 
-    init_script
+    uninstall_openclaw "$@" || exit 1
+        init_script
     detect_system
     check_network
     detect_n5105 || exit 1
