@@ -824,17 +824,29 @@ install_docker() {
     done
     [[ "$docker_ready" != "true" ]] && log_warn "Docker daemon 未就绪"
 
+    # Docker registry mirror 连通性检测（失败则降级到官方源）
+    local registry_mirror=""
+    if curl --max-time 5 -fsSL "https://mirror.ccs.tencentyi.com" >/dev/null 2>&1; then
+        registry_mirror="\"registry-mirrors\": [\"https://mirror.ccs.tencentyi.com\"]"
+        log_info "Docker registry mirror (腾讯云) 可达"
+    else
+        log_warn "Docker registry mirror 不可达，降级到官方源"
+    fi
+
     mkdir -p /etc/docker
-    cat > /etc/docker/daemon.json <<'EOF'
-{
-    "storage-driver": "overlay2",
-    "log-driver": "json-file",
-    "log-opts": {"max-size": "100m", "max-file": "3"},
-    "live-restore": true,
-    "userland-proxy": false,
-    "registry-mirrors": ["https://mirror.ccs.tencentyi.com"]
-}
-EOF
+    local daemon_json="{
+    \"storage-driver\": \"overlay2\",
+    \"log-driver\": \"json-file\",
+    \"log-opts\": {\"max-size\": \"100m\", \"max-file\": \"3\"},
+    \"live-restore\": true,
+    \"userland-proxy\": false"
+    if [[ -n "$registry_mirror" ]]; then
+        daemon_json+=",
+    $registry_mirror"
+    fi
+    daemon_json+="
+}"
+    printf '%s\n' "$daemon_json" > /etc/docker/daemon.json
     systemctl restart docker 2>/dev/null || true
     if command -v docker &>/dev/null; then
         log_info "Docker $(docker --version) 安装成功"

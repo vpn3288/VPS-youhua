@@ -595,16 +595,30 @@ configure_docker_daemon() {
     mkdir -p /etc/docker
     local docker_log_size="50m"
     [[ $SYS_DISK_AVAIL_GB -lt 10 ]] && docker_log_size="20m" && log_warn "磁盘空间有限，Docker日志限制为20M"
-    cat > /etc/docker/daemon.json <<EOFDOCKER
-{
-    "storage-driver": "overlay2",
-    "log-driver": "json-file",
-    "log-opts": {"max-size": "${docker_log_size}", "max-file": "2"},
-    "live-restore": true,
-    "userland-proxy": false,
-    "registry-mirrors": ["https://mirror.ccs.tencentyi.com"]
-}
-EOFDOCKER
+
+    # Docker registry mirror 连通性检测（失败则降级到官方源）
+    local registry_mirror=""
+    if curl --max-time 5 -fsSL "https://mirror.ccs.tencentyi.com" >/dev/null 2>&1; then
+        registry_mirror="\"registry-mirrors\": [\"https://mirror.ccs.tencentyi.com\"]"
+        log_info "Docker registry mirror (腾讯云) 可达"
+    else
+        log_warn "Docker registry mirror 不可达，降级到官方源"
+    fi
+
+    mkdir -p /etc/docker
+    local daemon_json="{
+    \"storage-driver\": \"overlay2\",
+    \"log-driver\": \"json-file\",
+    \"log-opts\": {\"max-size\": \"${docker_log_size}\", \"max-file\": \"2\"},
+    \"live-restore\": true,
+    \"userland-proxy\": false"
+    if [[ -n "$registry_mirror" ]]; then
+        daemon_json+=",
+    $registry_mirror"
+    fi
+    daemon_json+="
+}"
+    printf '%s\n' "$daemon_json" > /etc/docker/daemon.json
 
     systemctl restart docker 2>/dev/null || true
     if command -v docker &>/dev/null; then log_info "Docker $(docker --version) 安装成功"; fi
