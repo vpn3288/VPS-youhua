@@ -602,7 +602,9 @@ vm.vfs_cache_pressure = 50
 # === 连接追踪 (云环境需要更多) ===
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
-net.netfilter.nf_conntrack_tcp_timeout_established = 3600
+net.netfilter.nf_conntrack_tcp_timeout_established = 900
+net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
+net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 20
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
 net.netfilter.nf_conntrack_tcp_timeout_close_wait = 5
 net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
@@ -619,8 +621,7 @@ net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
 net.ipv4.conf.all.secure_redirects = 0
 net.ipv4.conf.default.secure_redirects = 0
-net.ipv4.ip_forward = 1
-# IP 转发（Docker 容器网络必需；无容器时开启无害）
+net.ipv4.ip_forward = 0  # 单网卡场景默认关闭（避免机器成为路由跳板）；多网卡/Docker-host网关场景由用户自行开启
 net.ipv6.conf.all.forwarding = 1
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
@@ -628,6 +629,13 @@ net.ipv4.tcp_syncookies = 1
 # IPv6 安全
 net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
+
+# 内核安全强化
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+kernel.yama.ptrace_scope = 1
 EOF
 
     # 加载 BBR 模块
@@ -989,6 +997,22 @@ EOTCLEANUP
 }
 
 # =============================================================================
+# 禁用自动更新，追求极致控制力（半夜升级内核会打断服务）
+# =============================================================================
+disable_auto_updates() {
+    log_step "禁用自动更新 (追求极致控制)..."
+    # mask apt-daily 定时器（防止半夜自动 apt upgrade）
+    systemctl mask apt-daily.service apt-daily.timer \
+        apt-daily-upgrade.service apt-daily-upgrade.timer 2>/dev/null || true
+    # 卸载 unattended-upgrades（防止静默安全更新）
+    if dpkg -l unattended-upgrades 2>/dev/null | grep -q "^ii"; then
+        apt-get remove --purge -y unattended-upgrades >> "$APT_LOG" 2>&1 || true
+        log_info "unattended-upgrades 已移除"
+    fi
+    log_info "自动更新已禁用（追求极致控制，手动维护）"
+}
+
+# =============================================================================
 # logrotate 配置（云环境清理）
 # =============================================================================
 configure_logrotate() {
@@ -1284,7 +1308,7 @@ main() {
     echo "  系统:      ${SYS_OS_ID} ${SYS_OS_VERSION}"
     echo "  架构:      ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
     echo "  ZRAM:      跳过 (内存充足)"
-    echo "  TCP缓冲:   ${TCP_BUF_MAX} (32MB)"
+    echo "  TCP缓冲:   ${TCP_BUF_MAX} (动态: 2c16G→32MB, 1c8G→16MB)"
     echo "  CT追踪:    ${CT_MAX}"
     echo ""
 
@@ -1348,6 +1372,7 @@ main() {
     optimize_oracle_cloud
     optimize_oom
     configure_cleanup_cron
+    disable_auto_updates
     configure_logrotate
     optimize_ssh
 
@@ -1372,10 +1397,12 @@ main() {
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
     echo -e "${CYAN}后续步骤:${NC}"
-    echo "  1. reboot"
+    echo "  1. reboot  ← 必须重启！sysctl/CPU governor/journald/内核参数不重启不生效"
     echo "  2. sudo -u ${OPENCLAW_USER} -i openclaw onboard"
     echo "  3. systemctl --user start openclaw-gateway"
     echo "  4. systemctl --user enable openclaw-gateway  # 开机自启"
+    echo ""
+    echo -e "${YELLOW}⚠️  必须重启才能使所有优化生效！未重启时 sysctl/内存/journald 均未就位${NC}"
     echo ""
     echo -e "${YELLOW}注意: Oracle Cloud 需要在控制台开放端口 ${OPENCLAW_PORT}${NC}"
     echo ""

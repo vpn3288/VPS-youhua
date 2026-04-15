@@ -551,7 +551,9 @@ vm.vfs_cache_pressure = 50
 # === 连接追踪 ===
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
-net.netfilter.nf_conntrack_tcp_timeout_established = 3600
+net.netfilter.nf_conntrack_tcp_timeout_established = 900
+net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
+net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 20
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 15
 net.netfilter.nf_conntrack_tcp_timeout_close_wait = 5
 net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
@@ -579,6 +581,13 @@ net.ipv6.conf.default.forwarding = 1
 # === 网关转发（Docker 容器网络必需；无容器时开启无害） ===
 net.ipv4.ip_forward = 1
 net.ipv6.conf.all.forwarding = 1
+
+# 内核安全强化
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+kernel.yama.ptrace_scope = 1
 EOF
 
     # 加载 BBR 模块
@@ -704,6 +713,20 @@ EOTCLEANUP
         echo "0 3 * * * /usr/local/bin/aiagent-cleanup.sh >> /var/log/aiagent-cleanup.log 2>&1" >> "$cron_file"
     fi
     log_info "自动清理已配置"
+}
+
+# =============================================================================
+# 禁用自动更新，追求极致控制力
+# =============================================================================
+disable_auto_updates() {
+    log_step "禁用自动更新 (追求极致控制)..."
+    systemctl mask apt-daily.service apt-daily.timer \
+        apt-daily-upgrade.service apt-daily-upgrade.timer 2>/dev/null || true
+    if dpkg -l unattended-upgrades 2>/dev/null | grep -q "^ii"; then
+        apt-get remove --purge -y unattended-upgrades >> "$APT_LOG" 2>&1 || true
+        log_info "unattended-upgrades 已移除"
+    fi
+    log_info "自动更新已禁用"
 }
 
 # =============================================================================
@@ -1238,6 +1261,7 @@ main() {
     optimize_x86_generic
     optimize_network_generic
     optimize_oom
+    disable_auto_updates
     configure_cleanup_cron
     configure_logrotate
     optimize_ssh
@@ -1263,10 +1287,12 @@ main() {
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
     echo -e "${CYAN}后续步骤:${NC}"
-    echo "  1. reboot"
+    echo "  1. reboot  ← 必须重启！sysctl/CPU governor/journald/内核参数不重启不生效"
     echo "  2. sudo -u ${OPENCLAW_USER} -i openclaw onboard"
     echo "  3. systemctl --user start openclaw-gateway"
     echo "  4. systemctl --user enable openclaw-gateway  # 开机自启"
+    echo ""
+    echo -e "${YELLOW}⚠️  必须重启才能使所有优化生效！未重启时 sysctl/内存/journald 均未就位${NC}"
     echo ""
     echo -e "${YELLOW}日志: ${APT_LOG}${NC}"
     echo ""

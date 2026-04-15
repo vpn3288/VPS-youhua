@@ -889,7 +889,9 @@ net.ipv4.ip_forward = 1
 # ===== 连接追踪 conntrack =====
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_hashsize = ${CT_HASH_SIZE}
-net.netfilter.nf_conntrack_tcp_timeout_established = 3600
+net.netfilter.nf_conntrack_tcp_timeout_established = 900
+net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
+net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 20
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
 net.netfilter.nf_conntrack_tcp_timeout_close_wait = 5
 net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
@@ -911,6 +913,13 @@ vm.min_free_kbytes = 32768
 # ===== inotify =====
 fs.inotify.max_user_watches = 1048576
 fs.inotify.max_user_instances = 8192
+
+# 内核安全强化
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+kernel.yama.ptrace_scope = 1
 EOF
     
     sysctl -p "$sysctl_file" 2>/dev/null || true
@@ -999,7 +1008,7 @@ configure_cleanup_cron() {
 # AIagent 清理脚本 - eMMC 保护版
 docker image prune -af --filter "until=168h" 2>/dev/null || true
 journalctl --vacuum-size=30M 2>/dev/null || true
-journalctl --vacuum-time=3d 2>/dev/null || true
+journalctl --vacuum-time=7d 2>/dev/null || true
 find /tmp -type f -mtime +1 -delete 2>/dev/null || true
 find /var/tmp -type f -mtime +1 -delete 2>/dev/null || true
 find /root/.openclaw/sessions -name "*.json" -mmin +10080 -delete 2>/dev/null || true
@@ -1017,6 +1026,20 @@ EOTCLEANUP
         echo "0 3 * * * /usr/local/bin/aiagent-cleanup.sh >> /var/log/aiagent-cleanup.log 2>&1" >> "$cron_file"
     fi
     log_info "自动清理已配置"
+}
+
+# =============================================================================
+# 禁用自动更新，追求极致控制力
+# =============================================================================
+disable_auto_updates() {
+    log_step "禁用自动更新 (追求极致控制)..."
+    systemctl mask apt-daily.service apt-daily.timer \
+        apt-daily-upgrade.service apt-daily-upgrade.timer 2>/dev/null || true
+    if dpkg -l unattended-upgrades 2>/dev/null | grep -q "^ii"; then
+        apt-get remove --purge -y unattended-upgrades >> "$APT_LOG" 2>&1 || true
+        log_info "unattended-upgrades 已移除"
+    fi
+    log_info "自动更新已禁用"
 }
 
 
@@ -1271,9 +1294,12 @@ main() {
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
     echo -e "${CYAN}后续步骤:${NC}"
+    echo "  0. reboot  ← 必须重启！sysctl/journald/内核参数不重启不生效"
     echo "  1. sudo -u ${OPENCLAW_USER} -i openclaw onboard"
     echo "  2. systemctl start openclaw-gateway"
     echo "  3. openclaw status"
+    echo ""
+    echo -e "${YELLOW}⚠️  必须重启才能使所有优化生效！未重启时 sysctl/journald 均未就位${NC}"
     echo ""
 }
 

@@ -351,7 +351,7 @@ configure_journald() {
 SystemMaxUse=100M
 SystemMaxFileSize=30M
 RuntimeMaxUse=80M
-MaxRetentionSec=3day
+MaxRetentionSec=7day  # TF卡保护: 7天足够排查问题，3天太短
 Compress=yes
 Storage=volatile
 ForwardToSyslog=no
@@ -529,7 +529,7 @@ configure_ext4_commit() {
         echo "$line"
     done < "$fstab_file" > "${fstab_file}.new"
     mv "${fstab_file}.new" "$fstab_file"
-    log_info "ext4 挂载参数已优化 (commit=600)"
+    log_info "ext4 挂载参数已优化 (noatime,commit=600)"
 }
 
 configure_cleanup_cron() {
@@ -558,6 +558,20 @@ EOTCLEANUP
         echo "0 3 * * * /usr/local/bin/aiagent-cleanup.sh >> /var/log/aiagent-cleanup.log 2>&1" >> "$cron_file"
     fi
     log_info "自动清理已配置"
+}
+
+# =============================================================================
+# 禁用自动更新，追求极致控制力
+# =============================================================================
+disable_auto_updates() {
+    log_step "禁用自动更新 (追求极致控制)..."
+    systemctl mask apt-daily.service apt-daily.timer \
+        apt-daily-upgrade.service apt-daily-upgrade.timer 2>/dev/null || true
+    if dpkg -l unattended-upgrades 2>/dev/null | grep -q "^ii"; then
+        apt-get remove --purge -y unattended-upgrades >> "$APT_LOG" 2>&1 || true
+        log_info "unattended-upgrades 已移除"
+    fi
+    log_info "自动更新已禁用"
 }
 
 # =============================================================================
@@ -781,7 +795,7 @@ SWAPPINESS=10
 TCP_BUF_MAX=16777216  # 16MB TCP缓冲（R4S 作为网关需要足够的窗口）
 TCP_TW_BUCKETS=32768
 CT_MAX=524288
-MIN_FREE_KB=8192
+MIN_FREE_KB=65536  # 4GB 机器预留 64MB，防止 OOM；8KB 太小，模型加载时 direct reclaim 会触发 OOM
 
 # =============================================================================
 # 平台检测
@@ -889,7 +903,9 @@ vm.overcommit_memory = 1
 # 连接追踪
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
-net.netfilter.nf_conntrack_tcp_timeout_established = 1800
+net.netfilter.nf_conntrack_tcp_timeout_established = 900
+net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
+net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 20
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
 net.netfilter.nf_conntrack_tcp_timeout_close_wait = 10
 net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
@@ -915,6 +931,13 @@ net.ipv4.conf.all.secure_redirects = 0
 net.ipv4.conf.default.secure_redirects = 0
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
+
+# 内核安全强化（防止内核指针泄露和信息泄露攻击）
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+kernel.yama.ptrace_scope = 1
 
 # ARM64 内存
 vm.vfs_cache_pressure = 50
@@ -1300,6 +1323,7 @@ main() {
     optimize_arm
     optimize_network_r4s
     optimize_oom
+    disable_auto_updates
     optimize_ssh
 
     if [[ "$OPTIMIZE_ONLY" != "true" ]]; then
@@ -1325,15 +1349,17 @@ main() {
     echo "  - journald: 压缩 + 50MB限制"
     echo "  - log2ram: 64MB RAM日志缓冲"
     echo "  - /tmp: tmpfs (减少TF卡写入)"
-    echo "  - ext4: commit=600 (5分钟批量写)"
+    echo "  - ext4: noatime,commit=600 (减少随机写入，延长TF寿命)"
     echo "  - swap: 物理swap已禁用, Armbian原生zram保持启用(压缩内存)"
     echo "  - 每日清理: 自动执行"
     echo ""
     echo -e "${CYAN}后续步骤:${NC}"
-    echo "  1. reboot"
+    echo "  1. reboot  ← 必须重启！sysctl/CPU governor/tmpfsmount/内核参数不重启不生效"
     echo "  2. sudo -u ${OPENCLAW_USER} -i openclaw onboard"
     echo "  3. systemctl --user start openclaw-gateway"
     echo "  4. systemctl --user enable openclaw-gateway  # 开机自启"
+    echo ""
+    echo -e "${YELLOW}⚠️  必须重启才能使所有优化生效！未重启时 sysctl/内存/tmpfs governor 均未就位${NC}"
     echo ""
     echo -e "${YELLOW}日志: ${APT_LOG}${NC}"
     echo ""
