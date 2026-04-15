@@ -17,11 +17,11 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="cb07b88e8678ba25fa63ecc1e8a4277e1efc61d4fef7d0ed3ef6246d49fe5c2f"
-    ["nanopi-t6"]="04e36dfae13cee8aa773bce8bb7c1f44dced747b6caa7a6357fc930173de0148"
-    ["oracle-arm"]="576da1911eab782a5b05082298eb61ec7bab3cf302c551afe587a8a5b32fc2da"
-    ["n5105"]="b32c9dd35ed750c5619bb8ba3e1fd00b8144097f2a6720b1c8dd2b9a401ef8b6"
-    ["generic-x86"]="a7b41f2161dc5a23651d4bbf1b5b4bccac8adf39b502e224049e906835b474dd"
+    ["nanopi-r4s"]="ff378f36b120caa24fee7e6efe4b9151d78f0f9c02619befd0f5a0121d07a11b"
+    ["nanopi-t6"]="0da5a54048f7be6cfac44d0e9688ca666aad43830fafdd943bcae958f2434b9b"
+    ["oracle-arm"]="0e46ae91a757c0ff00bfc9b1ab500b88c9f217eee57201cd6fca2df0a3a63063"
+    ["n5105"]="9656686744aca06423edfa2879160acde4b6707ea66b79e06826f768c9b37c09"
+    ["generic-x86"]="8c4018b196f4cb1f84acad6c3a14a9b86ffa43d700cf4f924f9442a4b9cb8742"
     ["verify-v3.1"]="d734d7b4a3cc933ce03021ac87279f8ecd20c4f0033a1c9b21a935f1df0ec5b4"
 )
 
@@ -35,13 +35,22 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 参数解析（非交互模式）
+# 参数解析（操作模式 + 非交互模式）
 # ─────────────────────────────────────────────────────────────────────────────
 
+MODE="install"
 INTERACTIVE=true
-if [[ ! -t 0 ]] || [[ "${1:-}" == "--non-interactive" ]] || [[ "${1:-}" == "-y" ]] || [[ "${1:-}" == "--yes" ]]; then
-    INTERACTIVE=false
-fi
+
+for arg in "$@"; do
+    case "$arg" in
+        --uninstall)
+            MODE="uninstall"
+            ;;
+        --non-interactive|-y|--yes)
+            INTERACTIVE=false
+            ;;
+    esac
+done
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 颜色
@@ -164,10 +173,106 @@ download_and_run() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 统一卸载（检测平台后调用对应平台脚本的 uninstall）
+# ─────────────────────────────────────────────────────────────────────────────
+
+uninstall_all() {
+    clear
+    echo -e "${RED}"
+    echo "╔═══════════════════════════════════════════════════════════════════════╗"
+    echo "║                                                                       ║"
+    echo "║              AIagent 环境优化脚本 v${VERSION} — 卸载模式               ║"
+    echo "║                                                                       ║"
+    echo "╚═══════════════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    echo ""
+
+    # root 检查已在上方完成
+    # 并发锁
+    local lock_file="/var/lock/vps-youhua-uninstall.lock"
+    exec 9>"$lock_file"
+    if ! flock -n 9; then
+        log_error "另一个实例正在运行，退出"
+        exit 1
+    fi
+
+    check_network
+
+    local platform
+    platform=$(detect_platform)
+
+    log_info "检测到平台: $platform"
+    echo ""
+
+    # 确认
+    if [[ "$INTERACTIVE" == "true" ]]; then
+        echo -e "${YELLOW}警告：此操作将清理本脚本安装的所有环境优化配置！${NC}"
+        echo ""
+        echo -n "确认卸载？(输入 'yes' 继续): "
+        read -r confirm
+        [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    else
+        log_info "非交互模式，自动确认"
+    fi
+
+    echo ""
+    log_step "调用 ${platform}.sh --uninstall..."
+    echo ""
+
+    # 下载平台脚本并执行 uninstall
+    local tmpfile
+    tmpfile=$(mktemp)
+    trap 'rm -f "$tmpfile"' EXIT
+
+    local script_url="${RAW_BASE}/${platform}.sh"
+    if ! curl -fsSL "$script_url" -o "$tmpfile"; then
+        log_error "下载失败: $script_url"
+        exit 1
+    fi
+
+    # SHA256 校验（防止供应链污染，即使是卸载也要验证）
+    local expected="${EXPECTED_SHA256[$platform]:-}"
+    if [[ -n "$expected" ]]; then
+        local actual
+        actual=$(sha256sum "$tmpfile" | awk '{print $1}')
+        if [[ "$actual" != "$expected" ]]; then
+            log_error "SHA256 校验失败！文件可能被篡改。"
+            log_error "期望: $expected"
+            log_error "实际: $actual"
+            rm -f "$tmpfile"
+            exit 1
+        fi
+        log_info "SHA256 校验通过"
+    fi
+
+    bash "$tmpfile" --uninstall
+    local ret=$?
+
+    rm -f "$tmpfile"
+    trap - EXIT
+
+    if [[ $ret -eq 0 ]]; then
+        echo ""
+        echo "========================================================================"
+        echo -e "${GREEN}  ✅ 卸载完成${NC}"
+        echo "========================================================================"
+    else
+        echo ""
+        log_error "平台脚本卸载失败 (exit $ret)"
+    fi
+    exit $ret
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
 
 main() {
+    if [[ "$MODE" == "uninstall" ]]; then
+        uninstall_all
+        return
+    fi
+
     # 清理临时文件
     trap 'rm -f /tmp/vps-youhua-*.sh' EXIT
 

@@ -1120,6 +1120,7 @@ uninstall_openclaw() {
     systemctl stop openclaw-gateway 2>/dev/null || true
     echo -e "${GREEN}[✓]${NC} 停止 docker 容器..."
     docker stop openclaw-gateway 2>/dev/null || true
+    docker rm -f openclaw-gateway 2>/dev/null || true
 
     echo -e "${GREEN}[✓]${NC} 禁用开机自启..."
     systemctl --user disable openclaw-gateway 2>/dev/null || true
@@ -1127,7 +1128,7 @@ uninstall_openclaw() {
 
     echo -e "${GREEN}[✓]${NC} 删除 systemd service 文件..."
     rm -f /etc/systemd/system/openclaw-gateway.service
-    rm -f /etc/systemd/system/openclaw-gateway.service.d
+    rm -rf /etc/systemd/system/openclaw-gateway.service.d
     systemctl daemon-reload 2>/dev/null || true
 
     echo -e "${GREEN}[✓]${NC} 删除 aiagent-cleanup.sh..."
@@ -1152,7 +1153,7 @@ uninstall_openclaw() {
     if [[ -f /etc/docker/daemon.json ]]; then
         local tmp_daemon="/tmp/daemon.json.$$"
         grep -v 'registry-mirrors' /etc/docker/daemon.json > "$tmp_daemon" 2>/dev/null || true
-        if [[ -s "$tmp_daemon" ]]; then
+        if [[ -s "$tmp_daemon" ]] && [[ "$(tr -d '[:space:]' < "$tmp_daemon")" != "{}" ]]; then
             if command -v python3 &>/dev/null; then
                 if python3 -c "import json; json.load(open('$tmp_daemon'))" 2>/dev/null; then
                     mv "$tmp_daemon" /etc/docker/daemon.json
@@ -1165,6 +1166,7 @@ uninstall_openclaw() {
                 mv "$tmp_daemon" /etc/docker/daemon.json
             fi
         else
+            # 清理后只剩 {} 或空文件，直接删除让 Docker 恢复默认配置
             rm -f "$tmp_daemon" /etc/docker/daemon.json
         fi
     fi
