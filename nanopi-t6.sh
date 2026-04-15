@@ -439,22 +439,32 @@ EOFDOCKERLIM
 optimize_ssh_t6() {
     log_step "SSH 安全加固 (T6)..."
 
-    local sshd_config="/etc/ssh/sshd_config"
-    [[ ! -f "$sshd_config" ]] && { log_warn "sshd_config 不存在，跳过"; return 0; }
+    # 优先使用 sshd_config.d drop-in（不影响主配置文件）
+    local dropin_dir="/etc/ssh/sshd_config.d"
+    local dropin_file="${dropin_dir}/99-vps-optimize.conf"
+    mkdir -p "$dropin_dir" 2>/dev/null || true
 
-    backup_file "$sshd_config"
+    # 生成 drop-in 配置（保留原有 PermitRootLogin/PubkeyAuthentication 行为）
+    cat > "$dropin_file" <<'EOFS'
+# VPS-youhua SSH 安全配置 — 由脚本维护，请勿手动修改
+PermitEmptyPasswords no
+ClientAliveInterval 3600
+ClientAliveCountMax 3
+X11Forwarding no
+EOFS
+    chmod 644 "$dropin_file"
 
-    # 只做必要的安全配置，不强制关闭密码登录
-    sed -i 's/^PermitEmptyPasswords.*/PermitEmptyPasswords no/' "$sshd_config" 2>/dev/null || true
-    grep -q "^ClientAliveInterval" "$sshd_config" 2>/dev/null || echo "ClientAliveInterval 3600" >> "$sshd_config"
-    sed -i 's/^ClientAliveInterval.*/ClientAliveInterval 3600/' "$sshd_config" 2>/dev/null || true
-    sed -i 's/^ClientAliveCountMax.*/ClientAliveCountMax 3/' "$sshd_config" 2>/dev/null || true
-    sed -i 's/^X11Forwarding.*/X11Forwarding no/' "$sshd_config" 2>/dev/null || true
-    # 保留系统原有 PermitRootLogin 和 PubkeyAuthentication 设置
-    systemctl reload sshd 2>/dev/null || true
-    log_info "SSH 已配置 (ClientAliveInterval=3600, 空密码已禁止)"
+    # 语法验证（防止把自己锁外面）
+    if command -v sshd &>/dev/null; then
+        if ! sshd -t -f "$dropin_file" 2>&1 | grep -qi "error"; then
+            log_info "SSH drop-in 已应用 + 语法验证通过"
+        else
+            log_warn "SSH drop-in 语法异常，移除并跳过"
+            rm -f "$dropin_file"
+        fi
+    fi
 
-    # 显示上次登录信息（发现异常登录时能立刻看到）
+    # 记录上次登录
     echo -e "  \${CYAN}上次登录记录:\${RESET}"
     last -n 3 2>/dev/null | grep -v "^$" | head -3 | sed "s/^/    /" || true
 }
