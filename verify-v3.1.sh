@@ -757,6 +757,22 @@ main() {
 
     echo ""
     echo -e "${SEP}"
+    echo -e "${BOLD}  🎯 环境就绪状态${RESET}"
+    echo -e "${SEP}"
+    if [[ $failed -eq 0 ]]; then
+        echo -e "  ${GREEN}✓ 底层环境优化完成，系统处于最佳状态${RESET}"
+        echo -e "  ${GREEN}✓ 可以安全安装任意官方 agent 脚本（OpenClaw / Hermes 等）${RESET}"
+        echo ""
+        echo -e "  ${CYAN}推荐下一步:${RESET}"
+        echo -e "    1. ${YELLOW}reboot${RESET}  ← 使所有 sysctl 持久化生效"
+        echo -e "    2. 安装你的 agent（Docker / Node.js 环境已就绪）"
+    else
+        echo -e "  ${RED}✗ 有 ${failed} 项未通过，请修复后再安装 agent${RESET}"
+        echo -e "  ${DIM}提示: 核心安全项（syncookies/rp_filter/dns）通常不受影响${DIM}"
+    fi
+
+    echo ""
+    echo -e "${SEP}"
     echo -e "  验证报告生成完毕 | v${VERSION} | $(date)"
     echo -e "${SEP}"
 }

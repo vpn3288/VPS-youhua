@@ -213,9 +213,9 @@ show_reboot_notice() {
         [[ "$yn" =~ ^[Yy]$ ]] && reboot || true
     fi
 }
-
 # ─────────────────────────────────────────────────────────────────────────────
-# APT 配置（自动选择最快源）
+# APT 配置（自动地区检测选择最快源）
+# CONFIGURE_MIRROR: "auto"(自动) | "official"(官方) | "tencent"(腾讯) | "ali"(阿里) | "tsinghua"(清华)
 # ─────────────────────────────────────────────────────────────────────────────
 configure_apt_sources() {
     log_step "配置 APT 源..."
@@ -228,7 +228,8 @@ configure_apt_sources() {
 
     mkdir -p /etc/apt/apt.conf.d /etc/needrestart/conf.d
     cat > /etc/apt/apt.conf.d/99-noninteractive <<'EOF'
-DPkg::Options {"--force-confdef"; "--force-confold";};
+DPkg::Options {
+"--force-confdef"; "--force-confold";};
 APT::Get::Assume-Yes "true";
 APT::Get::Fix-Missing "true";
 EOF
@@ -238,37 +239,87 @@ $nrconf{kernelhints} = 0;
 $nrconf{unneeded} = 'a';
 EOF
 
-    # 智能选择源（延迟最低优先）
-    write_apt_sources() {
-        cat > "$sources_list" <<EOF
-# Debian ${codename} - VPS-youhua
+    local mirror_mode="${CONFIGURE_MIRROR:-auto}"
+    local selected_mirror=""
+
+    # 地区检测函数
+    auto_select_mirror() {
+        local latencies=""
+        local mirrors="tencent:mirrors.tencent.com,ali:mirrors.aliyun.com,tsinghua:mirrors.tuna.tsinghua.edu.cn,official:deb.debian.org"
+        local fastest=""
+        local fastest_ms=9999
+
+        for m in $mirrors; do
+            local name="${m%%:*}"
+            local host="${m#*:}"
+            local ms; ms=$(curl --connect-timeout 3 -s -o /dev/null -w "%{time_total}" "http://${host}/debian/" 2>/dev/null | awk '{printf "%.0f", $1*1000}')
+            [[ -n "$ms" && "$ms" != "0" ]] || continue
+            [[ $ms -lt $fastest_ms ]] && fastest_ms=$ms && fastest=$name
+        done
+
+        if [[ -n "$fastest" ]]; then
+            echo "$fastest"
+        else
+            echo "official"
+        fi
+    }
+
+    if [[ "$mirror_mode" == "auto" ]]; then
+        log_info "正在测速选择最快镜像..."
+        mirror_mode=$(auto_select_mirror)
+        log_info "最快镜像: $mirror_mode"
+    fi
+
+    write_mirror() {
+        local m="$1"
+        case "$m" in
+            tencent)
+                cat > "$sources_list" <<EOF
 deb http://mirrors.tencent.com/debian/ ${codename} main contrib non-free non-free-firmware
 deb http://mirrors.tencent.com/debian/ ${codename}-updates main contrib non-free non-free-firmware
 deb http://mirrors.tencent.com/debian-security/ ${codename}-security main contrib non-free non-free-firmware
 deb http://mirrors.tencent.com/debian/ ${codename}-backports main contrib non-free non-free-firmware
 EOF
-    }
-
-    write_apt_sources
-
-    # 验证源可用性（3秒超时）
-    if ! curl --connect-timeout 3 -s -o /dev/null -w "%{http_code}" "http://mirrors.tencent.com/debian/" | grep -q "200"; then
-        log_warn "腾讯云镜像延迟较高，尝试阿里云..."
-        cat > "$sources_list" <<EOF
+                ;;
+            ali)
+                cat > "$sources_list" <<EOF
 deb http://mirrors.aliyun.com/debian/ ${codename} main contrib non-free non-free-firmware
 deb http://mirrors.aliyun.com/debian/ ${codename}-updates main contrib non-free non-free-firmware
 deb http://mirrors.aliyun.com/debian-security/ ${codename}-security main contrib non-free non-free-firmware
 deb http://mirrors.aliyun.com/debian/ ${codename}-backports main contrib non-free non-free-firmware
 EOF
-        if ! curl --connect-timeout 3 -s -o /dev/null -w "%{http_code}" "http://mirrors.aliyun.com/debian/" | grep -q "200"; then
-            log_warn "国内镜像均不可用，回退到官方源..."
-            cat > "$sources_list" <<'EOF'
-deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
-deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
-deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
-deb http://deb.debian.com/debian bookworm-backports main contrib non-free non-free-firmware
+                ;;
+            tsinghua)
+                cat > "$sources_list" <<EOF
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename} main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename}-updates main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename}-security main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename}-backports main contrib non-free non-free-firmware
 EOF
-        fi
+                ;;
+            official|*)
+                cat > "$sources_list" <<EOF
+deb http://deb.debian.org/debian ${codename} main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian ${codename}-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security ${codename}-security main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian ${codename}-backports main contrib non-free non-free-firmware
+EOF
+                ;;
+        esac
+    }
+
+    write_mirror "$mirror_mode"
+
+    # 如果选定源不可用，自动 fallback 到官方
+    local test_url="http://$(grep -m1 "^deb " "$sources_list" | awk '{print $2}')/"
+    if ! curl --connect-timeout 5 -sf "$test_url" > /dev/null 2>&1; then
+        log_warn "镜像 ${mirror_mode} 不可用，fallback 到官方源..."
+        write_mirror official
+    fi
+
+    # Armbian 源保护：如果检测到 Armbian，保留 armbian.list 不动
+    if [[ -f /etc/apt/sources.list.d/armbian.list ]]; then
+        log_info "检测到 Armbian 专用源，跳过 sources.list 替换"
     fi
 
     if ! apt-get update -qq >> "$APT_LOG" 2>&1; then
@@ -651,14 +702,6 @@ configure_logrotate() {
     notifempty
     create 0644 root root
 }
-/var/log/openclaw-install.log {
-    daily
-    rotate 7
-    compress
-    delaycompress
-    notifempty
-    create 0644 root root
-}
 EOF
     log_info "logrotate 已配置"
 }
@@ -692,6 +735,8 @@ PermitEmptyPasswords no
 ClientAliveInterval 3600
 ClientAliveCountMax 3
 X11Forwarding no
+PrintLastLog yes
+MaxAuthTries 3
 EOF
     chmod 644 "$dropin_file"
 
@@ -751,6 +796,69 @@ optimize_oracle_cloud() {
     done
 
     log_info "Oracle Cloud 特定优化完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 自动安全更新（可选，长期运行推荐）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_unattended_upgrades() {
+    [[ "${CONFIGURE_UNATTENDED:-false}" != "true" ]] && return 0
+    log_step "配置自动安全更新..."
+
+    if ! command -v unattended-upgrades &>/dev/null; then
+        apt-get install -y unattended-upgrades >> "$APT_LOG" 2>&1 || {
+            log_warn "unattended-upgrades 安装失败"
+            return 0
+        }
+    fi
+
+    mkdir -p /etc/apt/apt.conf.d
+    cat > /etc/apt/apt.conf.d/99-vps-youhua-unattended <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Download-Upgradeable-Packages "1";
+APT::Periodic::AutocleanInterval "7";
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot-Time "03:00";
+EOF
+    systemctl enable --now unattended-upgrades 2>/dev/null || true
+    log_info "自动安全更新已启用"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# fail2ban（可选，SSH 暴力破解防护）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_fail2ban() {
+    [[ "${CONFIGURE_FAIL2BAN:-false}" != "true" ]] && return 0
+    log_step "安装并配置 fail2ban..."
+
+    if ! command -v fail2ban-server &>/dev/null; then
+        apt-get install -y fail2ban >> "$APT_LOG" 2>&1 || {
+            log_warn "fail2ban 安装失败"
+            return 0
+        }
+    fi
+
+    cat > /etc/fail2ban/jail.local <<'EOF'
+[DEFAULT]
+bantime = 3600
+findtime = 600
+maxretry = 3
+destemail = root@localhost
+sender = root@localhost
+action = %(action_mwl)s
+
+[sshd]
+enabled = true
+port = 22
+maxretry = 3
+bantime = 3600
+findtime = 600
+logpath = /var/log/auth.log
+EOF
+
+    systemctl enable --now fail2ban 2>/dev/null || true
+    log_info "fail2ban 已启用（SSH 暴力破解防护）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

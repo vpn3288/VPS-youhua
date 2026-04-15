@@ -304,62 +304,7 @@ install_nodejs() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OpenClaw
-# ─────────────────────────────────────────────────────────────────────────────
-readonly OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
-readonly OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
-readonly OPENCLAW_DATA_DIR="${OPENCLAW_DATA_DIR:-/opt/openclaw}"
-
-install_openclaw() {
-    [[ "$INSTALL_OPENCLAW" != "true" ]] && log_info "跳过 OpenClaw 安装" && return 0
-    log_step "安装 OpenClaw..."
-
-    if ! command -v docker &>/dev/null; then
-        log_error "Docker 未安装"
-        return 1
-    fi
-    if ! command -v node &>/dev/null; then
-        log_error "Node.js 未安装"
-        return 1
-    fi
-
-    if ! id "$OPENCLAW_USER" &>/dev/null; then
-        useradd -m -s /bin/bash "$OPENCLAW_USER" 2>/dev/null || true
-    fi
-
-    log_info "OpenClaw 安装步骤完成（请运行官方安装脚本完成配置）"
-}
-
-create_systemd_service() {
-    [[ "$INSTALL_OPENCLAW" != "true" ]] && return 0
-    log_step "配置 systemd 服务..."
-
-    cat > /etc/systemd/system/openclaw-gateway.service <<EOF
-[Unit]
-Description=OpenClaw Gateway
-After=docker.service network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/bin/docker start openclaw-gateway
-ExecStop=/usr/bin/docker stop openclaw-gateway
-Restart=on-failure
-RestartSec=10
-User=$OPENCLAW_USER
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload 2>/dev/null || true
-    systemctl enable openclaw-gateway.service 2>/dev/null || true
-    log_info "systemd 服务配置完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 诊断
+# 诊断报告
 # ─────────────────────────────────────────────────────────────────────────────
 run_doctor() {
     log_step "运行诊断..."
@@ -518,7 +463,7 @@ main() {
         install_build_deps
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_OPENCLAW" == "true" ]] && { install_openclaw; create_systemd_service; }
+        [[ "$INSTALL_OPENCLAW" == "true" ]] && log_info "OpenClaw 请使用官方脚本安装"
         local did_install=true
     fi
 

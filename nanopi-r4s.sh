@@ -318,72 +318,6 @@ install_nodejs() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OpenClaw（作为 --uninstall 目标，实际 agent 安装走官方脚本）
-# ─────────────────────────────────────────────────────────────────────────────
-readonly OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
-readonly OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
-readonly OPENCLAW_DATA_DIR="${OPENCLAW_DATA_DIR:-/opt/openclaw}"
-
-install_openclaw() {
-    [[ "$INSTALL_OPENCLAW" != "true" ]] && log_info "跳过 OpenClaw 安装" && return 0
-    log_step "OpenClaw 安装..."
-
-    # 检查必要组件
-    if ! command -v docker &>/dev/null; then
-        log_error "Docker 未安装，请先安装 Docker"
-        return 1
-    fi
-    if ! command -v node &>/dev/null; then
-        log_error "Node.js 未安装，请先安装 Node.js"
-        return 1
-    fi
-
-    # 创建用户
-    if ! id "$OPENCLAW_USER" &>/dev/null; then
-        useradd -m -s /bin/bash "$OPENCLAW_USER" 2>/dev/null || true
-    fi
-
-    # 下载并运行 OpenClaw 安装脚本
-    local openclaw_install_url="https://raw.githubusercontent.com/openclaw/agent/main/install.sh"
-    if curl --head --silent --fail "$openclaw_install_url" >/dev/null 2>&1; then
-        log_info "从官方脚本安装 OpenClaw..."
-        bash <(curl -fsSL "$openclaw_install_url") >> "$APT_LOG" 2>&1 || true
-    else
-        log_warn "OpenClaw 官方安装脚本不可用，请手动安装"
-    fi
-
-    log_info "OpenClaw 安装步骤完成"
-}
-
-create_systemd_service() {
-    [[ "$INSTALL_OPENCLAW" != "true" ]] && return 0
-    log_step "配置 systemd 服务..."
-
-    cat > /etc/systemd/system/openclaw-gateway.service <<EOF
-[Unit]
-Description=OpenClaw Gateway
-After=docker.service network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/bin/docker start openclaw-gateway
-ExecStop=/usr/bin/docker stop openclaw-gateway
-Restart=on-failure
-RestartSec=10
-User=$OPENCLAW_USER
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload 2>/dev/null || true
-    systemctl enable openclaw-gateway.service 2>/dev/null || true
-    log_info "systemd 服务配置完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 诊断报告
 # ─────────────────────────────────────────────────────────────────────────────
 run_doctor() {
@@ -585,7 +519,7 @@ main() {
         install_build_deps
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_OPENCLAW" == "true" ]] && { install_openclaw; create_systemd_service; }
+        [[ "$INSTALL_OPENCLAW" == "true" ]] && log_info "OpenClaw 请使用官方脚本安装"
         local did_install=true
     fi
 
