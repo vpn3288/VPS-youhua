@@ -14,16 +14,16 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 # SHA256 校验和（防止供应链污染）
 # ⚠️  脚本更新时必须同步更新对应 SHA256
-# R49: --optimize-only, --clean-system, ip_forward注释, apt purge可选, /tmp动态, aarch64_be, Oracle MTU
+# R50: conntrack收紧(900s), syn_sent/syn_recv, kernel hardening(kptr/dmesg/yama), reboot警告强化, disable_auto_updates
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="4bb47b90216ddb2f476c8bafa4915a8b12027e0536c8743a195e889c8af1ef28"
-    ["nanopi-t6"]="e91597f08b384fa604ebf4c3f9023d2e8e5833e4268c10dc998fd12076c09011"
-    ["oracle-arm"]="da5fc3f8074cce99965d9570cc7a321e836c9b1aa58d490b29d8113e27d2fdf5"
-    ["n5105"]="465a7f5a395fd6f3a61598aa09c89f1d5ea5ba0fcf3f290e4b4057669837fd7f"
-    ["generic-x86"]="89115a438457a820de708879c8e34e968ade7690b6b5148fee6aa5bb3cf240e5"
-    ["verify-v3.1"]="d734d7b4a3cc933ce03021ac87279f8ecd20c4f0033a1c9b21a935f1df0ec5b4"
+    ["nanopi-r4s"]="2face109c104b692cf62c9c8ee6270e71edc949a55b3c9d6e6b4b94bed8953ef"
+    ["nanopi-t6"]="739ebef9c8111e6808c36d235d5802b3ea7cb61c0511b820f816517c5c06c177"
+    ["oracle-arm"]="f0fd3ddcb061bd134b18862d5b3077230eddaed322a1487a9ac1637b01454492"
+    ["n5105"]="c9b21f5e448fd13d4ad0a8ca224273fa88bd6d1cd693a57a434f1fd4176315ae"
+    ["generic-x86"]="1c8dd6c4e481aafcbb435e65ce271e04b343d367261573a2cbd6c3d15627986d"
+    ["verify-v3.1"]="95760662417b601103a63512b6bb204bc8b56136e2337ea206b322f8d509ebc4"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -136,10 +136,29 @@ detect_platform() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 check_network() {
-    if ! ping -c1 -W3 1.1.1.1 >/dev/null 2>&1; then
-        log_error "网络不可达，请检查网络连接"
+    log_step "检测网络连通性..."
+
+    # 第一层：DNS 解析验证（最可靠，不依赖ICMP）
+    if ! host -W 3 cloudflare.com >/dev/null 2>&1 && \
+       ! getent hosts github.com >/dev/null 2>&1; then
+        log_error "DNS 解析失败，请检查 /etc/resolv.conf 和 nameserver 配置"
         exit 1
     fi
+
+    # 第二层：HTTPS HEAD 验证（测实际可达性，Cloudflare/GitHub 都有标准路径）
+    if ! curl --silent --head --fail --connect-timeout 5 \
+        -H "Host: www.cloudflare.com" https://104.16.123.96 >/dev/null 2>&1 && \
+       ! curl --silent --head --fail --connect-timeout 5 \
+        https://github.com >/dev/null 2>&1; then
+        log_warn "HTTPS 不可达（可能存在防火墙限制），尝试 ping..."
+        if ! ping -c 2 -W 4 1.1.1.1 >/dev/null 2>&1; then
+            log_error "网络完全不可达，请检查网络连接"
+            exit 1
+        fi
+        log_warn "网络检测降级为 ping 模式（部分云环境 ICMP 被限速）"
+    fi
+
+    log_info "网络检测通过"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
