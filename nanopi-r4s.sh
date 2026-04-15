@@ -37,6 +37,7 @@ SYS_NET_IF=""; SYS_ROOT_DISK=""; SYS_IS_TF_CARD=false
 
 INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
 INSTALL_NODEJS="${INSTALL_NODEJS:-true}"
+OPTIMIZE_ONLY="${OPTIMIZE_ONLY:-false}"
 NODEJS_VERSION="${NODEJS_VERSION:-22}"
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
 OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
@@ -182,17 +183,26 @@ EOFALL
 # =============================================================================
 clean_system() {
     log_step "清理系统..."
+
+    # 关闭常见有冲突的服务（始终执行，因为这些服务本身就可能干扰网络栈）
     local stop_svcs=(snapd apache2 nginx postfix exim4 ufw)
     for svc in "${stop_svcs[@]}"; do
         systemctl stop "$svc" 2>/dev/null || true
         systemctl disable "$svc" 2>/dev/null || true
     done
-    local remove_pkgs=(snapd apache2-bin apache2-utils nginx nginx-light nginx-full postfix exim4-base exim4-config)
-    local to_remove=()
-    for pkg in "${remove_pkgs[@]}"; do
-        dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && to_remove+=("$pkg")
-    done
-    [[ ${#to_remove[@]} -gt 0 ]] && apt-get remove --purge -y "${to_remove[@]}" >> "$APT_LOG" 2>&1 || true
+
+    # 卸载预装软件包（默认跳过；只有明确指定 --clean-system 才真正 purge）
+    if [[ "${CLEAN_SYSTEM:-false}" != "true" ]]; then
+        log_info "clean_system 跳过 apt purge（使用 --clean-system 可开启）"
+    else
+        local remove_pkgs=(snapd apache2-bin apache2-utils nginx nginx-light nginx-full postfix exim4-base exim4-config)
+        local to_remove=()
+        for pkg in "${remove_pkgs[@]}"; do
+            dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && to_remove+=("$pkg")
+        done
+        [[ ${#to_remove[@]} -gt 0 ]] && apt-get remove --purge -y "${to_remove[@]}" >> "$APT_LOG" 2>&1 || true
+    fi
+
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
     apt-get autoclean >> "$APT_LOG" 2>&1 || true
     log_info "系统清理完成"
@@ -375,12 +385,15 @@ configure_tf_card_protection() {
     # 2. log2ram
     configure_log2ram_local
 
-    # 3. /tmp tmpfs
+    # 3. /tmp tmpfs（动态大小：内存/8，上限2G，下限256M）
     log_step "配置 /tmp tmpfs..."
+    local tmpfs_size_mb=$((SYS_MEM_MB / 8))
+    [[ $tmpfs_size_mb -lt 256 ]] && tmpfs_size_mb=256
+    [[ $tmpfs_size_mb -gt 2048 ]] && tmpfs_size_mb=2048
     if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
-        echo "tmpfs /tmp tmpfs defaults,noatime,nosuid,nodev,mode=1777,size=512M 0 0" >> /etc/fstab
+        echo "tmpfs /tmp tmpfs defaults,noatime,nosuid,nodev,mode=1777,size=${tmpfs_size_mb}M 0 0" >> /etc/fstab
     fi
-    log_info "/tmp tmpfs 已配置"
+    log_info "/tmp tmpfs 已配置（${tmpfs_size_mb}MB，按内存比例动态计算）"
 
     # 4. ext4挂载参数
     log_step "优化 ext4 挂载参数..."
@@ -888,7 +901,7 @@ net.ipv6.conf.default.forwarding = 1
 net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
 
-# 转发（容器必需）
+# IP 转发（Docker 容器网络必需；无容器时可不开启，但开启无害）
 net.ipv4.ip_forward = 1
 net.ipv6.conf.all.forwarding = 1
 
@@ -1217,6 +1230,14 @@ main() {
     echo -e "${BLUE}平台: ${PLATFORM_DESC}${NC}"
     echo ""
 
+    # 解析参数
+    for arg in "$@"; do
+        case "$arg" in
+            --optimize-only) OPTIMIZE_ONLY=true ;;
+            --uninstall) ;;
+        esac
+    done
+
     uninstall_openclaw "$@" || exit 1
         init_script
     detect_system
@@ -1251,6 +1272,7 @@ main() {
     local docker_display="${INSTALL_DOCKER}"; [[ "$docker_display" == "true" ]] && docker_display="是" || docker_display="跳过"
     echo "  安装方式:  ${install_method_display}"
     echo "  Docker:    ${docker_display}"
+    [[ "$OPTIMIZE_ONLY" == "true" ]] && echo "  模式:      ${YELLOW}纯优化（跳过安装）${NC}" || echo "  模式:      全量安装"
     echo ""
 
     if [[ -t 0 ]]; then
@@ -1280,11 +1302,15 @@ main() {
     optimize_oom
     optimize_ssh
 
-    install_base_tools || exit 1
-    install_nodejs || exit 1
-    install_docker || exit 1
-    install_openclaw || exit 1
-    create_systemd_service || exit 1
+    if [[ "$OPTIMIZE_ONLY" != "true" ]]; then
+        install_base_tools || exit 1
+        install_nodejs || exit 1
+        install_docker || exit 1
+        install_openclaw || exit 1
+        create_systemd_service || exit 1
+    else
+        log_info "纯优化模式，跳过 Docker / Node.js / OpenClaw 安装"
+    fi
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true

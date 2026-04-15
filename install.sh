@@ -2,7 +2,7 @@
 # =============================================================================
 # AIagent 环境优化脚本（通用入口）v3.1
 # 支持平台: NanoPi R4S, NanoPC T6, Oracle ARM, N5105, 通用 x86 VPS
-# 功能: 只优化环境，不安装 AIagent
+# 功能: 环境优化 + 可选 Docker / Node.js / OpenClaw 安装（默认全量）
 # =============================================================================
 
 set -euo pipefail
@@ -14,14 +14,15 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 # SHA256 校验和（防止供应链污染）
 # ⚠️  脚本更新时必须同步更新对应 SHA256
+# R49: --optimize-only, --clean-system, ip_forward注释, apt purge可选, /tmp动态, aarch64_be, Oracle MTU
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="3deab308d9497217083b1dd3c8f59176c0127290f658532e579cabbb11aeea3f"
-    ["nanopi-t6"]="a90151840570a865b1ae55b7dce9adbe25c2c7fc6e2515242b1ff799b2fd704d"
-    ["oracle-arm"]="6b4ce9ebce5b8e435bc2b846dc53b4b6a892c7df4a391c795975e722b37a043e"
-    ["n5105"]="37e0ebc4b16a6af08bbeda9d397aa4443c91ed4e4fc7b113056d1db71a571ac6"
-    ["generic-x86"]="c560b1f4a18af83bffc921b6f7f5b22fcde6c72ff44fac756ff9d9b44e462817"
+    ["nanopi-r4s"]="4bb47b90216ddb2f476c8bafa4915a8b12027e0536c8743a195e889c8af1ef28"
+    ["nanopi-t6"]="e91597f08b384fa604ebf4c3f9023d2e8e5833e4268c10dc998fd12076c09011"
+    ["oracle-arm"]="da5fc3f8074cce99965d9570cc7a321e836c9b1aa58d490b29d8113e27d2fdf5"
+    ["n5105"]="465a7f5a395fd6f3a61598aa09c89f1d5ea5ba0fcf3f290e4b4057669837fd7f"
+    ["generic-x86"]="89115a438457a820de708879c8e34e968ade7690b6b5148fee6aa5bb3cf240e5"
     ["verify-v3.1"]="d734d7b4a3cc933ce03021ac87279f8ecd20c4f0033a1c9b21a935f1df0ec5b4"
 )
 
@@ -40,6 +41,8 @@ fi
 
 MODE="install"
 INTERACTIVE=true
+OPTIMIZE_ONLY=false
+CLEAN_SYSTEM=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -49,8 +52,18 @@ for arg in "$@"; do
         --non-interactive|-y|--yes)
             INTERACTIVE=false
             ;;
+        --optimize-only)
+            OPTIMIZE_ONLY=true
+            ;;
+        --clean-system)
+            CLEAN_SYSTEM=true
+            ;;
     esac
 done
+
+# 透传参数给平台脚本（子脚本通过 curl | bash 启动，无法继承父 shell 变量）
+[[ "$OPTIMIZE_ONLY" == "true" ]] && export OPTIMIZE_ONLY="true"
+[[ "$CLEAN_SYSTEM" == "true" ]] && export CLEAN_SYSTEM="true"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 颜色
@@ -80,8 +93,11 @@ detect_platform() {
         exit 1
     fi
 
+    # aarch64_be（部分 big-endian ARM64 变体）按 aarch64 处理
+    # 注意：部分国产 ARM 服务器使用 aarch64_be，内核仍兼容普通 aarch64 二进制
+
     case "$arch" in
-        aarch64)
+        aarch64|aarch64_be)
             # 1. 按设备树判断 NanoPi 系列（最精确）
             if echo "$model" | grep -qi "NanoPi R4S"; then
                 echo "nanopi-r4s"

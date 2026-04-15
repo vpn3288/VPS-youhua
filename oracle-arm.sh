@@ -46,6 +46,7 @@ SYS_IS_SSD=false; SYS_IS_ORACLE_CLOUD=false
 # 安装选项
 INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
 INSTALL_NODEJS="${INSTALL_NODEJS:-true}"
+OPTIMIZE_ONLY="${OPTIMIZE_ONLY:-false}"
 NODEJS_VERSION="${NODEJS_VERSION:-22}"
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
 OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
@@ -232,21 +233,27 @@ EOF
 clean_system() {
     log_step "清理系统..."
 
+    # 关闭常见有冲突的服务（始终执行，因为这些服务本身就可能干扰网络栈）
     local stop_svcs=(snapd apache2 nginx postfix exim4 ufw)
     for svc in "${stop_svcs[@]}"; do
         systemctl stop "$svc" 2>/dev/null || true
         systemctl disable "$svc" 2>/dev/null || true
     done
 
-    local remove_pkgs=(snapd apache2-bin apache2-utils nginx nginx-light nginx-full postfix exim4-base exim4-config)
-    local to_remove=()
-    for pkg in "${remove_pkgs[@]}"; do
-        dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && to_remove+=("$pkg")
-    done
+    # 卸载预装软件包（默认跳过；只有明确指定 --clean-system 才真正 purge）
+    if [[ "${CLEAN_SYSTEM:-false}" != "true" ]]; then
+        log_info "clean_system 跳过 apt purge（使用 --clean-system 可开启）"
+    else
+        local remove_pkgs=(snapd apache2-bin apache2-utils nginx nginx-light nginx-full postfix exim4-base exim4-config)
+        local to_remove=()
+        for pkg in "${remove_pkgs[@]}"; do
+            dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && to_remove+=("$pkg")
+        done
 
-    [[ ${#to_remove[@]} -gt 0 ]] && {
-        apt-get remove --purge -y "${to_remove[@]}" >> "$APT_LOG" 2>&1 || true
-    }
+        [[ ${#to_remove[@]} -gt 0 ]] && {
+            apt-get remove --purge -y "${to_remove[@]}" >> "$APT_LOG" 2>&1 || true
+        }
+    fi
 
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
     apt-get autoclean >> "$APT_LOG" 2>&1 || true
@@ -457,6 +464,19 @@ optimize_oracle_cloud() {
         log_info "保留 oracle-cloud-agent"
     fi
 
+    # 检测主网卡 MTU（Oracle 内部网络 MTU=9001，公网=1500）
+    local primary_iface
+    primary_iface=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}')
+    if [[ -n "$primary_iface" ]] && [[ -d "/sys/class/net/$primary_iface" ]]; then
+        local mtu
+        mtu=$(cat "/sys/class/net/$primary_iface/mtu" 2>/dev/null || echo "unknown")
+        if [[ "$mtu" == "1500" ]]; then
+            log_warn "主网卡 $primary_iface MTU=1500（公网）；Oracle 内部网络 MTU=9001，如需跨实例通信请调整 MTU"
+        elif [[ "$mtu" =~ ^[0-9]+$ ]] && [[ $mtu -gt 1500 ]]; then
+            log_info "主网卡 $primary_iface MTU=$mtu（可能是 Oracle 内部网络）"
+        fi
+    fi
+
     # 网络优化
     for iface in /sys/class/net/en* /sys/class/net/eth*; do
         [[ -d "$iface" ]] || continue
@@ -600,6 +620,7 @@ net.ipv4.conf.default.accept_redirects = 0
 net.ipv4.conf.all.secure_redirects = 0
 net.ipv4.conf.default.secure_redirects = 0
 net.ipv4.ip_forward = 1
+# IP 转发（Docker 容器网络必需；无容器时开启无害）
 net.ipv6.conf.all.forwarding = 1
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
@@ -1243,6 +1264,15 @@ main() {
     echo -e "${BLUE}平台: ${PLATFORM_DESC}${NC}"
     echo ""
 
+
+    # 解析参数
+    for arg in "$@"; do
+        case "$arg" in
+            --optimize-only) OPTIMIZE_ONLY=true ;;
+            --uninstall) ;;
+        esac
+    done
+
     uninstall_openclaw "$@" || exit 1
         init_script
     detect_system
@@ -1290,6 +1320,7 @@ main() {
 
     echo "  安装方式:  ${install_method_display}"
     echo "  Docker:    ${docker_display}"
+    [[ "$OPTIMIZE_ONLY" == "true" ]] && echo "  模式:      ${YELLOW}纯优化（跳过安装）${NC}" || echo "  模式:      全量安装"
     echo ""
 
     if [[ -t 0 ]]; then
@@ -1320,11 +1351,16 @@ main() {
     configure_logrotate
     optimize_ssh
 
+    if [[ "$OPTIMIZE_ONLY" != "true" ]]; then
     install_base_tools || exit 1
     install_nodejs || exit 1
     install_docker || exit 1
     install_openclaw || exit 1
     create_systemd_service || exit 1
+        else
+            log_info "纯优化模式，跳过 Docker / Node.js / OpenClaw 安装"
+        fi
+
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true

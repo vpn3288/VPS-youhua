@@ -2,9 +2,8 @@
 
 <div align="center">
 
-**AIagent 安装前的硬件环境优化脚本**
-适用于 OpenClaw、Hermes 等所有 AIagent
-仅优化环境，不安装 AIagent 本身
+**NanoPi R4S / T6、Oracle Cloud ARM、N5105、通用 x86 VPS 的系统优化**
+适用于 OpenClaw、Hermes 等所有需要 Linux 环境的 AIagent
 
 [![Debian 12](https://img.shields.io/badge/Debian-12-AA0000?logo=debian)](https://www.debian.org/)
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
@@ -20,7 +19,9 @@
 
 本项目为 AIagent（OpenClaw、Hermes 等）提供**安装前的环境优化**，让 AIagent 能以安全、稳定、高速、长期运行的状态部署。
 
-**只优化环境，不安装 AIagent。** 安装完本脚本的环境后，再按各 AIagent 官方方式安装本体。
+**默认行为：优化环境 + 安装 Docker + 安装 OpenClaw。**
+
+使用 `--optimize-only` 可跳过所有安装步骤，仅做纯环境优化（sysctl、journald、swap、CPU governor、inotify 等），适合"只想优化环境、后面装其他东西"的场景。
 
 ### 核心原则
 
@@ -45,6 +46,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nano
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)  # Oracle Cloud ARM
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)        # N5105/N5095 小主机
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)   # 其他 x86 VPS
+
+# 可选参数：
+#   --optimize-only   仅做环境优化，跳过 Docker / Node.js / OpenClaw 安装
+#   --clean-system    清理 apt purge 预装软件（apache2/nginx/postfix 等）
+#   --uninstall       卸载已安装的优化配置
+#   --non-interactive 自动执行（适合自动化）
 ```
 
 ### 第二步：验证优化效果
@@ -54,13 +61,14 @@ curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.1
 bash /tmp/verify-v3.1.sh
 ```
 
-### 第三步：安装 AIagent
+### 第三步：使用 AIagent
 
-优化完成后，按各 AIagent 官方文档安装。例如 OpenClaw：
+Docker / Node.js / OpenClaw 已在第一步中安装完毕。如需重启服务：
 
 ```bash
-npm install -g openclaw
-openclaw onboard --install-daemon
+systemctl --user start openclaw-gateway   # 启动
+systemctl --user enable openclaw-gateway  # 开机自启
+openclaw onboard                          # 首次配置
 ```
 
 ---
@@ -73,7 +81,7 @@ openclaw onboard --install-daemon
 | NanoPC T6 | RK3588S (ARM64) | 8GB | **eMMC** | `nanopi-t6.sh` |
 | Oracle Cloud ARM | Ampere Altra (ARM64) | 16GB | 云盘 | `oracle-arm.sh` |
 | N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | SSD | `n5105.sh` |
-| 通用 x86 VPS | 任意 x86_64 | 自动适配 | 自动检测 | `generic-x86.sh` |
+| 通用 x86 VPS | 任意 x86_64 | 自动适配 | 自动检测（SSD/HDD） | `generic-x86.sh` |
 
 ---
 

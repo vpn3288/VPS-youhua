@@ -49,6 +49,7 @@ SYS_NET_IF=""
 # 安装选项
 INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
 INSTALL_NODEJS="${INSTALL_NODEJS:-true}"
+OPTIMIZE_ONLY="${OPTIMIZE_ONLY:-false}"
 NODEJS_VERSION="${NODEJS_VERSION:-22}"
 OPENCLAW_USER="${OPENCLAW_USER:-openclaw}"
 OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
@@ -215,21 +216,27 @@ EOF
 clean_system() {
     log_step "清理系统..."
     
+    # 关闭常见有冲突的服务（始终执行）
     local stop_svcs=(snapd apache2 nginx postfix exim4 ufw)
     for svc in "${stop_svcs[@]}"; do
         systemctl stop "$svc" 2>/dev/null || true
         systemctl disable "$svc" 2>/dev/null || true
     done
     
-    local remove_pkgs=(snapd apache2-bin apache2-utils nginx nginx-light nginx-full postfix exim4-base exim4-config)
-    local to_remove=()
-    for pkg in "${remove_pkgs[@]}"; do
-        dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && to_remove+=("$pkg")
-    done
-    
-    [[ ${#to_remove[@]} -gt 0 ]] && {
-        apt-get remove --purge -y "${to_remove[@]}" >> "$APT_LOG" 2>&1 || true
-    }
+    # 卸载预装软件包（默认跳过；只有明确指定 --clean-system 才真正 purge）
+    if [[ "${CLEAN_SYSTEM:-false}" != "true" ]]; then
+        log_info "clean_system 跳过 apt purge（使用 --clean-system 可开启）"
+    else
+        local remove_pkgs=(snapd apache2-bin apache2-utils nginx nginx-light nginx-full postfix exim4-base exim4-config)
+        local to_remove=()
+        for pkg in "${remove_pkgs[@]}"; do
+            dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && to_remove+=("$pkg")
+        done
+        
+        [[ ${#to_remove[@]} -gt 0 ]] && {
+            apt-get remove --purge -y "${to_remove[@]}" >> "$APT_LOG" 2>&1 || true
+        }
+    fi
     
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
     apt-get autoclean >> "$APT_LOG" 2>&1 || true
@@ -875,6 +882,8 @@ net.ipv6.conf.all.forwarding = 1
 net.ipv6.conf.default.forwarding = 1
 net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
+# ===== IP 转发 =====
+# Docker 容器网络必需；无容器时开启无害
 net.ipv4.ip_forward = 1
 
 # ===== 连接追踪 conntrack =====
@@ -1152,6 +1161,14 @@ main() {
     echo -e "${BLUE}平台: ${PLATFORM_DESC}${NC}"
     echo ""
     
+    # 解析参数
+    for arg in "$@"; do
+        case "$arg" in
+            --optimize-only) OPTIMIZE_ONLY=true ;;
+            --uninstall) ;;
+        esac
+    done
+
     uninstall_openclaw "$@" || exit 1
         init_script
     detect_system
@@ -1201,6 +1218,7 @@ main() {
     echo "  安装方式:  ${install_method_display}"
     echo "  Docker:    ${docker_display}"
     echo "  Node.js:  ${nodejs_display}"
+    [[ "$OPTIMIZE_ONLY" == "true" ]] && echo "  模式:      ${YELLOW}纯优化（跳过安装）${NC}" || echo "  模式:      全量安装"
     echo ""
     
     if [[ -t 0 ]]; then
@@ -1233,11 +1251,15 @@ main() {
     optimize_oom
     configure_cleanup_cron
     
-    install_base_tools || exit 1
-    install_docker || exit 1
-    install_nodejs || exit 1
-    install_openclaw || exit 1
-    create_systemd_service || exit 1
+    if [[ "$OPTIMIZE_ONLY" != "true" ]]; then
+        install_base_tools || exit 1
+        install_docker || exit 1
+        install_nodejs || exit 1
+        install_openclaw || exit 1
+        create_systemd_service || exit 1
+    else
+        log_info "纯优化模式，跳过 Docker / Node.js / OpenClaw 安装"
+    fi
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
     
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
