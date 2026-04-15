@@ -761,7 +761,7 @@ main() {
     echo -e "${SEP}"
     if [[ $failed -eq 0 ]]; then
         echo -e "  ${GREEN}✓ 底层环境优化完成，系统处于最佳状态${RESET}"
-        echo -e "  ${GREEN}✓ 可以安全安装任意官方 agent 脚本（OpenClaw / Hermes 等）${RESET}"
+        echo -e "  ${GREEN}✓ 可以安全安装任意官方 agent 脚本（参考对应项目文档）${RESET}"
         echo ""
         echo -e "  ${CYAN}推荐下一步:${RESET}"
         echo -e "    1. ${YELLOW}reboot${RESET}  ← 使所有 sysctl 持久化生效"

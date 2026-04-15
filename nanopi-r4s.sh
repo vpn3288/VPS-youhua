@@ -9,7 +9,7 @@
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)
 #
 # 模式说明:
-#   --optimize-only   纯环境优化（不安装 Docker/Node.js/OpenClaw）
+#   --optimize-only   纯环境优化（不安装 Docker/Node.js）
 #   --uninstall       卸载所有优化配置
 #
 
@@ -381,7 +381,7 @@ uninstall_all() {
         exit 1
     fi
 
-    if [[ "${1:-}" != "--uninstall" ]] && [[ "${OPENCLAW_UNINSTALL:-}" != "1" ]]; then
+    if [[ "${1:-}" != "--uninstall" ]]; then
         return 0
     fi
 
@@ -398,13 +398,7 @@ uninstall_all() {
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
     # 停止服务
-    systemctl stop openclaw-gateway 2>/dev/null || true
-    systemctl disable openclaw-gateway 2>/dev/null || true
-    rm -f /etc/systemd/system/openclaw-gateway.service
-
-    # 清理 Docker
-    docker stop openclaw-gateway 2>/dev/null || true
-    docker rm -f openclaw-gateway 2>/dev/null || true
+    systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
 
     # 清理配置文件
     rm -f /etc/sysctl.d/99-vps-youhua-r4s.conf
@@ -416,26 +410,8 @@ uninstall_all() {
     rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
     rm -f /etc/cron.d/vps-youhua-cleanup
     rm -f /etc/logrotate.d/vps-youhua
-    rm -f /etc/apt/sources.list.d/openclaw.list
-    rm -f /etc/apt/preferences.d/openclaw
     rm -f /etc/apt/apt.conf.d/99-noninteractive
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
-    rm -rf /etc/systemd/system/openclaw-gateway.service.d
-
-    # 清理用户
-    id openclaw &>/dev/null && userdel openclaw 2>/dev/null || true
-
-    # 清理 Docker daemon.json registry-mirrors
-    if [[ -f /etc/docker/daemon.json ]]; then
-        python3 -c "
-import json
-with open('/etc/docker/daemon.json') as f:
-    d=json.load(f)
-d.pop('registry-mirrors', None)
-with open('/etc/docker/daemon.json','w') as f:
-    json.dump(d,f)
-" 2>/dev/null || true
-    fi
 
     systemctl daemon-reload
     echo ""
@@ -459,7 +435,6 @@ main() {
 
     # 环境变量默认值
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
-    : "${INSTALL_OPENCLAW:=false}"
 
     uninstall_all "$@" || exit 1
 
@@ -519,7 +494,6 @@ main() {
         install_build_deps
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_OPENCLAW" == "true" ]] && log_info "OpenClaw 请使用官方脚本安装"
         local did_install=true
     fi
 

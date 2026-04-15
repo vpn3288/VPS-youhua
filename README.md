@@ -334,6 +334,8 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 ## 版本历史
 
 ### v3.1（最新）
+- 移除 OpenClaw 相关代码及文本残留（纯优化定位更清晰）
+- R57: 5个平台脚本 uninstall 函数清理 OpenClaw 残留
 - 统一全平台 conntrack timeout（close_wait=5, fin_wait=10）
 - 补全 tcp_rfc1337、IPv6 forwarding、ip_forward
 - nanopi-r4s 补全 IPv6 accept_redirects 安全参数

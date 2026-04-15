@@ -8,7 +8,7 @@
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)
 #
 # 模式说明:
-#   --optimize-only   纯环境优化（不安装 Docker/Node.js/OpenClaw）
+#   --optimize-only   纯环境优化（不安装 Docker/Node.js）
 #   --uninstall       卸载所有优化配置
 #
 
@@ -354,7 +354,7 @@ uninstall_all() {
         exit 1
     fi
 
-    if [[ "${1:-}" != "--uninstall" ]] && [[ "${OPENCLAW_UNINSTALL:-}" != "1" ]]; then
+    if [[ "${1:-}" != "--uninstall" ]]; then
         return 0
     fi
 
@@ -367,11 +367,7 @@ uninstall_all() {
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
-    systemctl stop openclaw-gateway 2>/dev/null || true
-    systemctl disable openclaw-gateway 2>/dev/null || true
-    rm -f /etc/systemd/system/openclaw-gateway.service
-    docker stop openclaw-gateway 2>/dev/null || true
-    docker rm -f openclaw-gateway 2>/dev/null || true
+    systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
 
     rm -f /etc/sysctl.d/99-vps-youhua-oracle.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
@@ -382,7 +378,8 @@ uninstall_all() {
     rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
     rm -f /etc/cron.d/vps-youhua-cleanup
     rm -f /etc/logrotate.d/vps-youhua
-    rm -rf /etc/systemd/system/openclaw-gateway.service.d
+    rm -f /etc/apt/apt.conf.d/99-noninteractive
+    rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
 
     systemctl daemon-reload 2>/dev/null || true
 
@@ -405,7 +402,6 @@ main() {
     done
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
-    : "${INSTALL_OPENCLAW:=false}"
 
     uninstall_all "$@" || exit 1
 
@@ -463,7 +459,6 @@ main() {
         install_build_deps
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_OPENCLAW" == "true" ]] && log_info "OpenClaw 请使用官方脚本安装"
         local did_install=true
     fi
 

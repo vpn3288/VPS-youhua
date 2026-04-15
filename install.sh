@@ -96,7 +96,7 @@ show_help() {
 选项:
   运行模式（二选一，不选则交互询问）:
     --optimize         只做底层系统优化，不安装任何软件
-    --full             做系统优化 + 安装全部软件（Docker + Node.js + OpenClaw）
+    --full             做系统优化 + 安装全部软件（Docker + Node.js）
 
   软件选择（仅 --full 时有效）:
     --with-docker      安装 Docker（默认: 询问或安装）
@@ -328,11 +328,11 @@ step3_choose_mode() {
     echo ""
     echo -e "  ${GREEN}[1]${NC} ${BOLD}纯系统优化（新手推荐）${NC}"
     echo -e "       只做底层优化: sysctl参数 / journald / DNS / CPU调频 / 防火墙"
-    echo -e "       ${YELLOW}不安装 Docker / Node.js / OpenClaw${NC}"
+    echo -e "       ${YELLOW}不安装 Docker / Node.js${NC}"
     echo -e "       适合: 只想优化环境，后续自己装其他软件（Xray / Nginx / Docker Compose 等）"
     echo ""
     echo -e "  ${GREEN}[2]${NC} ${BOLD}全量安装（一步到位）${NC}"
-    echo -e "       系统优化 + 自动安装: Docker + Node.js + OpenClaw AIagent"
+    echo -e "       系统优化 + 自动安装: Docker + Node.js"
     echo -e "       ${YELLOW}适合: 想一条命令搞定所有，直接跑 AIagent${NC}"
     echo ""
     echo -e "  ${GREEN}[0]${NC}  退出"
@@ -357,7 +357,7 @@ resolve_full_extras() {
 
     # Docker
     if [[ "$INSTALL_DOCKER" == "ask" ]]; then
-        echo -e "  ${GREEN}[✓]${NC} ${BOLD}Docker${NC}（容器引擎，用于运行 OpenClaw 等）"
+        echo -e "  ${GREEN}[✓]${NC} ${BOLD}Docker${NC}（容器引擎，用于运行容器化应用等）"
         echo -e "      ${CYAN}建议安装，输入 y 或直接回车${NC}"
         echo -n "  是否安装 Docker？[y/n，默认 y]: "
         read -r yn
@@ -371,7 +371,7 @@ resolve_full_extras() {
     # Node.js
     if [[ "$INSTALL_NODEJS" == "ask" ]]; then
         echo ""
-        echo -e "  ${GREEN}[✓]${NC} ${BOLD}Node.js${NC}（运行环境，用于全局安装 OpenClaw）"
+        echo -e "  ${GREEN}[✓]${NC} ${BOLD}Node.js${NC}（运行环境，用于全局安装 npm 包）"
         echo -n "  是否安装 Node.js？[y/n，默认 y]: "
         read -r yn
         yn="${yn:-y}"
@@ -397,7 +397,6 @@ resolve_full_extras() {
         local nodejs_yn="是"; [[ "$INSTALL_NODEJS" == "false" ]] && nodejs_yn="否"
         echo -e "  Docker:   ${docker_yn}"
         echo -e "  Node.js:  ${nodejs_yn}"
-        echo -e "  OpenClaw: 是"
     fi
 
     echo ""
@@ -593,11 +592,11 @@ main() {
         if [[ "$SELECTED_MODE" == "optimize" ]]; then
             echo -e "${GREEN}✓ 系统已针对 ${SELECTED_PLATFORM} 优化完毕${NC}"
             echo ""
-            echo "下一步: 安装你的软件（Docker / Xray / Nginx / OpenClaw 等）"
+            echo "下一步: 安装你的软件（Docker / Xray / Nginx 等）"
         else
             echo -e "${GREEN}✓ 全量安装完成！${NC}"
             echo ""
-            echo "下一步: 重启后运行 OpenClaw AIagent"
+            echo "下一步: 重启后安装并运行你需要的 agent"
         fi
         echo ""
         echo -e "${CYAN}验证优化效果: bash <(curl -fsSL ${RAW_BASE}/verify-v3.1.sh)${NC}"
