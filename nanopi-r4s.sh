@@ -230,7 +230,66 @@ ReadEtcHosts=yes
 EOFDNS
     systemctl restart systemd-resolved 2>/dev/null || true
     systemctl enable systemd-resolved 2>/dev/null || true
+
+    # DNS 防篡改：锁定 resolv.conf（百毒不侵核心）
+    if [[ -f /etc/resolv.conf ]] && ! lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
+        chattr -i /etc/resolv.conf 2>/dev/null || true
+        chattr +i /etc/resolv.conf 2>/dev/null || log_warn "chattr +i 失败（文件可能已上锁或权限不足）"
+        log_info "DNS 配置已锁定（chattr +i）"
+    fi
+
     log_info "DNS 配置完成"
+}
+
+# =============================================================================
+# 防火墙：lo 网卡无脑放行（本地 Agent 通信豁免）
+# =============================================================================
+configure_firewall_lo() {
+    log_step "配置防火墙 lo 网卡放行..."
+    if command -v iptables &>/dev/null; then
+        iptables -C INPUT -i lo -j ACCEPT 2>/dev/null || iptables -A INPUT -i lo -j ACCEPT
+        iptables -C OUTPUT -o lo -j ACCEPT 2>/dev/null || iptables -A OUTPUT -o lo -j ACCEPT
+        log_info "lo 网卡已无脑放行"
+    else
+        log_info "iptables 未安装，跳过"
+    fi
+}
+
+# =============================================================================
+# npm 缓存指向 tmpfs（TF卡保护核心）
+# =============================================================================
+configure_npm_cache_tmpfs() {
+    log_step "配置 npm/pip 缓存到 tmpfs..."
+    local cache_dir="/tmp/agent_cache"
+    mkdir -p "$cache_dir"
+    chmod 1777 "$cache_dir"
+
+    if command -v npm &>/dev/null; then
+        mkdir -p /etc/profile.d
+        cat > /etc/profile.d/99-agent-cache.sh <<'EOFCACHE'
+export npm_config_cache="/tmp/agent_cache"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/agent_cache}"
+export PIP_CACHE_DIR="/tmp/agent_cache/pip"
+EOFCACHE
+        chmod +x /etc/profile.d/99-agent-cache.sh
+        export npm_config_cache="/tmp/agent_cache"
+        export XDG_CACHE_HOME="/tmp/agent_cache"
+        log_info "npm/pip 缓存已指向 $cache_dir"
+    fi
+}
+
+# =============================================================================
+# Systemd 内存统计（防止内存泄漏拖死系统）
+# =============================================================================
+configure_memory_accounting() {
+    log_step "配置 systemd 内存统计..."
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/99-memory-accounting.conf <<'EOF'
+[Manager]
+DefaultMemoryAccounting=yes
+EOF
+    systemctl daemon-reload 2>/dev/null || true
+    log_info "systemd 内存统计已启用"
 }
 
 configure_time_sync() {
@@ -539,8 +598,8 @@ configure_cleanup_cron() {
 #!/bin/bash
 # AIagent 清理脚本 - TF卡保护版
 docker image prune -af --filter "until=168h" 2>/dev/null || true
-journalctl --vacuum-size=30M 2>/dev/null || true
-journalctl --vacuum-time=3d 2>/dev/null || true
+journalctl --vacuum-size=100M 2>/dev/null || true
+journalctl --vacuum-time=7d 2>/dev/null || true
 find /tmp -type f -mtime +1 -delete 2>/dev/null || true
 find /var/tmp -type f -mtime +1 -delete 2>/dev/null || true
 find /root/.openclaw/sessions -name "*.json" -mmin +10080 -delete 2>/dev/null || true
@@ -1319,6 +1378,9 @@ main() {
     configure_dns
     configure_time_sync
     configure_locale
+    configure_firewall_lo
+    configure_npm_cache_tmpfs
+    configure_memory_accounting
     optimize_io_scheduler
     optimize_arm
     optimize_network_r4s

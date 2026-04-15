@@ -18,11 +18,11 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="2face109c104b692cf62c9c8ee6270e71edc949a55b3c9d6e6b4b94bed8953ef"
-    ["nanopi-t6"]="739ebef9c8111e6808c36d235d5802b3ea7cb61c0511b820f816517c5c06c177"
-    ["oracle-arm"]="f0fd3ddcb061bd134b18862d5b3077230eddaed322a1487a9ac1637b01454492"
-    ["n5105"]="c9b21f5e448fd13d4ad0a8ca224273fa88bd6d1cd693a57a434f1fd4176315ae"
-    ["generic-x86"]="1c8dd6c4e481aafcbb435e65ce271e04b343d367261573a2cbd6c3d15627986d"
+    ["nanopi-r4s"]="16f3e835649955a9cf4a862a774627c22e7bffbd07e8db932bbd28e17d754ae6"
+    ["nanopi-t6"]="87012e39899c225b29b9393d50bce2965f728a13b85cbbfc2f0c509d19993fac"
+    ["oracle-arm"]="85ca6296037d2915bc27196ff1821b4dad2e907034f79f795ebf6fd856f8579d"
+    ["n5105"]="5adb37104ff24688104da16b13150977c48a3a8cffbfe21e301c96076d56a969"
+    ["generic-x86"]="5d3c860fc86edf2ded58794179c9c1482ee2b476791b833dba7f9e98189183a7"
     ["verify-v3.1"]="95760662417b601103a63512b6bb204bc8b56136e2337ea206b322f8d509ebc4"
 )
 
