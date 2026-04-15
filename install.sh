@@ -17,14 +17,15 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="a8a085c3c2dbee14efa66662c9967b55eb89c46b0fc4e655a614346d1f202409"
-    ["nanopi-t6"]="ab54fdd96f41bdeaa37acaa9b6c1c0ae2f27a1c0efac150c342d82669f8a303b"
-    ["oracle-arm"]="2595d1d5953d8b986bbaa7aa71a8814581d38b4d52371a759f8d8ecab48936a7"
-    ["n5105"]="50c57730a047c057ec7216375b3e8f65f87a219a946d66449d48d49bd4cc24ca"
-    ["generic-x86"]="b68935265101416d813b30761c762ee4263bda352578bbb25453247818e5e88f"
-    ["verify-v3.1"]="95760662417b601103a63512b6bb204bc8b56136e2337ea206b322f8d509ebc4"
+    ["common-optimize.sh"]="dd3ace9febaa94c294c824bf0c320b05dfb24420012e39f7864b4fd30d82ff32"
+    ["nanopi-r4s.sh"]="f8c1d962dfc0c47b3c0b6a47fe8198f22909d4935333712405a5644d3179f72b"
+    ["nanopi-t6.sh"]="52916e6ee9653fc4c226a0b3eae6a5166d7f332f71a9bffda67cc3bfb325e95e"
+    ["oracle-arm.sh"]="cffc8bea02cd3155c88bf6e8eea6d043605f2ffd8c62c4f8ed5a18ad47ef0015"
+    ["n5105.sh"]="8a0f8dda622b699bd837002a80d9e6044e475b0f9149f1e1a7ac6a7368155d58"
+    ["generic-x86.sh"]="c29001e9c3b4922adb09e9a7f3ef6fe0075c282b9defba4967a1127ace169848"
+    ["verify-v3.1.sh"]="95760662417b601103a63512b6bb204bc8b56136e2337ea206b322f8d509ebc4"
+    ["install.sh"]="5127b85ed5da01b65d2941f2131e30cb053420a977fe8a83ced61ffab0887a26"
 )
-
 # ─────────────────────────────────────────────────────────────────────────────
 # root 检查
 # ─────────────────────────────────────────────────────────────────────────────
@@ -414,31 +415,55 @@ resolve_full_extras() {
 download_and_run() {
     local platform="$1"
     local mode="$2"   # optimize | full
-    local tmpfile; tmpfile=$(mktemp)
 
+    # 在同一目录存放平台脚本和通用库
+    local workdir; workdir=$(mktemp -d "/tmp/vps-youhua-XXXXX")
     local script_url="${RAW_BASE}/${platform}.sh"
-    log_step "检查 ${platform}.sh..."
+    local common_url="${RAW_BASE}/common-optimize.sh"
+
+    log_step "检查脚本..."
     if ! curl --head --silent --fail "$script_url" >/dev/null 2>&1; then
         log_error "平台脚本不存在: $script_url"
-        rm -f "$tmpfile"
+        rm -rf "$workdir"
         exit 1
     fi
 
+    # 下载通用函数库（所有平台脚本都依赖它）
+    log_step "下载 common-optimize.sh..."
+    if curl -fsSL "$common_url" -o "${workdir}/common-optimize.sh"; then
+        local common_expected="${EXPECTED_SHA256[common-optimize.sh]:-}"
+        if [[ -n "$common_expected" ]]; then
+            local common_actual; common_actual=$(sha256sum "${workdir}/common-optimize.sh" | awk '{print $1}')
+            if [[ "$common_actual" != "$common_expected" ]]; then
+                log_error "common-optimize.sh SHA256 校验失败！"
+                rm -rf "$workdir"
+                exit 1
+            fi
+        fi
+        log_info "common-optimize.sh 下载并校验通过"
+    else
+        log_error "下载失败: $common_url"
+        rm -rf "$workdir"
+        exit 1
+    fi
+
+    # 下载平台脚本
     log_step "下载 ${platform}.sh..."
+    local tmpfile="${workdir}/${platform}.sh"
     if ! curl -fsSL "$script_url" -o "$tmpfile"; then
         log_error "下载失败: $script_url"
-        rm -f "$tmpfile"
+        rm -rf "$workdir"
         exit 1
     fi
 
-    local expected="${EXPECTED_SHA256[$platform]:-}"
+    local expected="${EXPECTED_SHA256[${platform}.sh]:-}"
     if [[ -n "$expected" ]]; then
         local actual; actual=$(sha256sum "$tmpfile" | awk '{print $1}')
         if [[ "$actual" != "$expected" ]]; then
             log_error "SHA256 校验失败！文件可能被篡改。"
             log_error "期望: $expected"
             log_error "实际: $actual"
-            rm -f "$tmpfile"
+            rm -rf "$workdir"
             exit 1
         fi
         log_info "SHA256 校验通过"
@@ -446,6 +471,7 @@ download_and_run() {
         log_warn "SHA256 占位符，跳过校验"
     fi
 
+    chmod +x "$tmpfile"
     log_step "执行 ${platform}.sh..."
 
     # 透传环境变量给平台脚本
@@ -464,7 +490,7 @@ download_and_run() {
     fi
 
     local ret=$?
-    rm -f "$tmpfile"
+    rm -rf "$workdir"
     return $ret
 }
 

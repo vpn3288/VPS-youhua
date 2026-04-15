@@ -1,0 +1,780 @@
+#!/usr/bin/env bash
+# =============================================================================
+# VPS-youhua 通用函数库 v3.1 R55
+# 所有平台共享的函数和变量（各平台脚本 source 此文件）
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 基础安全设置
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+IFS=$'\n\t'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 颜色
+# ─────────────────────────────────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'
+BOLD='\033[1m'; NC='\033[0m'
+
+log_info()  { echo -e "${GREEN}[✓]${NC} $1"; }
+log_warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
+log_error() { echo -e "${RED}[✗]${NC} $1"; }
+log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
+log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" || true; }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 全局常量（可被调用者 override）
+# ─────────────────────────────────────────────────────────────────────────────
+readonly SCRIPT_VERSION="3.1"
+readonly APT_LOG="${APT_LOG:-/var/log/vps-youhua-install.log}"
+readonly LOCK_FILE="${LOCK_FILE:-/var/lock/vps-youhua-install.lock}"
+
+# 系统信息（初始化为空）
+SYS_MEM_MB=0; SYS_CPU_CORES=0; SYS_ARCH=""
+SYS_KERNEL=""; SYS_OS_ID=""; SYS_OS_VERSION=""
+SYS_DISK_TOTAL_GB=0; SYS_DISK_AVAIL_GB=0
+SYS_NET_IF=""; SYS_ROOT_DISK=""
+SYS_IS_SSD=false; SYS_IS_ORACLE_CLOUD=false
+SYS_IS_ARMBIAN=false; SYS_IS_TF_CARD=false
+PROFILE_DESC=""
+
+# 安装选项（从环境变量读取默认值）
+INSTALL_DEPS="${INSTALL_DEPS:-true}"        # 基础编译依赖
+INSTALL_DOCKER="${INSTALL_DOCKER:-false}"
+INSTALL_NODEJS="${INSTALL_NODEJS:-false}"
+SKIP_SOFTWARE_SCRIPT="${SKIP_SOFTWARE_SCRIPT:-false}"
+OPTIMIZE_ONLY="${OPTIMIZE_ONLY:-false}"
+
+# 平台标识（各平台脚本必须定义）
+readonly PLATFORM_NAME="${PLATFORM_NAME:-unknown}"
+readonly PLATFORM_DESC="${PLATFORM_DESC:-unknown}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 并发锁
+# ─────────────────────────────────────────────────────────────────────────────
+acquire_lock() {
+    exec 9>"$LOCK_FILE"
+    if ! flock -n 9; then
+        log_error "另一个实例正在运行，退出"
+        exit 1
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 初始化（各平台 main() 开头调用）
+# ─────────────────────────────────────────────────────────────────────────────
+init_script() {
+    acquire_lock
+    export DEBIAN_FRONTEND=noninteractive
+    mkdir -p "$(dirname "$APT_LOG")"
+    : > "$APT_LOG"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 系统检测
+# ─────────────────────────────────────────────────────────────────────────────
+detect_system() {
+    log_step "检测系统信息..."
+
+    SYS_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
+    [[ -z "$SYS_MEM_MB" || "$SYS_MEM_MB" -eq 0 ]] && SYS_MEM_MB=1024
+
+    SYS_CPU_CORES=$(nproc 2>/dev/null || echo 1)
+    SYS_KERNEL=$(uname -r)
+    SYS_ARCH=$(uname -m)
+
+    SYS_OS_ID=$(grep -oP '(?<=^ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "unknown")
+    SYS_OS_VERSION=$(grep -oP '(?<=^VERSION_ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "unknown")
+
+    SYS_DISK_TOTAL_GB=$(df -BG / 2>/dev/null | awk 'NR==2 {print $2}' | tr -d 'G' || echo 0)
+    SYS_DISK_AVAIL_GB=$(df -BG / 2>/dev/null | awk 'NR==2 {print $4}' | tr -d 'G' || echo 0)
+
+    SYS_NET_IF=$(ip route show default 2>/dev/null | awk '/default/{print $5; exit}' || true)
+    [[ -z "$SYS_NET_IF" ]] && SYS_NET_IF=$(ip -6 route show default 2>/dev/null | awk '/default/{print $5; exit}' || true)
+
+    # 检测 Armbian
+    [[ -f /etc/armbian-release ]] && SYS_IS_ARMBIAN=true
+
+    log_info "系统: ${SYS_OS_ID} ${SYS_OS_VERSION}"
+    log_info "架构: ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
+    [[ "$SYS_IS_ARMBIAN" == "true" ]] && log_info "Armbian 检测通过"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Oracle Cloud 检测
+# ─────────────────────────────────────────────────────────────────────────────
+detect_oracle_cloud() {
+    if grep -qi "oracle" /sys/class/dmi/id/sys_vendor 2>/dev/null || \
+       grep -qi "oracle" /sys/class/dmi/id/product_name 2>/dev/null; then
+        SYS_IS_ORACLE_CLOUD=true
+        log_info "Oracle Cloud 环境检测通过"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 网络检测
+# ─────────────────────────────────────────────────────────────────────────────
+check_network() {
+    log_step "检测网络连接..."
+
+    if ! ping -c1 -W3 8.8.8.8 &>/dev/null; then
+        # 三级降级：DNS → HTTPS HEAD → ping
+        if ! host -W3 debian.org &>/dev/null; then
+            if ! curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" https://deb.debian.org/ | grep -q "200\|301\|302"; then
+                log_error "无法连接到网络，请检查网络配置"
+                exit 1
+            fi
+        fi
+    fi
+    log_info "网络连接正常"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 预检查
+# ─────────────────────────────────────────────────────────────────────────────
+preflight_check() {
+    log_step "执行预检查..."
+
+    local errors=0
+
+    if [[ $EUID -ne 0 ]]; then
+        log_error "需要 root 权限"
+        ((errors++))
+    fi
+
+    if [[ $SYS_DISK_AVAIL_GB -lt 3 ]]; then
+        log_warn "磁盘可用空间 ${SYS_DISK_AVAIL_GB}GB < 3GB"
+        [[ $SYS_DISK_AVAIL_GB -lt 1 ]] && ((errors++))
+    fi
+
+    if [[ $SYS_MEM_MB -lt 256 ]]; then
+        log_warn "内存 ${SYS_MEM_MB}MB < 256MB，可能不稳定"
+    fi
+
+    if ! ping -c1 -W3 github.com &>/dev/null; then
+        log_warn "无法访问 GitHub，部分功能可能受限"
+    fi
+
+    [[ $errors -gt 0 ]] && exit 1
+    log_info "预检查通过"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 文件备份
+# ─────────────────────────────────────────────────────────────────────────────
+backup_file() {
+    local file="$1"
+    [[ -f "$file" ]] && cp -a "$file" "${file}.bak.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 全量备份（回滚机制，保留最近5份）
+# ─────────────────────────────────────────────────────────────────────────────
+backup_all() {
+    log_step "备份当前配置（回滚用）..."
+    local backup_dir="/var/backups/vps-youhua"
+    mkdir -p "$backup_dir"
+    local ts; ts=$(date +%Y%m%d_%H%M%S)
+
+    [[ -d /etc/sysctl.d ]] && cp -a /etc/sysctl.d "$backup_dir/sysctl.d_${ts}" 2>/dev/null || true
+    [[ -d /etc/systemd/system.conf.d ]] && cp -a /etc/systemd/system.conf.d "$backup_dir/system.conf.d_${ts}" 2>/dev/null || true
+    [[ -d /etc/systemd/journald.conf.d ]] && cp -a /etc/systemd/journald.conf.d "$backup_dir/journald.conf.d_${ts}" 2>/dev/null || true
+    [[ -f /etc/fstab ]] && cp -a /etc/fstab "$backup_dir/fstab_${ts}" 2>/dev/null || true
+    [[ -f /etc/security/limits.conf ]] && cp -a /etc/security/limits.conf "$backup_dir/limits.conf_${ts}" 2>/dev/null || true
+    [[ -f /etc/default/cpufrequtils ]] && cp -a /etc/default/cpufrequtils "$backup_dir/cpufrequtils_${ts}" 2>/dev/null || true
+    [[ -f /etc/docker/daemon.json ]] && cp -a /etc/docker/daemon.json "$backup_dir/daemon.json_${ts}" 2>/dev/null || true
+
+    # 清理超过5份的旧备份
+    find "$backup_dir" -maxdepth 1 -type d -name "*_[0-9]*" | sort -r | tail -n +6 | xargs rm -rf 2>/dev/null || true
+    log_info "备份已保存至 $backup_dir（最近5份）"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 重启提示
+# ─────────────────────────────────────────────────────────────────────────────
+show_reboot_notice() {
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo -e "${YELLOW}  ⚠️  必须重启才能完全生效${NC}"
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo ""
+    echo "以下配置必须重启后才能 100% 生效："
+    echo "  - sysctl 参数（/etc/sysctl.d/）"
+    echo "  - fstab 挂载参数（/tmp tmpfs, ext4 commit）"
+    echo "  - journald 配置（volatile 模式）"
+    echo "  - systemd 资源限制"
+    echo "  - CPU governor 持久化"
+    echo ""
+    if [[ -t 0 ]]; then
+        echo "立即重启？[y/N]"
+        echo -n "→ "
+        read -r yn
+        [[ "$yn" =~ ^[Yy]$ ]] && reboot || true
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# APT 配置（自动选择最快源）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_apt_sources() {
+    log_step "配置 APT 源..."
+
+    local sources_list="/etc/apt/sources.list"
+    local codename
+    codename=$(grep -oP '(?<=^VERSION_CODENAME=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "bookworm")
+
+    backup_file "$sources_list"
+
+    mkdir -p /etc/apt/apt.conf.d /etc/needrestart/conf.d
+    cat > /etc/apt/apt.conf.d/99-noninteractive <<'EOF'
+DPkg::Options {"--force-confdef"; "--force-confold";};
+APT::Get::Assume-Yes "true";
+APT::Get::Fix-Missing "true";
+EOF
+    cat > /etc/needrestart/conf.d/99-vps-youhua.conf <<'EOF'
+$nrconf{restart} = 'a';
+$nrconf{kernelhints} = 0;
+$nrconf{unneeded} = 'a';
+EOF
+
+    # 智能选择源（延迟最低优先）
+    write_apt_sources() {
+        cat > "$sources_list" <<EOF
+# Debian ${codename} - VPS-youhua
+deb http://mirrors.tencent.com/debian/ ${codename} main contrib non-free non-free-firmware
+deb http://mirrors.tencent.com/debian/ ${codename}-updates main contrib non-free non-free-firmware
+deb http://mirrors.tencent.com/debian-security/ ${codename}-security main contrib non-free non-free-firmware
+deb http://mirrors.tencent.com/debian/ ${codename}-backports main contrib non-free non-free-firmware
+EOF
+    }
+
+    write_apt_sources
+
+    # 验证源可用性（3秒超时）
+    if ! curl --connect-timeout 3 -s -o /dev/null -w "%{http_code}" "http://mirrors.tencent.com/debian/" | grep -q "200"; then
+        log_warn "腾讯云镜像延迟较高，尝试阿里云..."
+        cat > "$sources_list" <<EOF
+deb http://mirrors.aliyun.com/debian/ ${codename} main contrib non-free non-free-firmware
+deb http://mirrors.aliyun.com/debian/ ${codename}-updates main contrib non-free non-free-firmware
+deb http://mirrors.aliyun.com/debian-security/ ${codename}-security main contrib non-free non-free-firmware
+deb http://mirrors.aliyun.com/debian/ ${codename}-backports main contrib non-free non-free-firmware
+EOF
+        if ! curl --connect-timeout 3 -s -o /dev/null -w "%{http_code}" "http://mirrors.aliyun.com/debian/" | grep -q "200"; then
+            log_warn "国内镜像均不可用，回退到官方源..."
+            cat > "$sources_list" <<'EOF'
+deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+deb http://deb.debian.com/debian bookworm-backports main contrib non-free non-free-firmware
+EOF
+        fi
+    fi
+
+    if ! apt-get update -qq >> "$APT_LOG" 2>&1; then
+        log_warn "APT 源更新失败，保留原有配置"
+    fi
+
+    log_info "APT 源配置完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 系统清理
+# ─────────────────────────────────────────────────────────────────────────────
+clean_system() {
+    log_step "清理系统..."
+
+    # 关闭常见干扰服务
+    local stop_svcs=(snapd apache2 nginx postfix exim4 ufw)
+    for svc in "${stop_svcs[@]}"; do
+        systemctl stop "$svc" 2>/dev/null || true
+        systemctl disable "$svc" 2>/dev/null || true
+    done
+
+    # Oracle Cloud 专属清理（节省资源 + 减少磁盘写入）
+    if [[ "$SYS_IS_ORACLE_CLOUD" == "true" ]]; then
+        log_info "Oracle Cloud 环境：清理云监控组件..."
+        systemctl disable --now oracle-cloud-agent oracle-cloud-agent-updater 2>/dev/null || true
+        systemctl mask oracle-cloud-agent oracle-cloud-agent-updater 2>/dev/null || true
+        # cloud-init 保留（用户可能需要），但禁用其网络探测
+        mkdir -p /etc/cloud/cloud.cfg.d
+        echo "network: {config: disabled}" > /etc/cloud/cloud.cfg.d/99-disable-net.cfg 2>/dev/null || true
+        log_info "Oracle 云监控已禁用（节省资源）"
+    fi
+
+    # 可选 purge（仅当明确指定时）
+    if [[ "${CLEAN_SYSTEM:-false}" == "true" ]]; then
+        local remove_pkgs=(snapd apache2-bin apache2-utils nginx nginx-light nginx-full postfix exim4-base exim4-config)
+        local to_remove=()
+        for pkg in "${remove_pkgs[@]}"; do
+            dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && to_remove+=("$pkg")
+        done
+        [[ ${#to_remove[@]} -gt 0 ]] && {
+            apt-get remove --purge -y "${to_remove[@]}" >> "$APT_LOG" 2>&1 || true
+        }
+    fi
+
+    apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
+    apt-get autoclean >> "$APT_LOG" 2>&1 || true
+    log_info "系统清理完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 基础工具（通用）
+# ─────────────────────────────────────────────────────────────────────────────
+install_base_tools() {
+    log_step "安装基础工具..."
+
+    # 通用工具（任何环境都需要）
+    local basic_tools=(
+        curl wget git jq vim htop net-tools dnsutils
+        traceroute mtr iptraf-ng iftop iperf3 sysstat
+        ncdu tree rsync tmux unzip zip
+        ca-certificates gnupg lsb-release apt-transport-https
+        dirmngr ethtool pciutils bc dc cron
+    )
+    install_if_missing "${basic_tools[@]}"
+
+    # 编译依赖（任何 agent 安装脚本都需要）
+    local compile_tools=(
+        build-essential cmake pkg-config libssl-dev
+        python3-venv python3-dev python3-pip
+        libffi-dev libxml2-dev libxslt1-dev zlib1g-dev
+    )
+    install_if_missing "${compile_tools[@]}"
+
+    log_info "基础工具安装完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 安装缺失的包（内部函数）
+# ─────────────────────────────────────────────────────────────────────────────
+install_if_missing() {
+    local to_install=()
+    for tool in "$@"; do
+        command -v "$tool" &>/dev/null || to_install+=("$tool")
+    done
+    [[ ${#to_install[@]} -gt 0 ]] && {
+        apt-get install -y --no-install-recommends "${to_install[@]}" >> "$APT_LOG" 2>&1
+        log_info "已安装 ${#to_install[@]} 个缺失工具"
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DNS 配置
+# ─────────────────────────────────────────────────────────────────────────────
+configure_dns() {
+    log_step "配置 DNS..."
+
+    mkdir -p /etc/systemd
+    cat > /etc/systemd/resolved.conf <<'EOF'
+[Resolve]
+DNS=1.1.1.1 8.8.8.8 223.5.5.5
+FallbackDNS=1.0.0.1 8.8.4.4 119.29.29.29
+DNSSEC=no
+DNSOverTLS=no
+DNSStubListener=no
+ReadEtcHosts=yes
+EOF
+    systemctl restart systemd-resolved 2>/dev/null || true
+    systemctl enable systemd-resolved 2>/dev/null || true
+
+    # DNS 防篡改：锁定 resolv.conf（百毒不侵核心）
+    if [[ -f /etc/resolv.conf ]]; then
+        if ! lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
+            chattr -i /etc/resolv.conf 2>/dev/null || true
+            chattr +i /etc/resolv.conf 2>/dev/null || log_warn "chattr +i 失败（权限不足）"
+            log_info "DNS 配置已锁定（chattr +i）"
+        fi
+    fi
+
+    log_info "DNS 配置完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 防火墙：lo 网卡无脑放行
+# ─────────────────────────────────────────────────────────────────────────────
+configure_firewall_lo() {
+    log_step "配置防火墙 lo 网卡放行..."
+    if command -v iptables &>/dev/null; then
+        iptables -C INPUT -i lo -j ACCEPT 2>/dev/null || iptables -A INPUT -i lo -j ACCEPT
+        iptables -C OUTPUT -o lo -j ACCEPT 2>/dev/null || iptables -A OUTPUT -o lo -j ACCEPT
+        log_info "lo 网卡已无脑放行"
+    else
+        log_info "iptables 未安装，跳过"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# npm/pip 缓存指向 tmpfs（减少磁盘写入）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_npm_cache_tmpfs() {
+    log_step "配置 npm/pip 缓存到 tmpfs..."
+    local cache_dir="/tmp/agent_cache"
+    mkdir -p "$cache_dir"
+    chmod 1777 "$cache_dir"
+
+    if command -v npm &>/dev/null; then
+        mkdir -p /etc/profile.d
+        cat > /etc/profile.d/99-agent-cache.sh <<'EOFCACHE'
+export npm_config_cache="/tmp/agent_cache"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/agent_cache}"
+EOFCACHE
+        chmod +x /etc/profile.d/99-agent-cache.sh
+        log_info "npm 缓存已指向 $cache_dir"
+    fi
+
+    if command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
+        cat >> /etc/profile.d/99-agent-cache.sh <<'EOFPIP'
+export PIP_CACHE_DIR="/tmp/agent_cache/pip"
+EOFPIP
+        log_info "pip 缓存已指向 $cache_dir/pip"
+    fi
+
+    export npm_config_cache="/tmp/agent_cache"
+    export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/agent_cache}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# systemd 内存统计（防止内存泄漏拖死系统）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_memory_accounting() {
+    log_step "配置 systemd 内存统计..."
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/99-memory-accounting.conf <<'EOF'
+[Manager]
+DefaultMemoryAccounting=yes
+EOF
+    systemctl daemon-reload 2>/dev/null || true
+    log_info "systemd 内存统计已启用"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 时间同步（Chrony）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_time_sync() {
+    log_step "配置时间同步..."
+
+    if ! command -v chronyd &>/dev/null; then
+        apt-get install -y chrony >> "$APT_LOG" 2>&1 || true
+    fi
+
+    # NTP 服务器池（智能选择）
+    cat > /etc/chrony/chrony.conf <<'EOF'
+server 0.pool.ntp.org iburst
+server 1.pool.ntp.org iburst
+server 2.pool.ntp.org iburst
+server 3.pool.ntp.org iburst
+server ntp.cloud.tencent.com iburst
+server time.google.com iburst
+makestep 1.0 -1
+rtcsync
+logdir /var/log/chrony
+EOF
+
+    systemctl restart chronyd 2>/dev/null || true
+    systemctl enable chronyd 2>/dev/null || true
+    systemctl enable cron 2>/dev/null || true
+    systemctl restart cron 2>/dev/null || true
+    chronyc makestep 2>/dev/null || true
+    log_info "时间同步配置完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Locale 配置
+# ─────────────────────────────────────────────────────────────────────────────
+configure_locale() {
+    log_step "配置 Locale..."
+    if [[ -f /etc/locale.gen ]] && ! grep -q "^en_US.UTF-8 UTF-8" /etc/locale.gen 2>/dev/null; then
+        sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen 2>/dev/null || true
+        locale-gen >> "$APT_LOG" 2>&1 || true
+    fi
+    update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF_8 2>/dev/null || true
+    export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+    log_info "Locale 配置完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 文件句柄 / 资源限制
+# ─────────────────────────────────────────────────────────────────────────────
+configure_limits() {
+    log_step "配置资源限制..."
+
+    # 立即生效
+    ulimit -n 1048576
+    ulimit -u 131072
+    ulimit -m unlimited
+    [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
+
+    # 持久化
+    mkdir -p /etc/security/limits.d
+    cat > /etc/security/limits.d/99-vps-youhua.conf <<'EOF'
+root soft nofile 1048576
+root hard nofile 1048576
+root soft nproc 131072
+root hard nproc 131072
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 131072
+* hard nproc 131072
+EOF
+
+    # systemd 级别
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/99-resource-limits.conf <<'EOF'
+[Manager]
+DefaultLimitNOFILE=1048576:1048576
+DefaultLimitNPROC=131072:131072
+DefaultLimitMEMLOCK=infinity
+EOF
+    systemctl daemon-reload 2>/dev/null || true
+    log_info "资源限制配置完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# journald 配置（平台差异化）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_journald() {
+    log_step "配置 journald..."
+    mkdir -p /etc/systemd/journald.conf.d
+
+    # 默认：50MB，单文件50MB，压缩
+    local volatile="${JOURNALD_VOLATILE:-false}"
+    local max_use="${JOURNALD_MAX_USE:-50M}"
+
+    cat > /etc/systemd/journald.conf.d/99-vps-youhua.conf <<EOF
+[Journal]
+SystemMaxUse=${max_use}
+SystemMaxFileSize=50M
+MaxRetentionSec=7day
+Compress=yes
+Storage=${volatile:+volatile}${volatile:-persistent}
+Seal=yes
+EOF
+    systemctl restart systemd-journald 2>/dev/null || true
+    log_info "journald 配置完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 内核参数（通用部分，所有平台共享）
+# 所有平台共享的内核加固参数
+# ─────────────────────────────────────────────────────────────────────────────
+write_common_sysctl() {
+    local file="$1"
+    backup_file "$file"
+
+    cat > "$file" <<'EOF'
+# =============================================================================
+# VPS-youhua 通用内核加固参数 v3.1 R55
+# 所有平台共享
+# =============================================================================
+
+# ── 内核安全加固 ──────────────────────────────────────────────────────────
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+kernel.yama.ptrace_scope = 1
+kernel.panic = 10
+kernel.panic_on_io_nmi = 1
+kernel.panic_on_oops = 1
+
+# ── 网络基础 ──────────────────────────────────────────────────────────────
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
+net.ipv4.ip_local_port_range = 10240 65535
+
+# ── BBR（所有平台共享，模块加载失败静默跳过） ─────────────────────────────
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+
+    # 尝试加载 tcp_bbr（仅写入，不阻塞）
+    modprobe -q tcp_bbr 2>/dev/null || true
+    modprobe -q tcp_fq 2>/dev/null || true
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# sysctl 持久化（通用 + 平台差异分别写入不同文件，避免冲突）
+# ─────────────────────────────────────────────────────────────────────────────
+apply_sysctl() {
+    log_step "应用 sysctl 参数..."
+    sysctl --system >> "$APT_LOG" 2>&1 || sysctl -e -f /etc/sysctl.d/*.conf 2>/dev/null || true
+    log_info "sysctl 已应用"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /tmp tmpfs
+# ─────────────────────────────────────────────────────────────────────────────
+configure_tmp_tmpfs() {
+    log_step "配置 /tmp 为 tmpfs..."
+    local tmpfs_size="${TMPFS_SIZE:-512M}"
+
+    if grep -q "/tmp" /etc/fstab 2>/dev/null; then
+        log_info "/tmp 已配置（跳过）"
+        return 0
+    fi
+
+    echo "tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=${tmpfs_size} 0 0" >> /etc/fstab
+    mkdir -p /tmp
+    mount -o remount /tmp 2>/dev/null || mount /tmp 2>/dev/null || log_warn "/tmp tmpfs 挂载失败"
+    log_info "/tmp tmpfs 已配置（${tmpfs_size}）"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# daily cleanup cron
+# ─────────────────────────────────────────────────────────────────────────────
+configure_cleanup_cron() {
+    log_step "配置每日清理 cron..."
+    mkdir -p /etc/cron.d
+    cat > /etc/cron.d/vps-youhua-cleanup <<'EOF'
+# VPS-youhua 每日清理（减少磁盘占用）
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+1 4 * * * root find /tmp -type f -atime +7 -delete 2>/dev/null; find /var/log -name "*.gz" -mtime +7 -delete 2>/dev/null; journalctl --vacuum-time=7d 2>/dev/null; true
+EOF
+    chmod 644 /etc/cron.d/vps-youhua-cleanup
+    log_info "每日清理 cron 已配置"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# logrotate
+# ─────────────────────────────────────────────────────────────────────────────
+configure_logrotate() {
+    log_step "配置 logrotate..."
+    cat > /etc/logrotate.d/vps-youhua <<'EOF'
+/var/log/vps-youhua-install.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 0644 root root
+}
+/var/log/openclaw-install.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 0644 root root
+}
+EOF
+    log_info "logrotate 已配置"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 禁用自动更新（避免生产环境被升级打断）
+# ─────────────────────────────────────────────────────────────────────────────
+disable_auto_updates() {
+    log_step "配置自动更新策略..."
+    # Debian 12 默认没有 unattended-upgrades，跳过
+    if command -v unattended-upgrades &>/dev/null; then
+        cat > /etc/apt/apt.conf.d/99-vps-youhua-no-unattended <<'EOF'
+APT::Periodic::Enable "0";
+Unattended-Upgrade::Automatic Reboot "false";
+EOF
+    fi
+    log_info "自动更新已禁用（防止生产环境被升级打断）"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SSH 加固
+# ─────────────────────────────────────────────────────────────────────────────
+optimize_ssh() {
+    log_step "加固 SSH..."
+    mkdir -p /etc/ssh/sshd_config.d
+
+    local dropin_file="/etc/ssh/sshd_config.d/99-vps-youhua.conf"
+    cat > "$dropin_file" <<'EOF'
+# VPS-youhua SSH 安全配置 — 由脚本维护，请勿手动修改
+PermitEmptyPasswords no
+ClientAliveInterval 3600
+ClientAliveCountMax 3
+X11Forwarding no
+EOF
+    chmod 644 "$dropin_file"
+
+    # 语法验证（防止把自己锁外面）
+    if command -v sshd &>/dev/null; then
+        if ! sshd -t -f "$dropin_file" 2>&1 | grep -qi "error"; then
+            log_info "SSH 加固已应用 + 语法验证通过"
+        else
+            log_warn "SSH 配置语法异常，移除并跳过"
+            rm -f "$dropin_file"
+        fi
+    fi
+
+    echo -e "  ${CYAN}上次登录记录:${RESET}"
+    last -n 3 2>/dev/null | grep -v "^$" | head -3 | sed "s/^/    /" || true
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Oracle Cloud 专属优化（MTU / TSO-GRO / RPS）
+# ─────────────────────────────────────────────────────────────────────────────
+optimize_oracle_cloud() {
+    [[ "$SYS_IS_ORACLE_CLOUD" != "true" ]] && return 0
+    log_step "Oracle Cloud 特定优化..."
+
+    # 检测主网卡 MTU（Oracle 内部网络 MTU=9001，公网=1500）
+    local primary_iface
+    primary_iface=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}')
+    if [[ -n "$primary_iface" ]] && [[ -d "/sys/class/net/$primary_iface" ]]; then
+        local mtu; mtu=$(cat "/sys/class/net/$primary_iface/mtu" 2>/dev/null || echo "unknown")
+        if [[ "$mtu" == "1500" ]]; then
+            log_warn "主网卡 $primary_iface MTU=1500（公网）；Oracle 内部网络 MTU=9001"
+        elif [[ "$mtu" =~ ^[0-9]+$ ]] && [[ $mtu -gt 1500 ]]; then
+            log_info "主网卡 $primary_iface MTU=$mtu（内部网络）"
+        fi
+    fi
+
+    # 网卡优化
+    for iface in /sys/class/net/en* /sys/class/net/eth*; do
+        [[ -d "$iface" ]] || continue
+        local name; name=$(basename "$iface")
+
+        ethtool -K "$name" tso on 2>/dev/null || true
+        ethtool -K "$name" gso on 2>/dev/null || true
+        ethtool -K "$name" gro on 2>/dev/null || true
+        ip link set "$name" txqueuelen 10000 2>/dev/null || true
+
+        # RPS（多核 CPU 时启用）
+        if [[ $SYS_CPU_CORES -gt 1 ]]; then
+            local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
+            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
+            for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
+                [[ -f "$rps_file" ]] || continue
+                printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
+            done
+        fi
+        log_info "网卡 $name 已优化"
+    done
+
+    log_info "Oracle Cloud 特定优化完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 平台信息输出（供 main() 调用）
+# ─────────────────────────────────────────────────────────────────────────────
+show_platform_summary() {
+    echo ""
+    echo "========================================================================"
+    echo -e "${GREEN}  ${PLATFORM_NAME} 优化安装脚本 v${SCRIPT_VERSION}${NC}"
+    echo -e "${BLUE}平台: ${PLATFORM_DESC}${NC}"
+    echo ""
+    echo "------------------------------------------------------------------------"
+    echo -e "  ${BLUE}系统:${NC}      ${SYS_OS_ID} ${SYS_OS_VERSION}"
+    echo -e "  ${BLUE}架构:${NC}      ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
+    echo -e "  ${BLUE}Armbian:${NC}   ${SYS_IS_ARMBIAN}"
+    echo -e "  ${BLUE}Oracle:${NC}    ${SYS_IS_ORACLE_CLOUD}"
+    echo -e "  ${BLUE}TF卡:${NC}      ${SYS_IS_TF_CARD}"
+    echo ""
+    echo "------------------------------------------------------------------------"
+    echo -e "  ${BLUE}模式:${NC}      ${SKIP_SOFTWARE_SCRIPT:+纯优化（不安装软件）}${SKIP_SOFTWARE_SCRIPT:-安装 Docker/Node.js}"
+
+    if [[ "$SKIP_SOFTWARE_SCRIPT" != "true" ]]; then
+        echo -e "  ${BLUE}Docker:${NC}     ${INSTALL_DOCKER}"
+        echo -e "  ${BLUE}Node.js:${NC}    ${INSTALL_NODEJS}"
+    fi
+    echo ""
+}
