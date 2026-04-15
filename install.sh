@@ -14,15 +14,16 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 # SHA256 校验和（防止供应链污染）
 # ⚠️  脚本更新时必须同步更新对应 SHA256
-# R50: conntrack收紧(900s), syn_sent/syn_recv, kernel hardening(kptr/dmesg/yama), reboot警告强化, disable_auto_updates
+# R52: DNS锁定(chattr)/lo防火墙/npm缓存tmpfs/systemd内存统计/journald vacuum对齐
+# R53: backup_all备份回滚/全程reboot提示/governor schedutil三层fallback/dirty_writeback降频
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="16f3e835649955a9cf4a862a774627c22e7bffbd07e8db932bbd28e17d754ae6"
-    ["nanopi-t6"]="87012e39899c225b29b9393d50bce2965f728a13b85cbbfc2f0c509d19993fac"
-    ["oracle-arm"]="85ca6296037d2915bc27196ff1821b4dad2e907034f79f795ebf6fd856f8579d"
-    ["n5105"]="5adb37104ff24688104da16b13150977c48a3a8cffbfe21e301c96076d56a969"
-    ["generic-x86"]="5d3c860fc86edf2ded58794179c9c1482ee2b476791b833dba7f9e98189183a7"
+    ["nanopi-r4s"]="30f53420740cb348165714689a704a7c534063cb7409da3a79f423411f1c1a5b"
+    ["nanopi-t6"]="22cde750ec1cc9075093e4a2338db1aee213db41a9612177e7f5d2a0f27c5d75"
+    ["oracle-arm"]="89c182bd254076aff291dc9a346c9d9af9e0c3a0b6d04bd4871f86ad4ecd66ca"
+    ["n5105"]="ab7f63f6a7d9df3e3f1c394c5a242363cceddd2ac987be332359c1b3fdf8fafc"
+    ["generic-x86"]="3b0e6639da527ed50b7438e85615073b03c79e1f7e5d7a60d4e19a8b18c09075"
     ["verify-v3.1"]="95760662417b601103a63512b6bb204bc8b56136e2337ea206b322f8d509ebc4"
 )
 

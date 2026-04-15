@@ -180,6 +180,48 @@ backup_file() {
 }
 
 # =============================================================================
+# 全量备份（回滚机制）
+# =============================================================================
+backup_all() {
+    log_step "备份当前配置（回滚用）..."
+    local backup_dir="/var/backups/vps-youhua"
+    mkdir -p "$backup_dir"
+    local ts; ts=$(date +%Y%m%d_%H%M%S)
+
+    # 备份关键配置目录
+    [[ -d /etc/sysctl.d ]] && cp -a /etc/sysctl.d "$backup_dir/sysctl.d_${ts}" 2>/dev/null || true
+    [[ -d /etc/systemd/system.conf.d ]] && cp -a /etc/systemd/system.conf.d "$backup_dir/system.conf.d_${ts}" 2>/dev/null || true
+    [[ -f /etc/fstab ]] && cp -a /etc/fstab "$backup_dir/fstab_${ts}" 2>/dev/null || true
+    [[ -f /etc/security/limits.conf ]] && cp -a /etc/security/limits.conf "$backup_dir/limits.conf_${ts}" 2>/dev/null || true
+    [[ -f /etc/default/cpufrequtils ]] && cp -a /etc/default/cpufrequtils "$backup_dir/cpufrequtils_${ts}" 2>/dev/null || true
+
+    # 清理旧备份（保留最近 5 份）
+    find "$backup_dir" -maxdepth 1 -type d -name "*_[0-9]*" | sort -r | tail -n +6 | xargs rm -rf 2>/dev/null || true
+
+    log_info "备份已保存至 $backup_dir（最近5份）"
+}
+
+# =============================================================================
+# 重启提示
+# =============================================================================
+show_reboot_notice() {
+    echo ""
+    echo "========================================================================"
+    echo -e "${YELLOW}  ⚠️  必须重启才能完全生效${NC}"
+    echo "========================================================================"
+    echo ""
+    echo "以下配置必须重启后才能 100% 生效："
+    echo "  - sysctl 参数（/etc/sysctl.d/）"
+    echo "  - fstab 挂载参数（/tmp tmpfs, ext4 commit）"
+    echo "  - journald 配置（volatile 模式）"
+    echo "  - systemd 资源限制"
+    echo "  - CPU governor 持久化"
+    echo ""
+    echo "立即重启？[y/N]"
+    echo -n "→ "
+}
+
+# =============================================================================
 # APT 配置（云优化）
 # =============================================================================
 configure_apt_sources() {
@@ -589,16 +631,20 @@ MIN_FREE_KB=32768
 optimize_memory_oracle_arm() {
     log_step "配置内存 (Oracle Cloud ARM 16GB)..."
 
-    # 清理旧 swap
+    # 清理物理 swap 文件（保留 zram/zswap 作为内存峰值泄洪区）
     for sw in /swapfile /swap.img; do
         swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
     sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
-    [[ -f /sys/module/zswap/parameters/enabled ]] && echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
+    # 注意：保留 zram/zswap — Oracle Cloud 内存峰值时的泄洪区，避免 OOM
+    # zram 是压缩内存，零磁盘写入
+    if [[ -d /sys/block/zram0 ]]; then
+        log_info "zram 保持原状（内存峰值泄洪区）"
+    fi
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
-    log_info "内存优化完成 (16GB充足，无ZRAM)"
+    log_info "内存优化完成（物理swap已关，zram保留泄洪）"
 }
 
 # =============================================================================
@@ -1415,6 +1461,7 @@ main() {
     log_step "开始优化..."
     echo ""
 
+    backup_all
     preflight_check
     configure_apt_sources
     clean_system

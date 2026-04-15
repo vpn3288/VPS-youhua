@@ -152,6 +152,45 @@ backup_file() {
 }
 
 # =============================================================================
+# 全量备份（回滚机制）
+# =============================================================================
+backup_all() {
+    log_step "备份当前配置（回滚用）..."
+    local backup_dir="/var/backups/vps-youhua"
+    mkdir -p "$backup_dir"
+    local ts; ts=$(date +%Y%m%d_%H%M%S)
+
+    [[ -d /etc/sysctl.d ]] && cp -a /etc/sysctl.d "$backup_dir/sysctl.d_${ts}" 2>/dev/null || true
+    [[ -d /etc/systemd/system.conf.d ]] && cp -a /etc/systemd/system.conf.d "$backup_dir/system.conf.d_${ts}" 2>/dev/null || true
+    [[ -f /etc/fstab ]] && cp -a /etc/fstab "$backup_dir/fstab_${ts}" 2>/dev/null || true
+    [[ -f /etc/security/limits.conf ]] && cp -a /etc/security/limits.conf "$backup_dir/limits.conf_${ts}" 2>/dev/null || true
+    [[ -f /etc/default/cpufrequtils ]] && cp -a /etc/default/cpufrequtils "$backup_dir/cpufrequtils_${ts}" 2>/dev/null || true
+
+    find "$backup_dir" -maxdepth 1 -type d -name "*_[0-9]*" | sort -r | tail -n +6 | xargs rm -rf 2>/dev/null || true
+    log_info "备份已保存至 $backup_dir（最近5份）"
+}
+
+# =============================================================================
+# 重启提示
+# =============================================================================
+show_reboot_notice() {
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo -e "${YELLOW}  ⚠️  必须重启才能完全生效${NC}"
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo ""
+    echo "以下配置必须重启后才能 100% 生效："
+    echo "  - sysctl 参数（/etc/sysctl.d/）"
+    echo "  - fstab 挂载参数（/tmp tmpfs, ext4 commit）"
+    echo "  - journald 配置（volatile 模式）"
+    echo "  - systemd 资源限制"
+    echo "  - CPU governor 持久化"
+    echo ""
+    echo "立即重启？[y/N]"
+    echo -n "→ "
+}
+
+# =============================================================================
 # APT 配置
 # =============================================================================
 configure_apt_sources() {
@@ -1317,6 +1356,7 @@ main() {
     log_step "开始优化..."
     echo ""
 
+    backup_all
     preflight_check
     configure_apt_sources
     clean_system

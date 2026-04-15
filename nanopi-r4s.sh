@@ -146,6 +146,45 @@ backup_file() {
 }
 
 # =============================================================================
+# 全量备份（回滚机制）
+# =============================================================================
+backup_all() {
+    log_step "备份当前配置（回滚用）..."
+    local backup_dir="/var/backups/vps-youhua"
+    mkdir -p "$backup_dir"
+    local ts; ts=$(date +%Y%m%d_%H%M%S)
+
+    [[ -d /etc/sysctl.d ]] && cp -a /etc/sysctl.d "$backup_dir/sysctl.d_${ts}" 2>/dev/null || true
+    [[ -d /etc/systemd/system.conf.d ]] && cp -a /etc/systemd/system.conf.d "$backup_dir/system.conf.d_${ts}" 2>/dev/null || true
+    [[ -f /etc/fstab ]] && cp -a /etc/fstab "$backup_dir/fstab_${ts}" 2>/dev/null || true
+    [[ -f /etc/security/limits.conf ]] && cp -a /etc/security/limits.conf "$backup_dir/limits.conf_${ts}" 2>/dev/null || true
+    [[ -f /etc/default/cpufrequtils ]] && cp -a /etc/default/cpufrequtils "$backup_dir/cpufrequtils_${ts}" 2>/dev/null || true
+
+    find "$backup_dir" -maxdepth 1 -type d -name "*_[0-9]*" | sort -r | tail -n +6 | xargs rm -rf 2>/dev/null || true
+    log_info "备份已保存至 $backup_dir（最近5份）"
+}
+
+# =============================================================================
+# 重启提示
+# =============================================================================
+show_reboot_notice() {
+    echo ""
+    echo "========================================================================"
+    echo -e "${YELLOW}  ⚠️  必须重启才能完全生效${NC}"
+    echo "========================================================================"
+    echo ""
+    echo "以下配置必须重启后才能 100% 生效："
+    echo "  - sysctl 参数（/etc/sysctl.d/）"
+    echo "  - fstab 挂载参数（/tmp tmpfs, ext4 commit）"
+    echo "  - journald 配置（volatile 模式）"
+    echo "  - systemd 资源限制"
+    echo "  - CPU governor 持久化"
+    echo ""
+    echo "立即重启？[y/N]"
+    echo -n "→ "
+}
+
+# =============================================================================
 # APT 配置
 # =============================================================================
 configure_apt_sources() {
@@ -476,7 +515,7 @@ configure_tf_card_protection() {
     # 7. sysctl TF卡优化
     log_step "配置 sysctl TF卡优化..."
     cat > /etc/sysctl.d/99-tf-optimize.conf <<'EOFSYSCTL'
-vm.dirty_writeback_centisecs = 15000
+vm.dirty_writeback_centisecs = 5000
 vm.dirty_expire_centisecs = 15000
 vm.dirty_ratio = 8
 vm.dirty_background_ratio = 3
@@ -1042,19 +1081,36 @@ optimize_network_r4s() {
 # =============================================================================
 optimize_arm() {
     log_step "ARM 特定优化..."
-    local gov_changed=false
-    # CPU governor（强制performance，AIagent需要稳定响应速度）
+
+    # CPU governor：优先 schedutil（高温自动降频，保护硬件）
+    # fallback: ondemand > performance（完全不管温度的才用 performance）
+    local gov=""
     for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
         [[ -f "$cpu" && -w "$cpu" ]] || continue
-        echo "performance" > "$cpu" 2>/dev/null || true
-        gov_changed=true
+        if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors ]] && \
+           grep -qw "schedutil" /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors; then
+            echo "schedutil" > "$cpu" 2>/dev/null && gov="schedutil" || true
+        elif [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors ]] && \
+             grep -qw "ondemand" /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors; then
+            echo "ondemand" > "$cpu" 2>/dev/null && gov="ondemand" || true
+        else
+            echo "performance" > "$cpu" 2>/dev/null && gov="performance" || true
+        fi
     done
-    if [[ "$gov_changed" == "true" ]]; then
-        local gov; gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
-        log_info "CPU governor: ${gov}"
-    else
-        log_info "CPU governor 无法修改（容器限制）"
+
+    # 持久化 governor 设置（cpufrequtils 是 Debian/Armbian 标准）
+    if dpkg -l cpufrequtils 2>/dev/null | grep -q "^ii"; then
+        mkdir -p /etc/default
+        cat > /etc/default/cpufrequtils <<EOF
+ENABLE="true"
+GOVERNOR="$gov"
+MAX_SPEED=0
+MIN_SPEED=0
+EOF
+        systemctl enable cpufrequtils 2>/dev/null || true
     fi
+
+    [[ -n "$gov" ]] && log_info "CPU governor: ${gov}（已持久化）" || log_info "CPU governor 无法修改（容器限制）"
 
     # irqbalance (ARM多核需要)
     if ! command -v irqbalance &>/dev/null; then
@@ -1063,8 +1119,6 @@ optimize_arm() {
     systemctl enable irqbalance 2>/dev/null || true
     systemctl start irqbalance 2>/dev/null || true
     log_info "irqbalance 已启用"
-
-    log_info "ARM 特定优化完成"
 }
 
 # =============================================================================
@@ -1367,6 +1421,7 @@ main() {
     log_step "开始优化..."
     echo ""
 
+    backup_all
     preflight_check
     configure_apt_sources
     clean_system

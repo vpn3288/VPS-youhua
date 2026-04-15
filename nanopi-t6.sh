@@ -161,6 +161,45 @@ backup_file() {
     [[ -f "$file" ]] && cp -a "$file" "${file}.bak.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
 }
 
+# =============================================================================
+# 全量备份（回滚机制）
+# =============================================================================
+backup_all() {
+    log_step "备份当前配置（回滚用）..."
+    local backup_dir="/var/backups/vps-youhua"
+    mkdir -p "$backup_dir"
+    local ts; ts=$(date +%Y%m%d_%H%M%S)
+
+    [[ -d /etc/sysctl.d ]] && cp -a /etc/sysctl.d "$backup_dir/sysctl.d_${ts}" 2>/dev/null || true
+    [[ -d /etc/systemd/system.conf.d ]] && cp -a /etc/systemd/system.conf.d "$backup_dir/system.conf.d_${ts}" 2>/dev/null || true
+    [[ -f /etc/fstab ]] && cp -a /etc/fstab "$backup_dir/fstab_${ts}" 2>/dev/null || true
+    [[ -f /etc/security/limits.conf ]] && cp -a /etc/security/limits.conf "$backup_dir/limits.conf_${ts}" 2>/dev/null || true
+    [[ -f /etc/default/cpufrequtils ]] && cp -a /etc/default/cpufrequtils "$backup_dir/cpufrequtils_${ts}" 2>/dev/null || true
+
+    find "$backup_dir" -maxdepth 1 -type d -name "*_[0-9]*" | sort -r | tail -n +6 | xargs rm -rf 2>/dev/null || true
+    log_info "备份已保存至 $backup_dir（最近5份）"
+}
+
+# =============================================================================
+# 重启提示
+# =============================================================================
+show_reboot_notice() {
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo -e "${YELLOW}  ⚠️  必须重启才能完全生效${NC}"
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo ""
+    echo "以下配置必须重启后才能 100% 生效："
+    echo "  - sysctl 参数（/etc/sysctl.d/）"
+    echo "  - fstab 挂载参数（/tmp tmpfs, ext4 commit）"
+    echo "  - journald 配置（volatile 模式）"
+    echo "  - systemd 资源限制"
+    echo "  - CPU governor 持久化"
+    echo ""
+    echo "立即重启？[y/N]"
+    echo -n "→ "
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # APT 配置
 # ─────────────────────────────────────────────────────────────────────────────
@@ -813,10 +852,36 @@ optimize_io_scheduler() {
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_arm() {
     log_step "ARM 特定优化..."
+
+    # CPU governor：优先 schedutil（高温自动降频，保护硬件）
+    # fallback: ondemand > performance（完全不管温度的才用 performance）
+    local gov=""
     for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
-        [[ -f "$cpu" ]] && echo "performance" > "$cpu" 2>/dev/null || true
+        [[ -f "$cpu" && -w "$cpu" ]] || continue
+        if [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors ]] && \\
+           grep -qw "schedutil" /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors; then
+            echo "schedutil" > "$cpu" 2>/dev/null && gov="schedutil" || true
+        elif [[ -f /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors ]] && \\
+             grep -qw "ondemand" /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors; then
+            echo "ondemand" > "$cpu" 2>/dev/null && gov="ondemand" || true
+        else
+            echo "performance" > "$cpu" 2>/dev/null && gov="performance" || true
+        fi
     done
-    log_info "ARM 特定优化完成"
+
+    # 持久化 governor 设置（cpufrequtils 是 Debian/Armbian 标准）
+    if dpkg -l cpufrequtils 2>/dev/null | grep -q "^ii"; then
+        mkdir -p /etc/default
+        cat > /etc/default/cpufrequtils <<EOF
+ENABLE="true"
+GOVERNOR="$gov"
+MAX_SPEED=0
+MIN_SPEED=0
+EOF
+        systemctl enable cpufrequtils 2>/dev/null || true
+    fi
+
+    log_info "CPU governor: ${gov:-unknown}（已持久化）"
 }
 
 configure_ext4_commit() {
@@ -1322,7 +1387,8 @@ main() {
     echo ""
     log_step "开始优化..."
     echo ""
-    
+
+    backup_all
     preflight_check
     configure_apt_sources
     clean_system
@@ -1341,11 +1407,11 @@ main() {
     optimize_io_scheduler
     optimize_arm
     optimize_network_t6
-    
+
     # OOM Killer 保护（重要：AIagent 进程被oomkill会导致会话中断）
     optimize_oom
     configure_cleanup_cron
-    
+
     if [[ "$OPTIMIZE_ONLY" != "true" ]]; then
         install_base_tools || exit 1
         install_docker || exit 1
@@ -1356,10 +1422,10 @@ main() {
         log_info "纯优化模式，跳过 Docker / Node.js / OpenClaw 安装"
     fi
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
-    
+
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
     apt-get autoclean >> "$APT_LOG" 2>&1 || true
-    
+
     echo ""
     echo "═══════════════════════════════════════════════════════════════════════"
     echo -e "${GREEN}  ✅ NanoPi T6/T6S v${SCRIPT_VERSION} 优化完成！${NC}"
