@@ -20,8 +20,10 @@ declare -A EXPECTED_SHA256=(
     ["nanopi-r4s"]="acdb662f962b7edfaac1bd7984144fa3c64bce455ce193bf72641f73f78c08bf"
     ["nanopi-t6"]="c30f9c8bcd90a9d90ba1253bf00806bea079b09b034ef1354547d05daceebdb9"
     ["oracle-arm"]="64c4f836cc687aa32f55cb5686726cc4796025104c8ad33be73f9b276cac3a92"
+    ["oracle-1c4g"]="16644186747de97ed2539b95b5f2d03077a2e5df6681e22a0977bc86d60bb084"
     ["n5105"]="2ab6dfbcd92282f4c4bd5908c74ad5fe3909ae4411927699491dd023c25e133d"
     ["generic-x86"]="289ac743ffbbfb606333c40bde35587f5fb26728aca99876eef0350920cae737"
+    ["generic-1c1g"]="05fc3ce02375f8c9b3e6274a154bda880d1216fe185a101ce561f300562136e3"
     ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
 
@@ -38,7 +40,7 @@ fi
 # 全局状态（菜单选择结果）
 # ─────────────────────────────────────────────────────────────────────────────
 
-SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | n5105 | generic-x86
+SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | oracle-1c4g | n5105 | generic-x86 | generic-1c1g
 SELECTED_MODE=""          # optimize | full | custom
 INSTALL_DOCKER="ask"      # true | false | ask
 INSTALL_NODEJS="ask"       # true | false | ask
@@ -222,7 +224,14 @@ wait_for_apt_lock() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 detect_platform() {
-    local arch=$(uname -m)
+    # 先获取内存信息（用于内存级别路由）
+    local sys_mem_mb=0
+    if [[ -f /proc/meminfo ]]; then
+        sys_mem_mb=$(awk '/MemTotal/{printf "%.0f", $2/1024}' /proc/meminfo)
+    fi
+
+    local arch
+    arch=$(uname -m)
     local cpu_model
     cpu_model=$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^ //' 2>/dev/null || echo "")
     local model
@@ -241,7 +250,13 @@ detect_platform() {
                 echo "nanopi-t6"
             elif grep -qiE "oracle|oraclecloud" /sys/class/dmi/id/sys_vendor 2>/dev/null || \
                  echo "$cpu_model" | grep -qiE "Ampere|Altra"; then
-                echo "oracle-arm"
+                # Oracle Cloud：根据内存自动选择规格
+                if [[ $sys_mem_mb -gt 0 ]] && [[ $sys_mem_mb -lt 8192 ]]; then
+                    log_info "Oracle Cloud 检测到内存 ${sys_mem_mb}MB，自动选择 1核4G 配置"
+                    echo "oracle-1c4g"
+                else
+                    echo "oracle-arm"
+                fi
             elif echo "$cpu_model" | grep -qi "RK3588"; then
                 echo "nanopi-t6"
             elif echo "$cpu_model" | grep -qi "RK3399"; then
@@ -255,6 +270,10 @@ detect_platform() {
         x86_64)
             if echo "$cpu_model" | grep -qiE "N5105|N5095|J6412|J6413"; then
                 echo "n5105"
+            elif [[ $sys_mem_mb -gt 0 ]] && [[ $sys_mem_mb -lt 2048 ]]; then
+                # 1GB 及以下内存，自动使用极简版
+                log_info "检测到内存 ${sys_mem_mb}MB，自动选择 1核1G 极简版配置"
+                echo "generic-1c1g"
             else
                 echo "generic-x86"
             fi
@@ -326,9 +345,14 @@ show_platform_info() {
             echo -e "  ${BLUE}特点:     3网口(1×GbE+2×2.5GbE)，16GB大内存${NC}"
             ;;
         oracle-arm)
-            echo -e "  ${BLUE}设备:     Oracle Cloud ARM (Ampere Altra)${NC}"
+            echo -e "  ${BLUE}设备:     Oracle Cloud ARM (Ampere Altra, 2核+)${NC}"
             echo -e "  ${BLUE}存储:     云盘（高IOPS）${NC}"
-            echo -e "  ${BLUE}特点:     32MB TCP缓冲优化${NC}"
+            echo -e "  ${BLUE}特点:     TCP缓冲自适应优化${NC}"
+            ;;
+        oracle-1c4g)
+            echo -e "  ${BLUE}设备:     Oracle Cloud ARM 精选（1核 4GB）${NC}"
+            echo -e "  ${BLUE}存储:     云盘${NC}"
+            echo -e "  ${BLUE}特点:     zram内存扩展 + 精简资源限制${NC}"
             ;;
         n5105)
             echo -e "  ${BLUE}设备:     N5105/N5095 小主机 (x86_64)${NC}"
@@ -336,8 +360,12 @@ show_platform_info() {
             echo -e "  ${BLUE}特点:     低功耗，有风扇${NC}"
             ;;
         generic-x86)
-            echo -e "  ${BLUE}设备:     通用 x86_64 VPS${NC}"
+            echo -e "  ${BLUE}设备:     通用 x86_64 VPS（2GB+ 内存）${NC}"
             echo -e "  ${BLUE}特点:     自动适配${NC}"
+            ;;
+        generic-1c1g)
+            echo -e "  ${BLUE}设备:     通用 1核 1G VPS（极简版）${NC}"
+            echo -e "  ${BLUE}特点:     zram扩展 + 极保守资源限制${NC}"
             ;;
     esac
     echo ""
@@ -392,12 +420,19 @@ step2_choose_subplatform() {
             esac
             ;;
         oracle)
-            echo -e "  ${GREEN}[1]${NC} Oracle Cloud ARM"
-            echo -e "       Ampere Altra | 1-4核 | 最高64GB RAM | 云盘存储"
+            echo -e "  ${GREEN}[1]${NC} Oracle Cloud ARM（2核 8GB+）"
+            echo -e "       Ampere Altra | 2核起 | Oracle Cloud 标准配置"
             echo ""
-            echo -n "请输入选项 [1]: "
+            echo -e "  ${GREEN}[2]${NC} Oracle Cloud ARM 精选（1核 4GB）"
+            echo -e "       Ampere Altra | 1核 4GB | Oracle 促销机型"
+            echo ""
+            echo -n "请输入选项 [1/2]: "
             read -r choice
-            SELECTED_PLATFORM="oracle-arm"
+            case "$choice" in
+                1) SELECTED_PLATFORM="oracle-arm" ;;
+                2) SELECTED_PLATFORM="oracle-1c4g" ;;
+                *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
+            esac
             ;;
         n5105)
             echo -e "  ${GREEN}[1]${NC} N5105 / N5095 小主机"
@@ -408,12 +443,19 @@ step2_choose_subplatform() {
             SELECTED_PLATFORM="n5105"
             ;;
         generic)
-            echo -e "  ${GREEN}[1]${NC} 通用 x86_64 VPS"
-            echo -e "       任何 x86_64 云服务器均可"
+            echo -e "  ${GREEN}[1]${NC} 通用 x86_64 VPS（2GB+ 内存）"
+            echo -e "       任何 x86_64 云服务器均可（2GB 及以上内存）"
             echo ""
-            echo -n "请输入选项 [1]: "
+            echo -e "  ${GREEN}[2]${NC} 通用 1核 1G VPS（极简版）"
+            echo -e "       最低配套餐 | 1GB 内存 | 仅优化环境，不安装重软件"
+            echo ""
+            echo -n "请输入选项 [1/2]: "
             read -r choice
-            SELECTED_PLATFORM="generic-x86"
+            case "$choice" in
+                1) SELECTED_PLATFORM="generic-x86" ;;
+                2) SELECTED_PLATFORM="generic-1c1g" ;;
+                *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
+            esac
             ;;
     esac
 
