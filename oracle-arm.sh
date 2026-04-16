@@ -483,6 +483,10 @@ uninstall_all() {
     iptables -D INPUT -i lo -j ACCEPT 2>/dev/null || true
     log_info "iptables 规则已清理"
 
+    # 清理优化标记文件
+    rm -f /etc/vps-youhua-optimized
+    log_info "优化标记文件已清理"
+
     echo ""
     echo "========================================================================"
     echo -e "${GREEN}  ✅ VPS-youhua 卸载完成${NC}"

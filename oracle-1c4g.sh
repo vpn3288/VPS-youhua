@@ -430,9 +430,23 @@ uninstall_all() {
 
     systemctl daemon-reload 2>/dev/null || true
 
+    # 卸载 /tmp tmpfs
+    if mount | grep -q "tmpfs on /tmp"; then
+        umount /tmp 2>/dev/null || true
+        log_info "/tmp tmpfs 已卸载"
+    fi
+
+    # 清理 fstab tmpfs 条目
+    sed -i '/tmpfs.*\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
+    log_info "fstab tmpfs 条目已清理"
+
     # 清理 iptables 规则
     iptables -D INPUT -i lo -j ACCEPT 2>/dev/null || true
     log_info "iptables 规则已清理"
+
+    # 清理优化标记文件
+    rm -f /etc/vps-youhua-optimized
+    log_info "优化标记文件已清理"
 
     echo ""
     echo "========================================================================"
