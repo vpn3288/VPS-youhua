@@ -398,6 +398,13 @@ show_platform_info() {
 # 位置: 交互式入口，在 step1 之前调用
 #────────────────────────────────────────────────────────────────
 show_quick_start_menu() {
+    # NONINTERACTIVE 模式跳过交互菜单
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+        quick_choice="${QUICK_CHOICE:-1}"
+        log_info "非交互模式: quick_choice=${quick_choice}"
+        return 0
+    fi
+
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  ⚡ 快速选择（新手友好）${NC}"
@@ -495,6 +502,12 @@ show_quick_start_menu() {
 
 
 step1_choose_platform() {
+    # NONINTERACTIVE 模式：跳过菜单，使用默认值
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+        log_info "非交互模式: platform 使用默认值或 FORCE_PLATFORM"
+        return 0
+    fi
+
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  Step 1/4：选择你的设备类型${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -506,7 +519,7 @@ step1_choose_platform() {
     echo -e "  ${GREEN}[5]${NC} 通用 x86_64 VPS"
     echo ""
     echo -n "请输入选项 [1/2/3/4/5]: "
-    read -r choice
+    read -r -t 15 choice || choice=""
     case "$choice" in
         1) PLATFORM_CATEGORY="arm" ;;
         2) PLATFORM_CATEGORY="oracle" ;;
@@ -518,6 +531,12 @@ step1_choose_platform() {
 }
 
 step2_choose_subplatform() {
+    # NONINTERACTIVE 模式：跳过菜单，使用 SELECTED_PLATFORM
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+        log_info "非交互模式: subplatform 使用 SELECTED_PLATFORM=${SELECTED_PLATFORM:-auto}"
+        return 0
+    fi
+
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  Step 2/4：选择具体设备${NC}"
@@ -595,6 +614,12 @@ step2_choose_subplatform() {
 }
 
 step3_choose_mode() {
+    # NONINTERACTIVE 模式：跳过菜单，使用 SELECTED_MODE
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+        log_info "非交互模式: mode 使用 SELECTED_MODE=${SELECTED_MODE:-optimize}"
+        return 0
+    fi
+
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  Step 3/4：选择运行模式${NC}"
@@ -623,6 +648,15 @@ step3_choose_mode() {
 }
 
 step4_choose_features() {
+    # NONINTERACTIVE 模式：跳过菜单，使用默认值
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+        CONFIGURE_UNATTENDED="${CONFIGURE_UNATTENDED:-true}"
+        CONFIGURE_FAIL2BAN="${CONFIGURE_FAIL2BAN:-false}"
+        CONFIGURE_MIRROR="${CONFIGURE_MIRROR:-auto}"
+        log_info "非交互模式: features 使用默认值（安全更新开，fail2ban关，镜像测速）"
+        return 0
+    fi
+
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  Step 4/4：可选功能（安全加固）${NC}"
@@ -938,6 +972,12 @@ main() {
         exit 1
     fi
 
+    # BUG#6 FIX: DD 镜像 SSL 证书（第一步必须执行，防止 GitHub 拉取失败）
+    if ! command -v update-ca-certificates &>/dev/null; then
+        log_info "安装 CA 证书（DD 镜像必需）..."
+        apt-get install -y ca-certificates >> "$APT_LOG" 2>&1 && update-ca-certificates >> "$APT_LOG" 2>&1 || true
+    fi
+
     # ── 幂等性检测（是否重复运行）─────────────────────────────────────────────
     if [[ -f /etc/vps-youhua-optimized ]]; then
         local opt_time
@@ -954,6 +994,15 @@ main() {
     show_banner
 
     # ── MODE=status 直接运行验证 ─────────────────────────────────────────
+# BUG#12 FIX: 非交互模式跳过所有 read
+# 用法: NONINTERACTIVE=1 ./install.sh --platform=xxx --mode=optimize
+# 或: ./install.sh --platform=xxx --mode=optimize -y
+# 自动设置默认选项，防止 read 永久挂起
+if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+    export INTERACTIVE=0
+    log_info "非交互模式（NONINTERACTIVE=1 / -y）: 使用默认选项"
+fi
+
     if [[ "${MODE}" == "status" ]]; then
         log_info "运行状态验证..."
         local verify_script
@@ -968,6 +1017,28 @@ main() {
     check_network
 
     # 自动检测平台（允许用户修改）
+    # ── BUG#14: 低内存自动锁（<1024MB 强制纯代理底层优化）──────────────
+    local low_mem_kb low_mem_mb
+    low_mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+    low_mem_mb=$((low_mem_kb / 1024))
+    if [[ "${low_mem_mb:-0}" -gt 0 ]] && [[ "${low_mem_mb}" -lt 1024 ]]; then
+        echo ""
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}  🔒 检测到极低内存机器: ${low_mem_mb}MB < 1024MB${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "  ${YELLOW}自动锁定为${NC} ${GREEN}纯代理底层优化模式${NC}（不装 Docker/Node.js）"
+        echo -e "  ${YELLOW}防止内存不足导致机器死机！${NC}"
+        SELECTED_MODE="optimize"
+        INSTALL_DOCKER="false"
+        INSTALL_NODEJS="false"
+        INSTALL_DEPS="false"
+        CONFIGURE_UNATTENDED="true"
+        CONFIGURE_FAIL2BAN="false"
+        CONFIGURE_MIRROR="auto"
+        log_info "极低内存机器，已强制锁定为纯代理模式"
+        return 0
+    fi
+
     # ── 低内存警告 (<2G) ───────────────────────────────────────────────
     if [[ -t 0 ]]; then
         local check_mem

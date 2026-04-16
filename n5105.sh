@@ -475,6 +475,12 @@ main() {
 
     init_script
     check_idempotent
+    # BUG#1: 低内存 Swap 创建
+    configure_swap
+    # BUG#5: IPv6 黑洞检测
+    configure_ipv6_health
+    # BUG#7: DNS 锁定防篡改
+    configure_dns_lock
     detect_system
     detect_storage_type
     check_network

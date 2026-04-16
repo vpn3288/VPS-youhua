@@ -368,6 +368,10 @@ main() {
 
     init_script
     check_idempotent
+    # BUG#5: IPv6 黑洞检测
+    configure_ipv6_health
+    # BUG#7: DNS 锁定防篡改
+    configure_dns_lock
     detect_system
     detect_oracle_cloud
     check_oracle_metadata
@@ -391,8 +395,13 @@ main() {
     clean_system
     oracle_cloud_cleanup
     optimize_memory_oracle
+    # BUG#1+22 FIX: Oracle 1C4G 在 zram 就位后才判断 swap（避免浪费磁盘 swap）
+    configure_swap
     configure_sysctl_oracle
     configure_limits
+
+    # BUG#8: 低内存极限清理
+    [[ "${IS_LOW_MEM}" == "true" ]] && configure_lowmem_purge
     configure_fstab
     configure_journald
     configure_dns
@@ -415,6 +424,22 @@ main() {
     optimize_ssh
     configure_cleanup_cron
     configure_logrotate
+
+    # BUG#3: 安装熵服务（Oracle 1C4G ARM TLS 加解密瓶颈优化）
+    if command -v haveged >/dev/null 2>&1; then
+        systemctl enable haveged 2>/dev/null || true
+        systemctl restart haveged 2>/dev/null || true
+        log_info "haveged 熵服务运行中"
+    elif command -v rng-tools >/dev/null 2>&1; then
+        systemctl enable rng-tools 2>/dev/null || true
+        systemctl restart rng-tools 2>/dev/null || true
+        log_info "rng-tools 熵服务运行中"
+    else
+        apt-get install -y rng-tools >/dev/null 2>&1 && \
+            (systemctl enable rng-tools && systemctl restart rng-tools) >> "$APT_LOG" 2>&1 && \
+            log_info "rng-tools 已安装并运行（TLS 熵池充足）" || \
+            log_warn "熵服务安装失败（TLS 加解密可能受影响）"
+    fi
 
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过软件安装"

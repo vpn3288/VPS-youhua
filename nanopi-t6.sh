@@ -534,6 +534,10 @@ main() {
 
     init_script
     check_idempotent
+    # BUG#5: IPv6 黑洞检测
+    configure_ipv6_health
+    # BUG#7: DNS 锁定防篡改
+    configure_dns_lock
     detect_system
     detect_storage_type
     check_network
@@ -555,6 +559,8 @@ main() {
     configure_apt_sources
     clean_system
     optimize_memory_t6
+    # BUG#1 FIX: T6 在 zram 之后才检查 swap（避免与 zram 冲突）
+    configure_swap
     configure_sysctl_t6
     configure_limits
     configure_fstab

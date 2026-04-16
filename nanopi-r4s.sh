@@ -451,6 +451,17 @@ install_nodejs() {
     # 卸载临时 tmpfs（编译已完成）
     [[ "$tmpfs_mounted" == "true" ]] && umount /tmp && log_info "已卸载临时 tmpfs"
 
+    # BUG#16: R4S 4G 内存限制 Node.js 最大堆（防止 OOM 被杀）
+    mkdir -p /etc/profile.d
+    cat > /etc/profile.d/nodejs-memory.sh <<'EOF'
+# R4S 4G TF 卡 Node.js 内存限制（BUG#16: 防止 OOM）
+export NODE_OPTIONS="--max-old-space-size=2048"
+EOF
+    chmod +x /etc/profile.d/nodejs-memory.sh
+    # 对当前 session 也生效
+    export NODE_OPTIONS="--max-old-space-size=2048"
+    log_info "Node.js 内存限制: NODE_OPTIONS=--max-old-space-size=2048"
+
     if command -v node &>/dev/null; then
         log_info "Node.js 安装完成: $(node --version)"
     else
@@ -684,6 +695,10 @@ main() {
 
     init_script
     detect_system
+    # BUG#5: IPv6 黑洞检测
+    configure_ipv6_health
+    # BUG#7: DNS 锁定防篡改
+    configure_dns_lock
     detect_storage_type
     check_network
     preflight_check
@@ -705,6 +720,8 @@ main() {
     clean_system
     configure_tf_card_protection
     optimize_memory_r4s
+    # BUG#1 FIX: R4S 在 zram 之后才检查 swap（避免与 zram 冲突）
+    configure_swap
     configure_sysctl_r4s
     configure_limits
     configure_fstab

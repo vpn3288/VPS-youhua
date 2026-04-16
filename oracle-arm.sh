@@ -533,6 +533,10 @@ main() {
 
     init_script
     check_idempotent
+    # BUG#5: IPv6 黑洞检测
+    configure_ipv6_health
+    # BUG#7: DNS 锁定防篡改
+    configure_dns_lock
     detect_system
     detect_oracle_cloud
     check_oracle_metadata
@@ -556,6 +560,8 @@ main() {
     clean_system
     oracle_cloud_cleanup
     optimize_memory_oracle
+    # BUG#1 FIX: Oracle ARM 在 zram 之后才检查 swap（避免冲突）
+    configure_swap
     configure_sysctl_oracle
     configure_limits
     configure_fstab

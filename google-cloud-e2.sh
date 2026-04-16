@@ -126,7 +126,16 @@ gcp_cloud_cleanup() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 内存优化（GCP e2-micro 精简版）
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────# BUG#15+17: 编译依赖（python3-venv/cmake/pkg-config/libssl-dev）
+install_build_deps() {
+    log_step "安装编译依赖..."
+    install_if_missing build-essential cmake pkg-config libssl-dev \
+        python3-venv python3-dev python3-pip \
+        libffi-dev libxml2-dev libxslt1-dev zlib1g-dev
+    log_info "编译依赖安装完成"
+}
+
+
 optimize_memory_gcp() {
     log_step "配置内存优化..."
 
@@ -392,6 +401,12 @@ main() {
 
     init_script
     check_idempotent
+    # BUG#1: 低内存 Swap 创建
+    configure_swap
+    # BUG#5: IPv6 黑洞检测
+    configure_ipv6_health
+    # BUG#7: DNS 锁定防篡改
+    configure_dns_lock
     detect_system
     detect_gcp_cloud
     check_gcp_metadata
@@ -417,6 +432,9 @@ main() {
     optimize_memory_gcp
     configure_sysctl_gcp
     configure_limits
+
+    # BUG#8: 低内存极限清理
+    [[ "${IS_LOW_MEM}" == "true" ]] && configure_lowmem_purge
     configure_fstab
     configure_journald
     configure_dns

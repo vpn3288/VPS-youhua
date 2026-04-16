@@ -622,40 +622,115 @@ configure_locale() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# BUG#1 FIX: 低内存机器自动创建 1GB Swap（GCP/1C1G 代理节点必选）
+# 适用: RAM < 1024MB 且无 Swap 的机器
+# ─────────────────────────────────────────────────────────────────────────────
+configure_swap() {
+    log_step "配置 Swap（低内存防护）..."
+
+    # 检查是否已有 Swap（物理 swap + zram swap 都算）
+    local swap_total zram_total=0
+    swap_total=$(awk '/Total Swap/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+    # zram 也算 Swap（/proc/meminfo 的 Swap 统计不包含 zram，需手动计算）
+    if [[ -d /sys/block/zram0 ]]; then
+        local zram_size
+        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
+        zram_total=$((zram_size / 1024))  # KB
+    fi
+    local total_swap=$((swap_total + zram_total))
+    if [[ "${total_swap}" -gt 0 ]]; then
+        log_info "Swap 已存在（物理: ${swap_total}KB + zram: ${zram_total}KB），跳过"
+        return 0
+    fi
+
+    log_info "检测到无 Swap，创建 1GB swapfile..."
+
+    # 创建 1GB swapfile
+    if fallocate -l 1G /swapfile 2>/dev/null; then
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+    elif dd if=/dev/zero of=/swapfile bs=1M count=1024 status=progress 2>/dev/null; then
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+    else
+        log_warn "Swap 创建失败，跳过"
+        return 1
+    fi
+
+    # 持久化 fstab
+    if ! grep -q "/swapfile" /etc/fstab 2>/dev/null; then
+        echo "/swapfile none swap sw 0 0" >> /etc/fstab
+    fi
+
+    # swappiness: 低内存代理节点设为 10-30（与 R4S 相反）
+    # 1C1G/GCP 场景希望尽量用 Swap 保护内存
+    echo 20 > /proc/sys/vm/swappiness 2>/dev/null || true
+    sysctl -w vm.swappiness=20 2>/dev/null || true
+
+    log_info "Swap 1GB 创建完成，swappiness=20"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 文件句柄 / 资源限制
 # ─────────────────────────────────────────────────────────────────────────────
 configure_limits() {
     log_step "配置资源限制..."
 
+    # ── 内存检测 ─────────────────────────────────────────────────────────────
+    local SYS_MEM_MB SYS_MEM_KB
+    SYS_MEM_KB=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+    SYS_MEM_MB=$((SYS_MEM_KB / 1024))
+    local IS_LOW_MEM=false
+    [[ "${SYS_MEM_MB:-0}" -gt 0 ]] && [[ "${SYS_MEM_MB}" -lt 1024 ]] && IS_LOW_MEM=true
+
+    # ── 句柄数动态配置（BUG#2: RAM<=1024MB → 限制在 65535 防止内核崩溃）────────
+    local NOFILE_VAL NPROC_VAL
+    if [[ "${IS_LOW_MEM}" == "true" ]]; then
+        NOFILE_VAL=65535
+        NPROC_VAL=65535
+        log_info "低内存机器，句柄数限制为 ${NOFILE_VAL}"
+    else
+        NOFILE_VAL=1048576
+        NPROC_VAL=131072
+    fi
+
     # 立即生效
-    ulimit -n 1048576
-    ulimit -u 131072
+    ulimit -n ${NOFILE_VAL}
+    ulimit -u ${NPROC_VAL}
     ulimit -m unlimited
     [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
 
     # 持久化
     mkdir -p /etc/security/limits.d
-    cat > /etc/security/limits.d/99-vps-youhua.conf <<'EOF'
-root soft nofile 1048576
-root hard nofile 1048576
-root soft nproc 131072
-root hard nproc 131072
-* soft nofile 1048576
-* hard nofile 1048576
-* soft nproc 131072
-* hard nproc 131072
+    cat > /etc/security/limits.d/99-vps-youhua.conf <<EOF
+root soft nofile ${NOFILE_VAL}
+root hard nofile ${NOFILE_VAL}
+root soft nproc ${NPROC_VAL}
+root hard nproc ${NPROC_VAL}
+* soft nofile ${NOFILE_VAL}
+* hard nofile ${NOFILE_VAL}
+* soft nproc ${NPROC_VAL}
+* hard nproc ${NPROC_VAL}
 EOF
 
     # systemd 级别
     mkdir -p /etc/systemd/system.conf.d
-    cat > /etc/systemd/system.conf.d/99-resource-limits.conf <<'EOF'
+    cat > /etc/systemd/system.conf.d/99-resource-limits.conf <<EOF
 [Manager]
-DefaultLimitNOFILE=1048576:1048576
-DefaultLimitNPROC=131072:131072
+DefaultLimitNOFILE=${NOFILE_VAL}:${NOFILE_VAL}
+DefaultLimitNPROC=${NPROC_VAL}:${NPROC_VAL}
 DefaultLimitMEMLOCK=infinity
 EOF
     systemctl daemon-reload 2>/dev/null || true
-    log_info "资源限制配置完成"
+
+    # ── BUG#1: RAM<=1024MB 自动创建 1GB Swap（防止 GCP/1C1G OOM）──────────────
+    if [[ "${IS_LOW_MEM}" == "true" ]]; then
+        configure_swap
+    fi
+
+    log_info "资源限制配置完成（nofile=${NOFILE_VAL}, nproc=${NPROC_VAL}）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -721,6 +796,78 @@ configure_fstab() {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# BUG#7 FIX: DNS 防篡改 — 写入 1.1.1.1/8.8.8.8 + chattr +i
+# DD 镜像和云厂商 DHCP 常篡改 resolv.conf
+# ─────────────────────────────────────────────────────────────────────────────
+configure_dns_lock() {
+    log_step "加固 DNS 配置（防篡改）..."
+
+    # 备份
+    cp -a /etc/resolv.conf /etc/resolv.conf.vps-youhua-bak 2>/dev/null || true
+
+    # 写入可信 DNS
+    cat > /etc/resolv.conf <<'EOF'
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+nameserver 2001:4860:4860::8888
+EOF
+
+    # 防止 DHCP/云厂商自动覆盖（BUG#7 核心修复）
+    chattr +i /etc/resolv.conf 2>/dev/null || true
+    log_info "DNS 已锁定（1.1.1.1 + 8.8.8.8），chattr +i 保护"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUG#5 FIX: IPv6 黑洞检测 — 若 ping6 失败则强制禁用 IPv6
+# 美国低端/免费 VPS 的 IPv6 路由常损坏，会导致代理请求超时
+# ─────────────────────────────────────────────────────────────────────────────
+configure_ipv6_health() {
+    log_step "IPv6 连通性检测..."
+
+    # 先检查 IPv6 是否已禁用
+    if grep -q "net.ipv6.conf.all.disable_ipv6 = 1" /etc/sysctl.d/99-vps-youhua.conf 2>/dev/null; then
+        log_info "IPv6 已禁用，跳过"
+        return 0
+    fi
+
+    # 检测 IPv6 是否通（允许超时）
+    if ping -6 -c 1 -W 2 ipv6.google.com >/dev/null 2>&1; then
+        log_info "IPv6 连通正常，保持开启"
+    else
+        log_warn "IPv6 黑洞检测失败（ping6 超时），强制禁用 IPv6"
+
+        # 写入 sysctl
+        mkdir -p /etc/sysctl.d
+        cat >> /etc/sysctl.d/99-vps-youhua.conf <<'EOF'
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+EOF
+        sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null || true
+        sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null || true
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUG#8 FIX: 低内存极限清理 — apt-get purge rpcbind apache2 snapd ufw
+# 适用: RAM < 2048MB 且用户选择"纯代理底层优化"
+# ─────────────────────────────────────────────────────────────────────────────
+configure_lowmem_purge() {
+    log_step "低内存极限清理（释放 ~100MB）..."
+
+    local PKGS_TO_REMOVE="rpcbind apache2 snapd ufw"
+    local removed=false
+
+    for pkg in ${PKGS_TO_REMOVE}; do
+        if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+            log_info "  移除 $pkg（释放内存）"
+            apt-get purge -y "$pkg" >/dev/null 2>&1 && removed=true || true
+        fi
+    done
+
+    [[ "$removed" == "true" ]] && log_info "低内存清理完成（释放约 100MB）" || log_info "无需清理（这些包未安装）"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # journald 配置（平台差异化）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_journald() {
@@ -752,7 +899,30 @@ write_common_sysctl() {
     local file="$1"
     backup_file "$file"
 
-    cat > "$file" <<'EOF'
+    # BUG#4: BBR 自适应检测（先运行，再写文件）
+    BBR_CC="cubic"
+    BBR_QDISC="fq"
+    if [[ -f /proc/sys/net/ipv4/tcp_available_congestion_control ]]; then
+        modprobe -q tcp_bbr2 2>/dev/null || true
+        if grep -q "bbr2" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+            BBR_CC="bbr"
+            log_info "TCP 拥塞控制: bbr（BBRv3 已激活）"
+        else
+            modprobe -q tcp_bbr 2>/dev/null || true
+            if grep -q "bbr " /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+                BBR_CC="bbr"
+                log_info "TCP 拥塞控制: bbr（BBRv1 已激活）"
+            else
+                BBR_CC="cubic"
+                log_info "TCP 拥塞控制: cubic（BBR 不可用，降级）"
+            fi
+        fi
+    else
+        BBR_CC="cubic"
+    fi
+
+    # 写入通用 sysctl 配置（使用已确定的 BBR_CC 值）
+    cat > "$file" <<EOF
 # =============================================================================
 # VPS-youhua 通用内核加固参数 v3.1 R56
 # 所有平台共享
@@ -781,19 +951,18 @@ net.core.rmem_default = 262144
 net.core.wmem_default = 262144
 net.ipv4.ip_local_port_range = 10240 65535
 
-# ── BBR（所有平台共享，模块加载失败静默跳过） ─────────────────────────────
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
+# ── BBR/BBRv3/cubic（BUG#4: 动态选择） ─────────────────────────────────
+net.core.default_qdisc = ${BBR_QDISC}
+net.ipv4.tcp_congestion_control = ${BBR_CC}
 EOF
 
-    # 尝试加载 tcp_bbr（仅写入，不阻塞）
-    modprobe -q tcp_bbr 2>/dev/null || true
-    modprobe -q tcp_fq 2>/dev/null || true
+    # BUG#10: 检查平台默认 sysctl 冲突，避免重复覆盖
+    if [[ -d /etc/sysctl.d ]] && grep -r "net.core" /etc/sysctl.d/ 2>/dev/null | grep -qv "vps-youhua"; then
+        log_warn "检测到平台默认 sysctl 参数，保留原配置，仅追加本项目参数"
+    fi
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# sysctl 持久化（通用 + 平台差异分别写入不同文件，避免冲突）
-# ─────────────────────────────────────────────────────────────────────────────
+
 apply_sysctl() {
     log_step "应用 sysctl 参数..."
     sysctl --system >> "$APT_LOG" 2>&1 || sysctl -e -f /etc/sysctl.d/*.conf 2>/dev/null || true
