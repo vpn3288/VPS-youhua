@@ -38,10 +38,13 @@ fi
 # 全局状态（菜单选择结果）
 # ─────────────────────────────────────────────────────────────────────────────
 
-SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | n5105 | generic-x86
+SELECTED_PLATFORM=""      # nanpi-r4s | nanpi-t6 | oracle-arm | n5105 | generic-x86
 SELECTED_MODE=""          # optimize | full | custom
 INSTALL_DOCKER="ask"      # true | false | ask
-INSTALL_NODEJS="ask"      # true | false | ask
+INSTALL_NODEJS="ask"       # true | false | ask
+CONFIGURE_UNATTENDED="true"   # true | false（自动安全更新，默认开）
+CONFIGURE_FAIL2BAN="false"    # true | false（SSH防暴破，默认关）
+CONFIGURE_MIRROR="auto"       # auto | off（APT镜像，默认自动测速）
 INTERACTIVE=true
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,19 +58,27 @@ for arg in "$@"; do
     case "$arg" in
         --optimize|--optimize-only) FORCE_MODE="optimize" ;;
         --full|--install-all)        FORCE_MODE="full" ;;
+        --no-software)               FORCE_MODE="optimize" ;;
         --non-interactive|-y|--yes)  INTERACTIVE=false ;;
-        --with-docker)    INSTALL_DOCKER="true" ;;
-        --without-docker) INSTALL_DOCKER="false" ;;
-        --with-npm)       INSTALL_NODEJS="true" ;;
-        --without-npm)    INSTALL_NODEJS="false" ;;
-        --no-software)    FORCE_MODE="optimize" ;;
-        --clean-system)    CLEAN_SYSTEM="true" ;;
-        --uninstall)       MODE="uninstall" ;;
-        --help|-h)         show_help; exit 0 ;;
-        --platform)        ;;  # skip, handled below
+        --with-docker)               INSTALL_DOCKER="true" ;;
+        --without-docker)             INSTALL_DOCKER="false" ;;
+        --with-npm)                  INSTALL_NODEJS="true" ;;
+        --without-npm)               INSTALL_NODEJS="false" ;;
+        --with-unattended)           CONFIGURE_UNATTENDED="true" ;;
+        --without-unattended)        CONFIGURE_UNATTENDED="false" ;;
+        --with-fail2ban)             CONFIGURE_FAIL2BAN="true" ;;
+        --without-fail2ban)          CONFIGURE_FAIL2BAN="false" ;;
+        --mirror-auto)               CONFIGURE_MIRROR="auto" ;;
+        --mirror-off)                CONFIGURE_MIRROR="off" ;;
+        --clean-system)              CLEAN_SYSTEM="true" ;;
+        --uninstall)                 MODE="uninstall" ;;
+        --help|-h)                   show_help; exit 0 ;;
+        --platform) ;; # skip, handled below
         *)
             if [[ "$arg" == --platform=* ]]; then
                 FORCE_PLATFORM="${arg#*=}"
+            elif [[ "$arg" == --* ]]; then
+                log_warn "未知选项: $arg"
             fi
             ;;
     esac
@@ -105,6 +116,14 @@ show_help() {
     --without-npm      不安装 Node.js
     --no-software      跳过所有软件安装（等价于 --optimize）
 
+  可选功能:
+    --with-unattended     开启自动安全更新（默认已开启）
+    --without-unattended   关闭自动安全更新
+    --with-fail2ban        安装 fail2ban 防 SSH 暴破
+    --without-fail2ban     不安装 fail2ban（默认）
+    --mirror-auto          自动测速选择最快镜像源（默认）
+    --mirror-off           跳过镜像切换，保持系统默认源
+
   其他:
     --non-interactive   非交互模式，使用默认选项
     --clean-system      优化前清理系统缓存
@@ -112,10 +131,12 @@ show_help() {
     --help, -h          显示本帮助信息
 
 示例:
-    bash install.sh                    # 交互式菜单（新手推荐）
-    bash install.sh --optimize         # 只做优化，不装软件
-    bash install.sh --full             # 优化 + 全量安装
-    bash install.sh --full --without-docker   # 优化 + 安装但跳过 Docker
+    bash install.sh                         # 交互式菜单（新手推荐）
+    bash install.sh --optimize              # 只做优化，不装软件
+    bash install.sh --full                  # 优化 + 全量安装
+    bash install.sh --full --without-docker  # 优化 + 安装但跳过 Docker
+    bash install.sh --with-fail2ban         # 优化 + 开启 fail2ban
+    bash install.sh --without-unattended    # 优化，安全更新保持系统默认
 EOF
 }
 
@@ -348,6 +369,50 @@ step3_choose_mode() {
     esac
 }
 
+step4_choose_features() {
+    echo ""
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  Step 4/4：可选功能（安全加固）${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  ${GREEN}[1]${NC} ${BOLD}自动安全更新（unattended-upgrades）${NC} ${YELLOW}默认: 开启${NC}"
+    echo -e "       每日自动检查并安装安全更新，不自动重启"
+    echo -e "       ${CYAN}适合: 生产服务器、长期运行的设备${NC}"
+    echo ""
+    echo -e "  ${GREEN}[2]${NC} ${BOLD}SSH 防暴力破解（fail2ban）${NC} ${YELLOW}默认: 关闭${NC}"
+    echo -e "       失败3次封IP 1小时，检测 SSH 暴力破解"
+    echo -e "       ${CYAN}适合: 有公网 IP 的 VPS（Oracle/通用 x86）${NC}"
+    echo ""
+    echo -e "  ${GREEN}[3]${NC} ${BOLD}APT 镜像源切换${NC}"
+    echo -e "       自动测速选择最快镜像（腾讯/阿里/清华）"
+    echo -e "       ${YELLOW}默认: 自动测速${NC}  |  ${CYAN}选 0 则跳过，保持系统默认源${NC}"
+    echo ""
+    echo -e "  ${GREEN}[0]${NC}  使用全部默认值（安全更新开，其余关）"
+    echo ""
+    echo -n "请输入选项 [1/2/3/0，默认 0]: "
+    read -r choice
+    choice="${choice:-0}"
+    case "$choice" in
+        1)
+            CONFIGURE_FAIL2BAN="true"
+            CONFIGURE_MIRROR="auto"
+            ;;
+        2)
+            CONFIGURE_UNATTENDED="false"
+            CONFIGURE_MIRROR="auto"
+            ;;
+        3)
+            CONFIGURE_UNATTENDED="true"
+            CONFIGURE_FAIL2BAN="true"
+            ;;
+        0)
+            # 全部使用默认值（已在变量声明中设置）
+            ;;
+        *)
+            echo -e "${YELLOW}无效选项${NC}"; step4_choose_features; return ;;
+    esac
+}
+
 resolve_full_extras() {
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -398,6 +463,12 @@ resolve_full_extras() {
         echo -e "  Docker:   ${docker_yn}"
         echo -e "  Node.js:  ${nodejs_yn}"
     fi
+    echo ""
+    echo -e "  ${CYAN}可选功能:${NC}"
+    local ua_yn="开启"; [[ "$CONFIGURE_UNATTENDED" == "false" ]] && ua_yn="关闭"
+    local f2b_yn="关闭"; [[ "$CONFIGURE_FAIL2BAN" == "true" ]] && f2b_yn="开启"
+    local mirror_desc="$CONFIGURE_MIRROR"; [[ "$mirror_desc" == "auto" ]] && mirror_desc="自动测速"; [[ "$mirror_desc" == "off" ]] && mirror_desc="保持默认"
+    echo -e "    自动安全更新: ${ua_yn}  |  fail2ban: ${f2b_yn}  |  镜像: ${mirror_desc}"
 
     echo ""
     echo -e "${YELLOW}即将开始执行，是否继续？${NC}"
@@ -447,6 +518,13 @@ download_and_run() {
 
     log_step "执行 ${platform}.sh..."
 
+    # Armbian 检测：如果是 Armbian 设备，强制跳过 APT 镜像切换
+    # （Armbian 有自己的 apt 源，不应被 Debian 源替换）
+    if [[ -f /etc/armbian-release ]]; then
+        CONFIGURE_MIRROR="off"
+        log_info "检测到 Armbian，跳过 APT 镜像切换"
+    fi
+
     # 透传环境变量给平台脚本
     export SKIP_SOFTWARE_SCRIPT="false"
     export INSTALL_DOCKER="$INSTALL_DOCKER"
@@ -454,6 +532,9 @@ download_and_run() {
     export INSTALL_DOCKER_SCRIPT="$INSTALL_DOCKER"
     export INSTALL_NODEJS_SCRIPT="$INSTALL_NODEJS"
     export INSTALL_METHOD="docker"
+    export CONFIGURE_UNATTENDED="$CONFIGURE_UNATTENDED"
+    export CONFIGURE_FAIL2BAN="$CONFIGURE_FAIL2BAN"
+    export CONFIGURE_MIRROR="$CONFIGURE_MIRROR"
 
     if [[ "$mode" == "optimize" ]]; then
         export SKIP_SOFTWARE_SCRIPT="true"
@@ -568,6 +649,7 @@ main() {
         step1_choose_platform
         step2_choose_subplatform
         step3_choose_mode
+        step4_choose_features
 
         # full 模式：询问 Docker / Node.js
         if [[ "$SELECTED_MODE" == "full" ]]; then

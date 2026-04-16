@@ -332,6 +332,37 @@ run_doctor() {
     echo "=== 诊断完成 ==="
 }
 
+configure_fail2ban() {
+    if [[ "${CONFIGURE_FAIL2BAN:-false}" != "true" ]]; then
+        return 0
+    fi
+
+    log_step "安装 fail2ban 防 SSH 暴力破解..."
+
+    if ! command -v fail2ban-server &>/dev/null; then
+        apt-get install -y fail2ban >> "$APT_LOG" 2>&1 || {
+            log_warn "fail2ban 安装失败，跳过"
+            return 0
+        }
+    fi
+
+    cat > /etc/fail2ban/jail.local << 'EOF'
+[sshd]
+enabled   = true
+port      = ssh
+filter    = sshd
+action    = iptables[name=SSH, port=ssh, protocol=tcp]
+logpath   = /var/log/auth.log
+maxretry  = 3
+bantime   = 3600
+findtime  = 600
+EOF
+
+    systemctl enable fail2ban >/dev/null 2>&1 || true
+    systemctl restart fail2ban >/dev/null 2>&1 || true
+    log_info "fail2ban 已启用（SSH: 3次失败封IP 1小时）"
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 卸载
 # ─────────────────────────────────────────────────────────────────────────────
@@ -439,6 +470,7 @@ main() {
     optimize_network_t6
     optimize_oom
     disable_auto_updates
+    configure_fail2ban
     optimize_ssh
     configure_cleanup_cron
     configure_logrotate

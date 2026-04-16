@@ -239,8 +239,18 @@ $nrconf{kernelhints} = 0;
 $nrconf{unneeded} = 'a';
 EOF
 
+    # CONFIGURE_MIRROR: auto=测速选源, off=仅配APT参数不改源
     local mirror_mode="${CONFIGURE_MIRROR:-auto}"
     local selected_mirror=""
+
+    if [[ "$mirror_mode" == "off" ]]; then
+        log_info "跳过 APT 镜像切换（保持系统默认源）"
+        if ! apt-get update -qq >> "$APT_LOG" 2>&1; then
+            log_warn "APT 更新失败"
+        fi
+        log_info "APT 源配置完成"
+        return 0
+    fi
 
     # 地区检测函数
     auto_select_mirror() {
@@ -711,14 +721,34 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 disable_auto_updates() {
     log_step "配置自动更新策略..."
-    # Debian 12 默认没有 unattended-upgrades，跳过
-    if command -v unattended-upgrades &>/dev/null; then
-        cat > /etc/apt/apt.conf.d/99-vps-youhua-no-unattended <<'EOF'
-APT::Periodic::Enable "0";
-Unattended-Upgrade::Automatic Reboot "false";
+
+    # CONFIGURE_UNATTENDED=true → 安装并启用 unattended-upgrades
+    # CONFIGURE_UNATTENDED=false（默认）→ 禁用自动更新
+    if [[ "${CONFIGURE_UNATTENDED:-false}" == "true" ]]; then
+        if ! command -v unattended-upgrades &>/dev/null; then
+            apt-get install -y unattended-upgrades >> "$APT_LOG" 2>&1 || {
+                log_warn "unattended-upgrades 安装失败"
+                return 0
+            }
+        fi
+        cat > /etc/apt/apt.conf.d/99-vps-youhua-unattended <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Download-Upgradeable-Packages "1";
+APT::Periodic::AutocleanInterval "7";
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
 EOF
+        log_info "自动安全更新已启用（每日检查，不自动重启）"
+    else
+        # 禁用自动更新（生产环境优先稳定）
+        if command -v unattended-upgrades &>/dev/null; then
+            cat > /etc/apt/apt.conf.d/99-vps-youhua-no-unattended <<'EOF'
+APT::Periodic::Enable "0";
+Unattended-Upgrade::Automatic-Reboot "false";
+EOF
+        fi
+        log_info "自动更新已禁用（防止生产环境被升级打断）"
     fi
-    log_info "自动更新已禁用（防止生产环境被升级打断）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
