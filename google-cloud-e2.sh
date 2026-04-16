@@ -164,6 +164,8 @@ optimize_memory_gcp() {
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl GCP e2-micro 专项配置
 # ─────────────────────────────────────────────────────────────────────────────
+    install_base_tools
+
 configure_sysctl_gcp() {
     log_step "配置 sysctl 系统参数..."
 
@@ -481,14 +483,19 @@ main() {
     # e2-micro 1GB 内存：跳过 fail2ban（Python 占用内存太多）
     configure_ssh_harden  # 仅 SSH 硬化，不装 fail2ban
 
+    # BUG#46 Fix: install_build_deps 独立于 SKIP_SOFTWARE_SCRIPT
+    # INSTALL_DEPS 由用户选择决定（Option 2 = true），与 Docker/NodeJS 分开
+    # SKIP_SOFTWARE_SCRIPT 只阻止 Docker/NodeJS，不阻止编译依赖
+    if [[ "\${INSTALL_DEPS}" == "true" ]]; then
+        install_build_deps
+    fi
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
-        log_info "纯优化模式，跳过软件安装"
+        log_info "纯优化模式，跳过 Docker / Node.js 安装"
         local did_install=false
     else
-        [[ "${INSTALL_DEPS}" == "true" ]] && install_build_deps
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        local did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }

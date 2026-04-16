@@ -705,7 +705,7 @@ configure_limits() {
 
     # ── 句柄数动态配置（BUG#2: RAM<=1024MB → 限制在 65535 防止内核崩溃）────────
     local NOFILE_VAL NPROC_VAL
-    if [[ "${IS_LOW_MEM}" == "true" ]]; then
+    if [[ "${IS_LOW_MEMORY}" == "true" ]]; then
         NOFILE_VAL=65535
         NPROC_VAL=65535
         log_info "低内存机器，句柄数限制为 ${NOFILE_VAL}"

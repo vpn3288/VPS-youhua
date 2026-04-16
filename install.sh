@@ -1064,6 +1064,10 @@ fi
         SELECTED_MODE="${FORCE_MODE:-optimize}"
         echo -e "${GREEN}使用指定平台: ${SELECTED_PLATFORM}${NC}"
         echo -e "${GREEN}使用指定模式: ${SELECTED_MODE}${NC}"
+    elif [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
+        # BUG#45 Fix: NONINTERACTIVE 模式使用自动检测的平台
+        SELECTED_PLATFORM="$auto_platform"
+        echo -e "${GREEN}非交互模式: 使用自动检测平台 ${SELECTED_PLATFORM}${NC}"
     else
         # ── 交互式菜单 ─────────────────────────────────────────────────────
         PLATFORM_CATEGORY=""

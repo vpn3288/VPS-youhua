@@ -86,6 +86,8 @@ detect_storage_type() {
 # ─────────────────────────────────────────────────────────────────────────────
 # R4S TF 卡保护（ext4 挂载参数 + dirty）
 # ─────────────────────────────────────────────────────────────────────────────
+    install_base_tools
+
 configure_tf_card_protection() {
     [[ "$SYS_IS_TF_CARD" != "true" ]] && return 0
     log_step "配置 TF 卡写入保护..."
@@ -746,14 +748,19 @@ main() {
     configure_tmp_tmpfs
 
     # ── 软件安装 ──────────────────────────────────────────────────────────────
+    # BUG#46 Fix: install_build_deps 独立于 SKIP_SOFTWARE_SCRIPT
+    # INSTALL_DEPS 由用户选择决定（Option 2 = true），与 Docker/NodeJS 分开
+    # SKIP_SOFTWARE_SCRIPT 只阻止 Docker/NodeJS，不阻止编译依赖
+    if [[ "\${INSTALL_DEPS}" == "true" ]]; then
+        install_build_deps
+    fi
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
-        log_info "纯优化模式，跳过软件安装"
+        log_info "纯优化模式，跳过 Docker / Node.js 安装"
         local did_install=false
     else
-        install_build_deps
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        local did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
