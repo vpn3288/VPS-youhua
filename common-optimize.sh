@@ -830,6 +830,12 @@ EOF
 configure_dns_lock() {
     log_step "加固 DNS 配置（防篡改）..."
 
+    # 检查是否已被锁定（幂等性）
+    if lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
+        log_info "DNS 已锁定（chattr +i），跳过"
+        return 0
+    fi
+
     # 备份
     cp -a /etc/resolv.conf /etc/resolv.conf.vps-youhua-bak 2>/dev/null || true
 
