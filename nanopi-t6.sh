@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.1 R58
+# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.1 R59
 # 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
 # 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
 # =============================================================================
@@ -82,6 +82,49 @@ optimize_memory_t6() {
     if systemctl is-active armbian-zram-config &>/dev/null; then
         log_info "Armbian zram-config 保持原状"
     fi
+
+    # ── Armbian 原生 zram-config 强化（T6 16GB）────────────────────────────────
+    if [[ -f /etc/default/armbian-zram-config ]]; then
+        if grep -q "^ENABLED=" /etc/default/armbian-zram-config 2>/dev/null; then
+            sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-zram-config
+        else
+            echo "ENABLED=true" >> /etc/default/armbian-zram-config
+        fi
+        # 16GB 内存下 zram SIZE=30%（T6 eMMC 耐久好，不强制压缩内存）
+        if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
+            sed -i 's/^SIZE=.*/SIZE=30%/' /etc/default/armbian-zram-config
+        else
+            echo "SIZE=30%" >> /etc/default/armbian-zram-config
+        fi
+        log_info "Armbian zram-config 已强化（SIZE=30%）"
+    fi
+
+    # ── Armbian 原生 ramlog 强化（T6）──────────────────────────────────────────
+    if [[ -f /etc/default/armbian-ramlog ]]; then
+        if grep -q "^ENABLED=" /etc/default/armbian-ramlog 2>/dev/null; then
+            sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog
+        else
+            echo "ENABLED=true" >> /etc/default/armbian-ramlog
+        fi
+        if grep -q "^SIZE=" /etc/default/armbian-ramlog 2>/dev/null; then
+            sed -i 's/^SIZE=.*/SIZE=256M/' /etc/default/armbian-ramlog
+        else
+            echo "SIZE=256M" >> /etc/default/armbian-ramlog
+        fi
+        log_info "Armbian ramlog 已强化（SIZE=256M）"
+    fi
+
+    # ── eMMC 每周 fstrim 定时任务（保持长期性能）────────────────────────────
+    mkdir -p /etc/cron.weekly
+    cat > /etc/cron.weekly/fstrim-emmc <<'EOF'
+#!/bin/sh
+# NanoPC T6 eMMC 每周 fstrim（保持长期 IO 性能）
+for d in / /var; do
+    fstrim -v "$d" 2>/dev/null || true
+done
+EOF
+    chmod +x /etc/cron.weekly/fstrim-emmc
+    log_info "已创建 eMMC 每周 fstrim 定时任务"
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
     log_info "内存优化完成（zram 保留，swappiness=$SWAPPINESS）"
@@ -484,7 +527,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION} R58${NC}"
+    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION} R59${NC}"
     echo "========================================================================"
     echo ""
 
@@ -547,7 +590,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} R58 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} R59 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
@@ -573,6 +616,10 @@ main() {
     echo ""
     echo -e "${YELLOW}日志: ${APT_LOG}${NC}"
     echo ""
+
+    # ── 写入优化完成标记（供幂等性检测使用）────────────────────────────────
+    date > /etc/vps-youhua-optimized 2>/dev/null || true
+    chmod 444 /etc/vps-youhua-optimized 2>/dev/null || true
 
     return 0
 }

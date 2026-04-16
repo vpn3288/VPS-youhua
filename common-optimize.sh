@@ -317,10 +317,10 @@ EOF
                 ;;
             official|*)
                 cat > "$sources_list" <<EOF
-deb http://deb.debian.org/debian ${codename} main contrib non-free-firmware
-deb http://deb.debian.org/debian ${codename}-updates main contrib non-free-firmware
-deb http://security.debian.org/debian-security ${codename}-security main contrib non-free-firmware
-deb http://deb.debian.org/debian ${codename}-backports main contrib non-free-firmware
+deb https://deb.debian.org/debian ${codename} main contrib non-free-firmware
+deb https://deb.debian.org/debian ${codename}-updates main contrib non-free-firmware
+deb https://security.debian.org/debian-security ${codename}-security main contrib non-free-firmware
+deb https://deb.debian.org/debian ${codename}-backports main contrib non-free-firmware
 EOF
                 ;;
         esac

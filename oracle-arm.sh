@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.1 R58
+# Oracle Cloud ARM 专用优化安装脚本 v3.1 R59
 # 硬件: Ampere Altra, 2核16GB, 100GB 云盘
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
@@ -495,7 +495,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R58${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R59${NC}"
     echo "========================================================================"
     echo ""
 
@@ -558,7 +558,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R58 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R59 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
@@ -584,6 +584,10 @@ main() {
     echo ""
     echo -e "${YELLOW}日志: ${APT_LOG}${NC}"
     echo ""
+
+    # ── 写入优化完成标记（供幂等性检测使用）────────────────────────────────
+    date > /etc/vps-youhua-optimized 2>/dev/null || true
+    chmod 444 /etc/vps-youhua-optimized 2>/dev/null || true
 
     return 0
 }

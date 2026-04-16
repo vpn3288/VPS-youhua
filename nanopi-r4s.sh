@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.1 R58
+# NanoPi R4S 专用优化安装脚本 v3.1 R59
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -47,16 +47,36 @@ elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TF 卡检测（R4S 专项）
+# TF 卡检测（R4S 专项，多方法交叉验证）
 # ─────────────────────────────────────────────────────────────────────────────
 detect_storage_type() {
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    if [[ "$root_dev" == mmcblk* ]]; then
+    # 多方法验证 TF 卡
+    local is_tf=false
+
+    # 方法1：检查 mmcblk0 是否为 TF 卡（无 eMMC 或 eMMC 在 mmcblk1）
+    if [[ "$root_dev" == mmcblk0* ]]; then
+        # 检查 eMMC 是否存在（mmcblk1 通常是 eMMC）
+        if [[ -d /sys/class/block/mmcblk1/device ]]; then
+            local emmc_name=""
+            emmc_name=$(cat /sys/class/block/mmcblk1/device/name 2>/dev/null || echo "")
+            if [[ -n "$emmc_name" ]]; then
+                # eMMC 存在，mmcblk0 必定是 TF 卡
+                is_tf=true
+                log_info "检测到 TF 卡（mmcblk0，eMMC=$emmc_name 存在于 mmcblk1）— 启用写入保护"
+            fi
+        else
+            # 无 eMMC，mmcblk0 即为 TF 卡
+            is_tf=true
+            log_info "检测到 TF 卡（mmcblk0，无 eMMC）— 启用写入保护"
+        fi
+    fi
+
+    if [[ "$is_tf" == "true" ]]; then
         SYS_IS_TF_CARD=true
-        log_info "检测到 TF 卡存储（$root_dev）— 启用写入保护"
     else
         SYS_IS_TF_CARD=false
         log_info "非 TF 卡存储（$root_dev）"
@@ -77,6 +97,54 @@ configure_tf_card_protection() {
     fi
 
     log_info "TF 卡 ext4 优化完成"
+
+    # ── Armbian 原生 zram-config 强化 ──────────────────────────────────────────
+    if [[ -f /etc/default/armbian-zram-config ]]; then
+        # 确保 zram-config 启用（ENABLED=true）
+        if grep -q "^ENABLED=" /etc/default/armbian-zram-config 2>/dev/null; then
+            sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-zram-config
+        else
+            echo "ENABLED=true" >> /etc/default/armbian-zram-config
+        fi
+        # 4G 内存下设置 zram size 为 50%（Armbian 官方推荐）
+        if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
+            sed -i 's/^SIZE=.*/SIZE=50%/' /etc/default/armbian-zram-config
+        else
+            echo "SIZE=50%" >> /etc/default/armbian-zram-config
+        fi
+        log_info "Armbian zram-config 已强化（SIZE=50%）"
+    fi
+
+    # ── Armbian 原生 ramlog 强化 ───────────────────────────────────────────────
+    if [[ -f /etc/default/armbian-ramlog ]]; then
+        # 确保 ramlog 启用
+        if grep -q "^ENABLED=" /etc/default/armbian-ramlog 2>/dev/null; then
+            sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog
+        else
+            echo "ENABLED=true" >> /etc/default/armbian-ramlog
+        fi
+        # 将 ramlog SIZE 提升至 256M（默认 100M 对多 agent 不够用）
+        if grep -q "^SIZE=" /etc/default/armbian-ramlog 2>/dev/null; then
+            sed -i 's/^SIZE=.*/SIZE=256M/' /etc/default/armbian-ramlog
+        else
+            echo "SIZE=256M" >> /etc/default/armbian-ramlog
+        fi
+        log_info "Armbian ramlog 已强化（SIZE=256M）"
+    fi
+
+    # ── TF 卡每周 fstrim 定时任务 ─────────────────────────────────────────────
+    if [[ "$SYS_IS_TF_CARD" == "true" ]]; then
+        mkdir -p /etc/cron.weekly
+        cat > /etc/cron.weekly/fstrim-tf <<'EOF'
+#!/bin/sh
+# NanoPi R4S TF 卡每周 fstrim（延长卡寿命）
+for d in / /var; do
+    fstrim -v "$d" 2>/dev/null || true
+done
+EOF
+        chmod +x /etc/cron.weekly/fstrim-tf
+        log_info "已创建 TF 卡每周 fstrim 定时任务"
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -525,7 +593,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R58${NC}"
+    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R59${NC}"
     echo "========================================================================"
     echo ""
 
@@ -590,7 +658,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R58 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R59 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
@@ -619,6 +687,10 @@ main() {
     echo ""
     echo -e "${YELLOW}日志: ${APT_LOG}${NC}"
     echo ""
+
+    # ── 写入优化完成标记（供幂等性检测使用）────────────────────────────────
+    date > /etc/vps-youhua-optimized 2>/dev/null || true
+    chmod 444 /etc/vps-youhua-optimized 2>/dev/null || true
 
     return 0
 }

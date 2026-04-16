@@ -17,11 +17,11 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="edfd0c445e9b9b4e5604970fe50b8b5dd8e5aea62cc5e942751acab0fdc3888f"
-    ["nanopi-t6"]="90d8f584db91210ad1c94e7730889d3e71baffc096a465b87fb4328977c22d68"
-    ["oracle-arm"]="6f35e199ee5eeaf52302874346d90fbe2924bcb667bf3615dce60254eb67ea55"
-    ["n5105"]="815546e92fb1501a8fa2944361fdce464072d4fe2493277cb232199a4082bbea"
-    ["generic-x86"]="5f5679477b69a19592c87582334d6434a8eb1131e35c3777371a5db9966bcf77"
+    ["nanopi-r4s"]="6321d67ba48b220baff561e7b0590c8cf90097b5e8320374ac036612f1fdfa77"
+    ["nanopi-t6"]="ac821cc8a7ae23613422ef29e47fc08d75835bd89cc02009e23203f7a40edff6"
+    ["oracle-arm"]="f37b75aef1952534f9400006db08795856b83d7eab4fbef0d7e5d7a7a6961bff"
+    ["n5105"]="8c683556c0c2cafc6600231d1ea659d611487320edbda101e8c35a317184d1c5"
+    ["generic-x86"]="73521b3e5cf7644ae2d027f8eba34bfaec901e71823a6ba123c7090247a087da"
     ["verify-v3.1"]="884a4e294436ac8e429cabfd31a0694b0222ad7e8f7e78c1c492ec497b7d77a1"
 )
 
@@ -702,6 +702,19 @@ main() {
     if ! wait_for_apt_lock; then
         log_error "APT 锁处理失败，请稍后重试或手动运行: systemctl status apt-daily"
         exit 1
+    fi
+
+    # ── 幂等性检测（是否重复运行）─────────────────────────────────────────────
+    if [[ -f /etc/vps-youhua-optimized ]]; then
+        local opt_time
+        opt_time=$(stat -c '%y' /etc/vps-youhua-optimized 2>/dev/null | cut -d' ' -f1,2 | cut -d'.' -f1)
+        echo ""
+        echo -e "${YELLOW}[!] 检测到系统已完成过优化（${opt_time}）${NC}"
+        echo -e "${YELLOW}   重复运行将重新应用所有优化项，请确认是否继续？${NC}"
+        if [[ "$*" != *"-y"* && "$*" != *"--yes"* ]]; then
+            echo -e "   按 ${BOLD}Enter${NC} 继续，或 ${BOLD}Ctrl+C${NC} 退出..."
+            read -r </dev/tty || true
+        fi
     fi
 
     show_banner

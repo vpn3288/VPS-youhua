@@ -333,17 +333,19 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 
 ## 版本历史
 
-### v3.2 R58（最新）
-- 新增：install.sh 添加 `wait_for_apt_lock()` 函数，自动停止 apt-daily/unattended-upgrades 并等待锁释放（解决纯净 Debian 12 新机 apt 锁阻塞问题）
-- 新增：install.sh 未知 ARM64 设备检测增加警告提示，明确告知 fallback 行为
-- 安全：所有平台脚本的 `install_docker()` / `install_nodejs()` 安装失败时报错并 return 1（不再静默继续）
-- 安全：APT 腾讯/阿里镜像 http→https（防中间人攻击）
-- 健壮：verify-v3.1.sh sysctl 配置文件路径从硬编码改为自动扫描
-- 健壮：Systemd DefaultLimitNOFILE=1048576 已正确配置（Debian 12 服务不继承 limits.conf）
-- 健壮：DNS 配置已实现 systemd-resolved + chattr +i 锁定
-- 健壮：Oracle Cloud Agent (oracle-cloud-agent) 卸载逻辑已存在
-- 健壮：PEP 668 python3-venv 依赖已安装（Debian 12 pip 全局安装阻断）
-- 已知实现良好：无 OpenClaw 特定变量残留；R4S 已使用 schedutil 而非 performance（Armbian 原生策略）；物理 swap 禁用但保留原生 zram
+### v3.2 R59（最新）
+- 新增：幂等性检测，重复运行时提示"系统已完成过优化"（检测 /etc/vps-youhua-optimized 标记文件，-y 参数跳过确认）
+- 新增：所有平台脚本完成时写入 /etc/vps-youhua-optimized 标记（date 时间戳）
+- 新增：R4S TF 卡检测升级为多方法交叉验证（df + sys/class/block + eMMC 存在性检测）
+- 新增：R4S Armbian zram-config 强化（SIZE=50%，ENABLED=true）
+- 新增：R4S Armbian ramlog 强化（SIZE=256M）
+- 新增：R4S TF 卡每周 fstrim 定时任务（延长卡寿命）
+- 新增：T6 Armbian zram-config 强化（SIZE=30%，ENABLED=true）
+- 新增：T6 Armbian ramlog 强化（SIZE=256M）
+- 新增：T6 eMMC 每周 fstrim 定时任务（保持长期 IO 性能）
+- 安全：APT 官方源 http→https（deb.debian.org 全线加密）
+- 安全：install.sh 添加 `wait_for_apt_lock()` 函数（解决 Debian 12 新机 unattended-upgrades 锁阻塞）
+- 健壮：未知 ARM64 设备 fallback 增加 log_warn 警告提示
 
 ### v3.1
 - 移除 OpenClaw 相关代码及文本残留（纯优化定位更清晰）
