@@ -23,7 +23,7 @@ declare -A EXPECTED_SHA256=(
     ["oracle-1c4g"]="f6cbf6effbe51e3ce20f8cc056e4c15ec6613cd5d5a1957b46e8f3cfb81b0f6e"
     ["n5105"]="e8dbfee4348d6860fdd000b1b8ad31318021aab6f15736fd6753f4785186278a"
     ["generic-x86"]="4381868c945d48a9b6ac9d43bdb33a9e34e1d65373bfb3c7012351fb23c0a58b"
-    ["generic-1c1g"]="6feb5fe90201607f0375775f323df4bae4c46b1520da8c9972684a8bfbe7a97e"
+    ["generic-1c1g"]="688167a0defa2e06923da00648a306721b7f80dfd23b6d4c2cb3558007df3898"
     ["google-cloud-e2"]="81469db7d63732fd753c6ed64efd27c519fedf9b3cc418b8a90a66ec454fa383"
     ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
