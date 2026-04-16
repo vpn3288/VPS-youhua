@@ -17,12 +17,12 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="a8a085c3c2dbee14efa66662c9967b55eb89c46b0fc4e655a614346d1f202409"
-    ["nanopi-t6"]="ab54fdd96f41bdeaa37acaa9b6c1c0ae2f27a1c0efac150c342d82669f8a303b"
-    ["oracle-arm"]="2595d1d5953d8b986bbaa7aa71a8814581d38b4d52371a759f8d8ecab48936a7"
-    ["n5105"]="50c57730a047c057ec7216375b3e8f65f87a219a946d66449d48d49bd4cc24ca"
-    ["generic-x86"]="b68935265101416d813b30761c762ee4263bda352578bbb25453247818e5e88f"
-    ["verify-v3.1"]="95760662417b601103a63512b6bb204bc8b56136e2337ea206b322f8d509ebc4"
+    ["nanopi-r4s"]="1a6a4a38e0829721b000e307f3d9b52512ea6750fc653befd9f4b52ffdb89daa"
+    ["nanopi-t6"]="fd71231b733390ba85ddae58d68c6d746ac5e8a17c86446f6d30729dbdc52fcd"
+    ["oracle-arm"]="fd36ef253eaeebeaa6f73ac13ae85e678ee0543531b1f7fb9982c166ee6ce1ec"
+    ["n5105"]="4995fcbce76c1c06500f19b8442fa6c995353b299981289ff3395fd8642a22e8"
+    ["generic-x86"]="f3c43faf281ecd48896127c077cc8ba1fa9073affb2e2f69a57d0d5198076741"
+    ["verify-v3.1"]="4eedf8d0cc1b9d31d3333a4ccceeafc85c8d425c65391df2881f4f6141c94b90"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ for arg in "$@"; do
         --no-software)               FORCE_MODE="optimize" ;;
         --non-interactive|-y|--yes)  INTERACTIVE=false ;;
         --with-docker)               INSTALL_DOCKER="true" ;;
-        --without-docker)             INSTALL_DOCKER="false" ;;
+        --without-docker)            INSTALL_DOCKER="false" ;;
         --with-npm)                  INSTALL_NODEJS="true" ;;
         --without-npm)               INSTALL_NODEJS="false" ;;
         --with-unattended)           CONFIGURE_UNATTENDED="true" ;;
@@ -270,7 +270,7 @@ show_platform_info() {
 
 step1_choose_platform() {
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}  Step 1/3：选择你的设备类型${NC}"
+    echo -e "${BOLD}  Step 1/4：选择你的设备类型${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "  ${GREEN}[1]${NC} ARM 开发板（NanoPi R4S / NanoPC T6）"
@@ -292,7 +292,7 @@ step1_choose_platform() {
 step2_choose_subplatform() {
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}  Step 2/3：选择具体设备${NC}"
+    echo -e "${BOLD}  Step 2/4：选择具体设备${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -344,7 +344,7 @@ step2_choose_subplatform() {
 step3_choose_mode() {
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}  Step 3/3：选择运行模式${NC}"
+    echo -e "${BOLD}  Step 3/4：选择运行模式${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "  ${GREEN}[1]${NC} ${BOLD}纯系统优化（新手推荐）${NC}"
@@ -426,6 +426,7 @@ resolve_full_extras() {
         echo -e "      ${CYAN}建议安装，输入 y 或直接回车${NC}"
         echo -n "  是否安装 Docker？[y/n，默认 y]: "
         read -r yn
+
         yn="${yn:-y}"
         case "$yn" in
             n|N) INSTALL_DOCKER="false" ;;
@@ -439,6 +440,7 @@ resolve_full_extras() {
         echo -e "  ${GREEN}[✓]${NC} ${BOLD}Node.js${NC}（运行环境，用于全局安装 npm 包）"
         echo -n "  是否安装 Node.js？[y/n，默认 y]: "
         read -r yn
+
         yn="${yn:-y}"
         case "$yn" in
             n|N) INSTALL_NODEJS="false" ;;
@@ -484,31 +486,44 @@ resolve_full_extras() {
 download_and_run() {
     local platform="$1"
     local mode="$2"   # optimize | full
-    local tmpfile; tmpfile=$(mktemp)
 
-    local script_url="${RAW_BASE}/${platform}.sh"
+    # 在临时目录下载平台脚本 + common-optimize.sh（确保 source 路径有效）
+    local tmpdir; tmpdir=$(mktemp -d)
+    chmod 755 "$tmpdir"
+
+    local platform_url="${RAW_BASE}/${platform}.sh"
+    local common_url="${RAW_BASE}/common-optimize.sh"
+    local platform_file="${tmpdir}/${platform}.sh"
+    local common_file="${tmpdir}/common-optimize.sh"
+
     log_step "检查 ${platform}.sh..."
-    if ! curl --head --silent --fail "$script_url" >/dev/null 2>&1; then
-        log_error "平台脚本不存在: $script_url"
-        rm -f "$tmpfile"
+    if ! curl --head --silent --fail "$platform_url" >/dev/null 2>&1; then
+        log_error "平台脚本不存在: $platform_url"
+        rm -rf "$tmpdir"
         exit 1
     fi
 
-    log_step "下载 ${platform}.sh..."
-    if ! curl -fsSL "$script_url" -o "$tmpfile"; then
-        log_error "下载失败: $script_url"
-        rm -f "$tmpfile"
+    log_step "下载 ${platform}.sh + common-optimize.sh..."
+    if ! curl -fsSL "$platform_url" -o "$platform_file"; then
+        log_error "下载失败: $platform_url"
+        rm -rf "$tmpdir"
+        exit 1
+    fi
+    if ! curl -fsSL "$common_url" -o "$common_file"; then
+        log_error "下载失败: $common_url"
+        rm -rf "$tmpdir"
         exit 1
     fi
 
+    # SHA256 校验（仅平台脚本）
     local expected="${EXPECTED_SHA256[$platform]:-}"
     if [[ -n "$expected" ]]; then
-        local actual; actual=$(sha256sum "$tmpfile" | awk '{print $1}')
+        local actual; actual=$(sha256sum "$platform_file" | awk '{print $1}')
         if [[ "$actual" != "$expected" ]]; then
             log_error "SHA256 校验失败！文件可能被篡改。"
             log_error "期望: $expected"
             log_error "实际: $actual"
-            rm -f "$tmpfile"
+            rm -rf "$tmpdir"
             exit 1
         fi
         log_info "SHA256 校验通过"
@@ -536,15 +551,17 @@ download_and_run() {
     export CONFIGURE_FAIL2BAN="$CONFIGURE_FAIL2BAN"
     export CONFIGURE_MIRROR="$CONFIGURE_MIRROR"
 
+    # 清理函数：执行完毕后删除临时目录
+    trap 'rm -rf "$tmpdir"' EXIT
+
     if [[ "$mode" == "optimize" ]]; then
         export SKIP_SOFTWARE_SCRIPT="true"
-        bash "$tmpfile" --optimize-only
+        bash "$platform_file" --optimize-only
     else
-        bash "$tmpfile"
+        bash "$platform_file"
     fi
 
     local ret=$?
-    rm -f "$tmpfile"
     return $ret
 }
 
@@ -581,29 +598,28 @@ uninstall_all() {
     log_step "调用 ${platform}.sh --uninstall..."
     echo ""
 
-    local tmpfile; tmpfile=$(mktemp)
-    trap 'rm -f "$tmpfile"' EXIT
+    # 在临时目录下载平台脚本 + common-optimize.sh
+    local tmpdir; tmpdir=$(mktemp -d)
+    chmod 755 "$tmpdir"
+    trap 'rm -rf "$tmpdir"' EXIT
 
-    local script_url="${RAW_BASE}/${platform}.sh"
-    if ! curl -fsSL "$script_url" -o "$tmpfile"; then
-        log_error "下载失败: $script_url"
+    local platform_file="${tmpdir}/${platform}.sh"
+    local common_file="${tmpdir}/common-optimize.sh"
+
+    if ! curl -fsSL "${RAW_BASE}/${platform}.sh" -o "$platform_file"; then
+        log_error "下载失败: ${RAW_BASE}/${platform}.sh"
+        rm -rf "$tmpdir"
+        exit 1
+    fi
+    if ! curl -fsSL "${RAW_BASE}/common-optimize.sh" -o "$common_file"; then
+        log_error "下载失败: ${RAW_BASE}/common-optimize.sh"
+        rm -rf "$tmpdir"
         exit 1
     fi
 
-    local expected="${EXPECTED_SHA256[$platform]:-}"
-    if [[ -n "$expected" ]]; then
-        local actual; actual=$(sha256sum "$tmpfile" | awk '{print $1}')
-        if [[ "$actual" != "$expected" ]]; then
-            log_error "SHA256 校验失败！文件可能被篡改。"
-            rm -f "$tmpfile"
-            exit 1
-        fi
-        log_info "SHA256 校验通过"
-    fi
-
-    bash "$tmpfile" --uninstall
+    bash "$platform_file" --uninstall
     local ret=$?
-    rm -f "$tmpfile"
+    rm -rf "$tmpdir"
     trap - EXIT
 
     if [[ $ret -eq 0 ]]; then
@@ -657,35 +673,34 @@ main() {
         fi
     fi
 
-    # 纯优化时强制跳过软件
-    if [[ "$SELECTED_MODE" == "optimize" ]]; then
-        INSTALL_DOCKER="false"
-        INSTALL_NODEJS="false"
-        SKIP_SOFTWARE_SCRIPT="true"
-    fi
+    echo ""
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  执行优化${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
 
     download_and_run "$SELECTED_PLATFORM" "$SELECTED_MODE"
     local ret=$?
 
     if [[ $ret -eq 0 ]]; then
         echo ""
-        log_step "环境优化完成!"
+        echo "========================================================================"
+        echo -e "${GREEN}  ✅ 优化完成！建议重启系统使全部配置生效${NC}"
+        echo "========================================================================"
         echo ""
-        if [[ "$SELECTED_MODE" == "optimize" ]]; then
-            echo -e "${GREEN}✓ 系统已针对 ${SELECTED_PLATFORM} 优化完毕${NC}"
-            echo ""
-            echo "下一步: 安装你的软件（Docker / Xray / Nginx 等）"
-        else
-            echo -e "${GREEN}✓ 全量安装完成！${NC}"
-            echo ""
-            echo "下一步: 重启后安装并运行你需要的 agent"
+        echo -e "  ${CYAN}重启前可运行验证脚本检查优化效果:${NC}"
+        echo -e "  ${GREEN}curl -fsSL ${RAW_BASE}/verify-v3.1.sh -o /tmp/verify-v3.1.sh && bash /tmp/verify-v3.1.sh${NC}"
+        echo ""
+        echo -n "  是否立即重启？[y/N]: "
+        read -r yn
+        if [[ "$yn" =~ ^[yY]$ ]]; then
+            echo "正在重启..."
+            reboot
         fi
-        echo ""
-        echo -e "${CYAN}验证优化效果: bash <(curl -fsSL ${RAW_BASE}/verify-v3.1.sh)${NC}"
     else
-        log_error "平台脚本执行失败 (exit $ret)"
+        echo ""
+        log_error "优化失败 (exit $ret)，请检查日志"
     fi
-
     exit $ret
 }
 
