@@ -637,13 +637,13 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
+    local did_install=false
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
-        local did_install=false
     else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
