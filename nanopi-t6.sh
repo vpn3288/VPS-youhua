@@ -171,10 +171,6 @@ configure_sysctl_t6() {
 
 # ── T6 内存（16GB 平衡）──────────────────────────────────────────────────────
 vm.swappiness = ${SWAPPINESS}
-    local ct_max=$(( SYS_MEM_MB * 32 ))
-    cat >> "$SYSCTL_FILE" <<EOF
-net.netfilter.nf_conntrack_max = ${ct_max}
-EOF
 vm.dirty_background_ratio = 5
 vm.dirty_writeback_centisecs = 10000
 vm.dirty_expire_centisecs = 60000
@@ -248,7 +244,7 @@ optimize_network_t6() {
         # RPS（RK3588S 多核）
         if [[ $SYS_CPU_CORES -gt 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
+            local mask; mask=$(printf '%x' "$(( (1 << cores) - 1 ))")
             for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                 [[ -f "$rps_file" ]] || continue
                 printf "%s" "$mask" > "$rps_file" 2>/dev/null || true

@@ -206,7 +206,7 @@ optimize_network_oracle() {
         # RPS
         if [[ $SYS_CPU_CORES -gt 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
+            local mask; mask=$(printf '%x' "$(( (1 << cores) - 1 ))")
             for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                 [[ -f "$rps_file" ]] || continue
                 printf "%s" "$mask" > "$rps_file" 2>/dev/null || true

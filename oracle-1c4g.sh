@@ -210,8 +210,9 @@ optimize_network_oracle() {
     log_step "优化 Oracle Cloud 网络..."
 
     # Oracle Cloud MTU 检测（不强制修改）
-    local mtu
-    mtu=$(ip link show $(ip route get 8.8.8.8 2>/dev/null | awk '{print $5; exit}') 2>/dev/null | grep -oP 'mtu \K\d+' || echo "1500")
+    local iface mtu
+    iface=$(ip route get 8.8.8.8 2>/dev/null | awk '{print $5; exit}')
+    mtu=$(ip link show "$iface" 2>/dev/null | grep -oP 'mtu \K\d+' || echo "1500")
     log_info "当前网卡 MTU: $mtu"
 
     for iface in /sys/class/net/en* /sys/class/net/eth*; do
@@ -226,7 +227,7 @@ optimize_network_oracle() {
         # RPS（单核，CPU掩码 = 1）
         if [[ $SYS_CPU_CORES -ge 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
+            local mask; mask=$(printf '%x' "$(( (1 << cores) - 1 ))")
             for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                 [[ -f "$rps_file" ]] || continue
                 printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
