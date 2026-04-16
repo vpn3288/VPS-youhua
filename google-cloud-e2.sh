@@ -1,5 +1,7 @@
 #!/bin/bash
 #
+# 修复: 非交互式环境(如SSH远程执行)需要 TERM 变量
+: "${TERM:=xterm}"
 # VPS 优化脚本 - Google Cloud e2-micro（共享 CPU 永久免费）
 #
 # 用法:
