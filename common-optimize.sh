@@ -143,7 +143,7 @@ detect_system() {
         export IS_LOW_MEMORY
         log_info "检测到低内存（${SYS_MEM_MB}MB），已启用低资源优化模式"
     fi
-    [[ "$SYS_IS_ARMBIAN" == "true" ]] && log_info "Armbian 检测通过"
+    [[ "$SYS_IS_ARMBIAN" == "true" ]] && log_info "Armbian 检测通过" || true
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -773,9 +773,15 @@ configure_fstab() {
         local new_line="${dev} ${mnt} ${fs_type} ${opts} ${dump} ${pass}"
         # 替换原行（转义设备路径中的正则元字符，避免误匹配）
         local escaped_dev
-        escaped_dev=$(printf '%s' "$dev" | sed 's/[][.\*^$]/\\&/g')
-        sed -i "\|^${escaped_dev} |s|^.*$|${new_line}|" /etc/fstab 2>/dev/null || true
-        fstab_changed=true
+        # 修复: 使用 awk 代替有问题的 sed 避免字符类解析问题
+        if grep -qF "$dev " /etc/fstab 2>/dev/null; then
+            awk -v dev="$dev" -v newline="$new_line" '
+                BEGIN { found=0 }
+                $1 == dev { print newline; found=1; next }
+                { print }
+            ' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
+            fstab_changed=true
+        fi
     done < /etc/fstab
 
     if [[ "$fstab_changed" == "true" ]]; then
