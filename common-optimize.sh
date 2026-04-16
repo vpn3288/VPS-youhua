@@ -59,9 +59,14 @@ fi
 # ── 代理节点专用模式（低资源平台推荐）──────────────────────────────────
 CONFIGURE_PROXY_ONLY="${CONFIGURE_PROXY_ONLY:-false}"   # 代理节点专用（仅环境优化，不装重软件）
 
-# 平台标识（各平台脚本必须定义）
-readonly PLATFORM_NAME="${PLATFORM_NAME:-unknown}"
-readonly PLATFORM_DESC="${PLATFORM_DESC:-unknown}"
+# 平台标识（各平台脚本必须定义，source前已设置）
+# 只在未定义时才设置（避免与平台脚本的readonly冲突）
+if [[ -z "${PLATFORM_NAME:-}" ]]; then
+    readonly PLATFORM_NAME="unknown"
+fi
+if [[ -z "${PLATFORM_DESC:-}" ]]; then
+    readonly PLATFORM_DESC="unknown"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 并发锁
