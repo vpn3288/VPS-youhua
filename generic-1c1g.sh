@@ -210,16 +210,7 @@ EOF
 
 # ─────────────────────────────────────────────────────────────────────────────
 # OOM
-# ─────────────────────────────────────────────────────────────────────────────# BUG#15+17: 编译依赖（python3-venv/cmake/pkg-config/libssl-dev）
-install_build_deps() {
-    log_step "安装编译依赖..."
-    install_if_missing build-essential cmake pkg-config libssl-dev \
-        python3-venv python3-dev python3-pip \
-        libffi-dev libxml2-dev libxslt1-dev zlib1g-dev
-    log_info "编译依赖安装完成"
-}
-
-
+# ─────────────────────────────────────────────────────────────────────────────
 optimize_oom() {
     log_step "配置 OOM Killer..."
     mkdir -p /etc/systemd/system.conf.d
@@ -342,6 +333,15 @@ uninstall_all() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 软件安装桩函数（generic-1c1g 调用 install_docker / install_nodejs）
+# BUG#15+17: 编译依赖（python3-venv/cmake/pkg-config/libssl-dev）
+install_build_deps() {
+    log_step "安装编译依赖..."
+    install_if_missing build-essential cmake pkg-config libssl-dev \
+        python3-venv python3-dev python3-pip \
+        libffi-dev libxml2-dev libxslt1-dev zlib1g-dev
+    log_info "编译依赖安装完成"
+}
+
 install_docker() {
     log_warn "Docker 安装未对此平台实现，跳过"
     return 0
