@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# 通用 x86_64 VPS 优化安装脚本 v3.1 R59
+# 通用 x86_64 VPS 优化安装脚本 v3.1 R60
 # 硬件: 通用 x86_64 架构
 # 特点: 自适应内存配置（内存分级），通用性最强
 # =============================================================================
@@ -117,6 +117,7 @@ EOF
     fi
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
+    sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
     log_info "内存优化完成"
 }
 
@@ -136,6 +137,7 @@ configure_sysctl_generic() {
 vm.swappiness = ${SWAPPINESS}
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = 50
+vm.oom_kill_allocating_task = 1
 vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
 vm.dirty_writeback_centisecs = 10000
@@ -495,7 +497,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  通用 x86_64 VPS 优化安装脚本 v${SCRIPT_VERSION} R59${NC}"
+    echo -e "${GREEN}  通用 x86_64 VPS 优化安装脚本 v${SCRIPT_VERSION} R60${NC}"
     echo "========================================================================"
     echo ""
 
@@ -557,7 +559,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Generic x86_64 v${SCRIPT_VERSION} R59 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Generic x86_64 v${SCRIPT_VERSION} R60 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

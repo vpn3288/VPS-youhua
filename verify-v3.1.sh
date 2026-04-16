@@ -231,7 +231,6 @@ check_sysctl_network() {
     # 自动检测实际存在的 sysctl 配置文件
     local sysctl_file=""
     for f in /etc/sysctl.d/99-vps-youhua-*.conf \
-             /etc/sysctl.d/99-openclaw.conf \
              /etc/sysctl.d/99-tf-optimize.conf; do
         [[ -f "$f" ]] && { sysctl_file="$f"; break; }
     done

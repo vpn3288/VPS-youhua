@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.1 R59
+# Oracle Cloud ARM 专用优化安装脚本 v3.1 R60
 # 硬件: Ampere Altra, 2核16GB, 100GB 云盘
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
@@ -27,8 +27,9 @@ readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="512M"
 
-# Oracle Cloud TCP 缓冲（16GB 内存充足）
-readonly TCP_BUF_MAX=33554432
+# Oracle Cloud TCP 缓冲（动态自适应：内存的 5%，上限 64MB，下限 16MB）
+readonly TCP_BUF_MAX
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.05*1024*1024>67108864)?67108864:(m*0.05*1024*1024<16777216)?16777216:m*0.05*1024*1024}' /proc/meminfo)
 readonly CT_MAX=131072
 readonly SOMAXCONN=65535
 readonly NETDEV_BACKLOG=65535
@@ -102,6 +103,7 @@ optimize_memory_oracle() {
     fi
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
+    sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
     log_info "内存优化完成"
 }
 
@@ -121,6 +123,7 @@ configure_sysctl_oracle() {
 vm.swappiness = ${SWAPPINESS}
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = 50
+vm.oom_kill_allocating_task = 1
 vm.dirty_ratio = 20
 vm.dirty_background_ratio = 10
 vm.dirty_writeback_centisecs = 15000
@@ -495,7 +498,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R59${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R60${NC}"
     echo "========================================================================"
     echo ""
 
@@ -558,7 +561,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R59 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R60 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

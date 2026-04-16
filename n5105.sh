@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# N5105/N5095 小主机专用优化安装脚本 v3.1 R59
+# N5105/N5095 小主机专用优化安装脚本 v3.1 R60
 # 硬件: Intel N5105/N5095 x86_64, 有风扇, SSD
 # 特点: x86 高性能优化，有风扇所以不需要保守降频
 # =============================================================================
@@ -115,6 +115,7 @@ EOF
     fi
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
+    sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
     log_info "内存优化完成（${PROFILE_DESC}）"
 }
 
@@ -134,6 +135,7 @@ configure_sysctl_n5105() {
 vm.swappiness = ${SWAPPINESS}
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = 50
+vm.oom_kill_allocating_task = 1
 vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
 vm.dirty_writeback_centisecs = 10000
@@ -466,7 +468,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION} R59${NC}"
+    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION} R60${NC}"
     echo "========================================================================"
     echo ""
 
@@ -528,7 +530,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} R59 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} R60 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

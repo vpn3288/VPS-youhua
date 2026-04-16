@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.1 R59
+# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.1 R60
 # 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
 # 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
 # =============================================================================
@@ -127,6 +127,7 @@ EOF
     log_info "已创建 eMMC 每周 fstrim 定时任务"
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
+    sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
     log_info "内存优化完成（zram 保留，swappiness=$SWAPPINESS）"
 }
 
@@ -527,7 +528,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION} R59${NC}"
+    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION} R60${NC}"
     echo "========================================================================"
     echo ""
 
@@ -590,7 +591,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} R59 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} R60 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

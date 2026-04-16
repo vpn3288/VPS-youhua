@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.1 R59
+# NanoPi R4S 专用优化安装脚本 v3.1 R60
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -165,8 +165,9 @@ optimize_memory_r4s() {
         log_info "Armbian zram-config 保持原状"
     fi
 
-    # swappiness 保守
+    # swappiness 保守（4G 内存，避免 OOM）
     sysctl -w vm.swappiness=10 2>/dev/null || true
+    sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
 
     log_info "内存优化完成（物理 swap 已禁用，zram 保留）"
 }
@@ -193,6 +194,7 @@ vm.dirty_expire_centisecs = 30000
 vm.swappiness = 10
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = 50
+vm.oom_kill_allocating_task = 1
 
 # ── R4S 网络 ────────────────────────────────────────────────────────────────
 net.core.netdev_max_backlog = ${NETDEV_BACKLOG}
@@ -593,7 +595,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R59${NC}"
+    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R60${NC}"
     echo "========================================================================"
     echo ""
 
@@ -658,7 +660,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R59 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R60 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
