@@ -198,13 +198,14 @@ wait_for_apt_lock() {
     # 等待锁释放（同时检查进程和锁文件）
     while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
           fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
-          [[ -f /var/lib/dpkg/lock-frontend ]] || \
           pgrep -x apt-get >/dev/null 2>&1 || \
           pgrep -x dpkg >/dev/null 2>&1; do
         if [[ $waited -ge $max_wait ]]; then
-            log_error "APT 锁等待超时（${max_wait}s），强制清理..."
-            rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock 2>/dev/null || true
-            dpkg --configure -a 2>/dev/null || true
+            log_error "APT 锁等待超时（${max_wait}s），请手动检查："
+            log_error "  1. ps aux | grep -E 'apt|dpkg'"
+            log_error "  2. sudo kill <PID>"
+            log_error "  3. sudo dpkg --configure -a"
+            log_error "  4. 重新运行本脚本"
             return 1
         fi
         sleep 2

@@ -160,8 +160,11 @@ EOF
 configure_sysctl_t6() {
     log_step "配置 sysctl (NanoPC T6)..."
 
-    # 在 cat heredoc 之前计算 conntrack_max
+    # 在 cat heredoc 之前计算 conntrack_max（上限保护：最大262144）
     local conntrack_max=$(( SYS_MEM_MB * 32 ))
+    if [[ $conntrack_max -gt 262144 ]]; then
+        conntrack_max=262144
+    fi
 
     backup_file "$SYSCTL_FILE"
 

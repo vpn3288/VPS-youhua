@@ -112,9 +112,17 @@ configure_tf_card_protection() {
     log_step "配置 TF 卡写入保护..."
 
     # ext4 挂载参数（减少随机写入）
-    if grep -q "^UUID=" /etc/fstab 2>/dev/null; then
-        # 追加 noatime,nodiratime,commit=600 到 root 条目
-        sed -i '/^UUID=.*\/.*ext4/s/ext4[^[:space:]]*/ext4,noatime,nodiratime,commit=600/' /etc/fstab
+    # 使用 awk 精确匹配 root 挂载点，避免 sed 正则误匹配
+    if grep -q "^UUID=.*[[:space:]]/[[:space:]]" /etc/fstab 2>/dev/null; then
+        awk '
+        /^[^#]/ && ($2 == "/") && ($3 == "ext4") {
+            if ($4 !~ /noatime/) $4 = $4 ",noatime"
+            if ($4 !~ /nodiratime/) $4 = $4 ",nodiratime"
+            if ($4 !~ /commit=/) $4 = $4 ",commit=600"
+            gsub(/,,+/, ",", $4)
+        }
+        { print }
+        ' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
     fi
 
     log_info "TF 卡 ext4 优化完成"
