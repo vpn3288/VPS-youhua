@@ -186,25 +186,25 @@ wait_for_apt_lock() {
     local max_wait=60
     local waited=0
 
-    # 检测是否有 apt 进程在运行
-    if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
-       fuser /var/lib/dpkg/lock >/dev/null 2>&1; then
-        log_info "检测到 APT 进程正在运行，正在等待锁释放..."
-    fi
-
-    # 优雅停止 apt-daily 服务
+    # 优雅停止 apt-daily 服务并屏蔽（防止恢复）
     for svc in apt-daily apt-daily-upgrade unattended-upgrades; do
-        if systemctl is-active --quiet $svc 2>/dev/null; then
+        if systemctl is-active --quiet "$svc" 2>/dev/null; then
             log_warn "停止后台服务: $svc"
-            systemctl stop $svc 2>/dev/null || true
+            systemctl stop "$svc" 2>/dev/null || true
         fi
+        systemctl mask "$svc" 2>/dev/null || true
     done
 
-    # 等待锁释放（检查进程而不是文件）
+    # 等待锁释放（同时检查进程和锁文件）
     while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
-          fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+          [[ -f /var/lib/dpkg/lock-frontend ]] || \
+          pgrep -x apt-get >/dev/null 2>&1 || \
+          pgrep -x dpkg >/dev/null 2>&1; do
         if [[ $waited -ge $max_wait ]]; then
-            log_error "APT 锁等待超时（${max_wait}s），请手动运行: systemctl status apt-daily"
+            log_error "APT 锁等待超时（${max_wait}s），强制清理..."
+            rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock 2>/dev/null || true
+            dpkg --configure -a 2>/dev/null || true
             return 1
         fi
         sleep 2
@@ -212,12 +212,7 @@ wait_for_apt_lock() {
     done
 
     # 确保 dpkg 状态正常
-    if [[ -f /var/lib/dpkg/status-old ]] && ! command -v dpkg &>/dev/null; then
-        # 极端情况：dpkg 被破坏
-        log_warn "dpkg 命令不可用，尝试修复..."
-        dpkg --configure -a 2>/dev/null || true
-    fi
-
+    dpkg --configure -a 2>/dev/null || true
     return 0
 }
 

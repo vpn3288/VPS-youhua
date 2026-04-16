@@ -374,12 +374,13 @@ EOF
     write_mirror "$mirror_mode"
 
     # 如果选定源不可用，自动 fallback 到官方
-    # 从 sources.list 提取 URL 时去掉协议前缀（支持 http/https 混合）
+    # 从 sources.list 提取 URL 时去掉协议前缀和路径（只保留域名）
     local mirror_url
     mirror_url=$(grep -m1 "^deb " "$sources_list" | awk '{print $2}')
     mirror_url="${mirror_url#http://}"
     mirror_url="${mirror_url#https://}"
-    if ! curl --connect-timeout 5 -sf "http://${mirror_url}/" > /dev/null 2>&1; then
+    mirror_url="${mirror_url%%/*}"  # 去掉路径部分，只保留域名
+    if ! curl --connect-timeout 5 -sf "https://${mirror_url}/" > /dev/null 2>&1; then
         log_warn "镜像 ${mirror_mode} 不可用，fallback 到官方源..."
         write_mirror official
     fi
@@ -807,9 +808,11 @@ configure_ipv6_health() {
         cat >> /etc/sysctl.d/99-vps-youhua-ipv6.conf <<'EOF'
 net.ipv6.conf.all.disable_ipv6 = 1
 net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
 EOF
         sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null || true
         sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null || true
+        sysctl -w net.ipv6.conf.lo.disable_ipv6=1 2>/dev/null || true
     fi
 }
 
@@ -865,7 +868,7 @@ configure_swap() {
     swap_total=$(awk '/SwapTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
     # zram 也算 Swap（/proc/meminfo 的 Swap 统计不包含 zram，需手动计算）
     # disksize 单位是字节，除以 1024 得到 KB
-    if [[ -d /sys/block/zram0 ]]; then
+    if [[ -d /sys/block/zram0 ]] && [[ -f /sys/block/zram0/disksize ]]; then
         local zram_size
         zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
         zram_total=$((zram_size / 1024))  # KB

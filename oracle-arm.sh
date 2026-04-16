@@ -46,7 +46,7 @@ readonly TMPFS_SIZE="512M"
 
 # Oracle Cloud TCP 缓冲（动态自适应：内存的 5%，上限 64MB，下限 16MB）
 # AUDIT-10 FIX: 使用纯整数运算代替浮点计算
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*5/100; if(buf>67108864) buf=67108864; if(buf<16777216) buf=16777216; printf "%.0f", buf}' /proc/meminfo)
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*5/100; if(buf>67108864) buf=67108864; if(buf<16777216) buf=16777216; printf "%d", buf}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=131072
 readonly SOMAXCONN=65535
@@ -352,8 +352,16 @@ install_docker() {
 EOF
     systemctl restart docker 2>/dev/null || true
     
-    # AUDIT-7 FIX: 等待 Docker daemon 启动
-    sleep 3
+    # AUDIT-7 FIX: 等待 Docker daemon 启动（最多等待 10 秒）
+    local wait_count=0
+    while ! docker info >/dev/null 2>&1; do
+        if [[ $wait_count -ge 10 ]]; then
+            log_warn "Docker daemon 启动超时"
+            break
+        fi
+        sleep 1
+        ((wait_count++))
+    done
     
     # Docker 健康检查
     if docker ps >/dev/null 2>&1; then
