@@ -46,9 +46,8 @@ readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="256M"
 
 # Oracle Cloud 1C4G TCP 缓冲（动态自适应：内存的 3%，上限 16MB，下限 8MB）
-readonly TCP_BUF_MAX
 # TCP 缓冲: 内存 4-6% 自适应（1C4G proxy 专用，省内存+够用）
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.04*1024*1024>16777216)?16777216:(m*0.04*1024*1024<4194304)?4194304:m*0.04*1024*1024}' /proc/meminfo)
+readonly TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.04*1024*1024>16777216)?16777216:(m*0.04*1024*1024<4194304)?4194304:m*0.04*1024*1024}' /proc/meminfo)
 readonly CT_MAX=8192  # 1C4G 精简资源限制
 readonly SOMAXCONN=1024
 readonly NETDEV_BACKLOG=4096

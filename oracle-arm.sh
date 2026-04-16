@@ -45,8 +45,7 @@ readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="512M"
 
 # Oracle Cloud TCP 缓冲（动态自适应：内存的 5%，上限 64MB，下限 16MB）
-readonly TCP_BUF_MAX
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.05*1024*1024>67108864)?67108864:(m*0.05*1024*1024<16777216)?16777216:m*0.05*1024*1024}' /proc/meminfo)
+readonly TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.05*1024*1024>67108864)?67108864:(m*0.05*1024*1024<16777216)?16777216:m*0.05*1024*1024}' /proc/meminfo)
 readonly CT_MAX=131072
 readonly SOMAXCONN=65535
 readonly NETDEV_BACKLOG=65535
