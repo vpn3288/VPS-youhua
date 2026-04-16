@@ -202,7 +202,7 @@ journalctl --vacuum-time=2d 2>/dev/null || true
 apt-get clean 2>/dev/null || true
 rm -rf /tmp/pear 2>/dev/null || true
 rm -rf /var/cache/apt/archives/*.deb 2>/dev/null || true
-rm -rf /var/tmp 2>/dev/null || true
+rm -rf /var/tmp/* 2>/dev/null || true
 EOF
     chmod +x /etc/cron.daily/vps-youhua-clean
     log_info "每日清理任务已配置"
