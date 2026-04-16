@@ -8,7 +8,8 @@
 [![Debian 12](https://img.shields.io/badge/Debian-12-AA0000?logo=debian)](https://www.debian.org/)
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v3.2](https://img.shields.io/badge/版本-v3.2-green.svg)](https://github.com/vpn3288/VPS-youhua)
+[![v3.3](https://img.shields.io/badge/版本-v3.3-green.svg)](https://github.com/vpn3288/VPS-youhua)
+[![审查](https://img.shields.io/badge/审查-8轮0bug-blue.svg)](https://github.com/vpn3288/VPS-youhua)
 [![5平台](https://img.shields.io/badge/平台-5个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
 
 </div>
@@ -333,7 +334,18 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 
 ## 版本历史
 
-### v3.2 R61（最新）
+### v3.3 R67（最新）
+- 审查：8轮严格审查（6轮 Sonnet-4.5 + 5轮 Opus-4.6），连续5轮0 bug确认
+- 审查：代码质量达到生产级别（8,731行，11个脚本）
+- 修复：APT锁超时处理从强制删锁改为提示用户手动处理
+- 修复：fstab sed转义使用完整字符集 `[][.*^$\\]` 避免误匹配
+- 修复：nanopi-t6 conntrack_max添加262144上限保护
+- 修复：RPS配置添加cores>1和cores>0双重检查
+- 修复：所有平台RPS配置统一防御性检查
+- 新增：nanopi-r4s fstab使用awk精确匹配root分区避免sed误匹配
+- 新增：所有平台函数调用顺序优化（detect_system先于configure_*）
+
+### v3.2 R61
 - 新增：`--status` 参数直接调用 verify-v3.1.sh 健康检查（install.sh），并更新帮助文档
 - 新增：R4S `install_nodejs()` 编译前临时挂载 1G tmpfs 到 /tmp（TF 卡保护），编译完自动卸载
 - 新增：fail2ban 选项 B 增加新手警告"请确保已配置 SSH 密钥登录，否则可能锁死"
