@@ -42,11 +42,14 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh)
 
 # 手动指定平台
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)    # NanoPi R4S
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-t6.sh)     # NanoPC T6
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)  # Oracle Cloud ARM
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)        # N5105/N5095 小主机
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)   # 其他 x86 VPS
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)      # NanoPi R4S (4GB ARM, TF卡)
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-t6.sh)       # NanoPC T6 (16GB ARM, eMMC)
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)      # Oracle Cloud ARM 2C16G
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-1c4g.sh)     # Oracle Cloud ARM 1C4G
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)            # N5105/N5095 小主机
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)     # 通用 x86 VPS
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-1c1g.sh)      # 通用 1C1G 低配 VPS
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/google-cloud-e2.sh) # Google Cloud e2-micro
 
 # 可选参数：
 #   --optimize-only   仅做环境优化，跳过 Docker / Node.js / OpenClaw 安装
@@ -80,8 +83,11 @@ openclaw onboard                          # 首次配置
 |------|-----|------|------|----------|
 | NanoPi R4S | RK3399 (ARM64) | 4GB | **TF卡** | `nanopi-r4s.sh` |
 | NanoPC T6 | RK3588S (ARM64) | 16GB | **eMMC** | `nanopi-t6.sh` |
-| Oracle Cloud ARM | Ampere Altra (ARM64) | 16GB | 云盘 | `oracle-arm.sh` |
+| Oracle Cloud ARM | Ampere Altra (ARM64) | 2C16GB | 云盘 | `oracle-arm.sh` |
+| Oracle Cloud ARM | Ampere Altra (ARM64) | 1C4GB | 云盘 | `oracle-1c4g.sh` |
 | N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | SSD | `n5105.sh` |
+| 通用 x86 VPS | 任意 x86_64 | 1C1G | 自动检测（SSD/HDD） | `generic-1c1g.sh` |
+| Google Cloud e2-micro | 共享 vCPU | 1GB | 云盘 | `google-cloud-e2.sh` |
 | 通用 x86 VPS | 任意 x86_64 | 自动适配 | 自动检测（SSD/HDD） | `generic-x86.sh` |
 
 ---
