@@ -24,6 +24,7 @@ declare -A EXPECTED_SHA256=(
     ["n5105"]="2ab6dfbcd92282f4c4bd5908c74ad5fe3909ae4411927699491dd023c25e133d"
     ["generic-x86"]="289ac743ffbbfb606333c40bde35587f5fb26728aca99876eef0350920cae737"
     ["generic-1c1g"]="05fc3ce02375f8c9b3e6274a154bda880d1216fe185a101ce561f300562136e3"
+    ["google-cloud-e2"]="5a7b67b0e0fba35098fa4269012b5dce954246ddae5f505a82bf7fe72f94c0b9"
     ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
 
@@ -40,7 +41,7 @@ fi
 # 全局状态（菜单选择结果）
 # ─────────────────────────────────────────────────────────────────────────────
 
-SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | oracle-1c4g | n5105 | generic-x86 | generic-1c1g
+SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | oracle-1c4g | n5105 | generic-x86 | generic-1c1g | google-cloud-e2
 SELECTED_MODE=""          # optimize | full | custom
 INSTALL_DOCKER="ask"      # true | false | ask
 INSTALL_NODEJS="ask"       # true | false | ask
@@ -268,7 +269,14 @@ detect_platform() {
             fi
             ;;
         x86_64)
-            if echo "$cpu_model" | grep -qiE "N5105|N5095|J6412|J6413"; then
+            # ── Google Cloud 检测（优先于内存路由）─────────────────────────────
+            local gcp_meta
+            gcp_meta=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
+                "http://metadata.google.internal/compute/v1/instance/machine-type" 2>/dev/null || echo "")
+            if echo "$gcp_meta" | grep -q "e2-micro\|e2-small\|e2-medium\|f1-micro\|g1-small"; then
+                log_info "Google Cloud 检测通过（${gcp_meta}），使用 GCP e2 优化"
+                echo "google-cloud-e2"
+            elif echo "$cpu_model" | grep -qiE "N5105|N5095|J6412|J6413"; then
                 echo "n5105"
             elif [[ $sys_mem_mb -gt 0 ]] && [[ $sys_mem_mb -lt 2048 ]]; then
                 # 1GB 及以下内存，自动使用极简版
@@ -367,6 +375,11 @@ show_platform_info() {
             echo -e "  ${BLUE}设备:     通用 1核 1G VPS（极简版）${NC}"
             echo -e "  ${BLUE}特点:     zram扩展 + 极保守资源限制${NC}"
             ;;
+        google-cloud-e2)
+            echo -e "  ${BLUE}设备:     Google Cloud e2-micro（Always Free）${NC}"
+            echo -e "  ${BLUE}存储:     30GB SSD${NC}"
+            echo -e "  ${BLUE}特点:     共享 CPU(burstable) + Intel + VPC 网络优化${NC}"
+            ;;
     esac
     echo ""
 }
@@ -383,15 +396,17 @@ step1_choose_platform() {
     echo -e "  ${GREEN}[1]${NC} ARM 开发板（NanoPi R4S / NanoPC T6）"
     echo -e "  ${GREEN}[2]${NC} 云服务器（Oracle Cloud ARM）"
     echo -e "  ${GREEN}[3]${NC} 小主机（N5105 / N5095）"
-    echo -e "  ${GREEN}[4]${NC} 通用 x86_64 VPS"
+    echo -e "  ${GREEN}[4]${NC} Google Cloud（e2-micro 永久免费）"
+    echo -e "  ${GREEN}[5]${NC} 通用 x86_64 VPS"
     echo ""
-    echo -n "请输入选项 [1/2/3/4]: "
+    echo -n "请输入选项 [1/2/3/4/5]: "
     read -r choice
     case "$choice" in
         1) PLATFORM_CATEGORY="arm" ;;
         2) PLATFORM_CATEGORY="oracle" ;;
         3) PLATFORM_CATEGORY="n5105" ;;
-        4) PLATFORM_CATEGORY="generic" ;;
+        4) PLATFORM_CATEGORY="google" ;;
+        5) PLATFORM_CATEGORY="generic" ;;
         *) echo -e "${YELLOW}无效选项${NC}"; step1_choose_platform; return ;;
     esac
 }
@@ -433,6 +448,14 @@ step2_choose_subplatform() {
                 2) SELECTED_PLATFORM="oracle-1c4g" ;;
                 *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
             esac
+            ;;
+        google)
+            echo -e "  ${GREEN}[1]${NC} Google Cloud e2-micro（永久免费）"
+            echo -e "       1vCPU 共享 | 1GB RAM | 30GB SSD | Always Free"
+            echo ""
+            echo -n "请输入选项 [1]: "
+            read -r choice
+            SELECTED_PLATFORM="google-cloud-e2"
             ;;
         n5105)
             echo -e "  ${GREEN}[1]${NC} N5105 / N5095 小主机"
