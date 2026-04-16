@@ -194,7 +194,8 @@ net.ipv4.tcp_keepalive_probes = 3
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${conntrack_max}
-net.netfilter.nf_conntrack_hashsize = ${CT_HASH_SIZE}
+# AUDIT-13 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# 将在 configure_conntrack_hashsize_t6() 函数中通过 /sys/module 设置
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
 net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30

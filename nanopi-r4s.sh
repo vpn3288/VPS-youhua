@@ -267,7 +267,8 @@ net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 # BUG 修复: 动态计算 conntrack_max（R4S 4GB: 4096*32=131072）
 net.netfilter.nf_conntrack_max = ${conntrack_max}
-net.netfilter.nf_conntrack_hashsize = 65536
+# AUDIT-12 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# 将在 configure_conntrack_hashsize_r4s() 函数中通过 /sys/module 设置
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
 net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30

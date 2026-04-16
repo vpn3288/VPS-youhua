@@ -443,7 +443,7 @@ main() {
     echo -e "${CYAN}系统优化内容:${NC}"
     echo "  - TCP 缓冲: $(numfmt --to=iec-i --suffix=B $TCP_BUF_MAX 2>/dev/null || echo "${TCP_BUF_MAX} bytes")（极保守）"
     echo "  - conntrack: ${CT_MAX}（仅够 NAT 基础转发）"
-    echo "  - zram 内存扩展（约 +${zram_size:-512}MB 等效内存）"
+    echo "  - zram 内存扩展（已启用，详见 swapon --show）"
     echo "  - BBR + fq qdisc"
     echo "  - journald: volatile + ${JOURNALD_MAX_USE} 限制"
     echo "  - /tmp: tmpfs ${TMPFS_SIZE}"
