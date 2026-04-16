@@ -131,12 +131,12 @@ detect_system() {
     log_info "系统: ${SYS_OS_ID} ${SYS_OS_VERSION}"
     log_info "架构: ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
 
-    # ── 低内存自动检测 ────────────────────────────────────────────────
+    # ── 低内存自动检测（2GB 以下）───────────────────────────────────
+    IS_LOW_MEMORY=false
     if [[ ${SYS_MEM_MB:-0} -gt 0 ]] && [[ ${SYS_MEM_MB} -lt 2048 ]]; then
-        export IS_LOW_MEMORY="true"
+        IS_LOW_MEMORY=true
+        export IS_LOW_MEMORY
         log_info "检测到低内存（${SYS_MEM_MB}MB），已启用低资源优化模式"
-    else
-        export IS_LOW_MEMORY="false"
     fi
     [[ "$SYS_IS_ARMBIAN" == "true" ]] && log_info "Armbian 检测通过"
 }
@@ -649,6 +649,7 @@ configure_swap() {
     local swap_total zram_total=0
     swap_total=$(awk '/Total Swap/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
     # zram 也算 Swap（/proc/meminfo 的 Swap 统计不包含 zram，需手动计算）
+    # disksize 单位是字节，除以 1024 得到 KB
     if [[ -d /sys/block/zram0 ]]; then
         local zram_size
         zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
@@ -699,8 +700,8 @@ configure_limits() {
     local SYS_MEM_MB SYS_MEM_KB
     SYS_MEM_KB=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
     SYS_MEM_MB=$((SYS_MEM_KB / 1024))
-    local IS_LOW_MEM=false
-    [[ "${SYS_MEM_MB:-0}" -gt 0 ]] && [[ "${SYS_MEM_MB}" -lt 1024 ]] && IS_LOW_MEM=true
+    IS_LOW_MEMORY=false
+    [[ "${SYS_MEM_MB:-0}" -gt 0 ]] && [[ "${SYS_MEM_MB}" -lt 2048 ]] && IS_LOW_MEMORY=true
 
     # ── 句柄数动态配置（BUG#2: RAM<=1024MB → 限制在 65535 防止内核崩溃）────────
     local NOFILE_VAL NPROC_VAL
@@ -743,7 +744,7 @@ EOF
     systemctl daemon-reload 2>/dev/null || true
 
     # ── BUG#1: RAM<=1024MB 自动创建 1GB Swap（防止 GCP/1C1G OOM）──────────────
-    if [[ "${IS_LOW_MEM}" == "true" ]]; then
+    if [[ "${IS_LOW_MEMORY}" == "true" ]]; then
         configure_swap
     fi
 

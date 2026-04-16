@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.1 R61
+# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.2 R64
 # 硬件: Google Cloud e2-micro, 1vCPU(共享) 1GB RAM, 30GB SSD
 # 特点: GCP 共享 CPU 特化优化（burstable CPU + Intel + VPC 网络）
 #       GCP Always Free 机型永久免费（1vCPU 1GB，非 ARM）
@@ -464,7 +464,7 @@ main() {
     configure_limits
 
     # BUG#8: 低内存极限清理
-    [[ "${IS_LOW_MEM}" == "true" ]] && configure_lowmem_purge
+    [[ "${IS_LOW_MEMORY}" == "true" ]] && configure_lowmem_purge
     configure_fstab
     configure_journald
     configure_dns
@@ -485,7 +485,7 @@ main() {
         log_info "纯优化模式，跳过软件安装"
         local did_install=false
     else
-        install_build_deps
+        [[ "${INSTALL_DEPS}" == "true" ]] && install_build_deps
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
         local did_install=true

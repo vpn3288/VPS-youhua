@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# 通用 1核 1G VPS 极简优化安装脚本 v3.1 R61
+# 通用 1核 1G VPS 极简优化安装脚本 v3.2 R64
 # 硬件: 任意 1核 1GB x86_64 VPS（最低配套餐）
 # 特点: 极简资源占用优化（适用于 1GB 及以下超小内存 VPS）
 #       去除所有重资源功能（fail2ban / unattended-upgrades / zram 替代 swap）
@@ -293,7 +293,7 @@ main() {
     configure_limits
 
     # BUG#8: 低内存极限清理
-    [[ "${IS_LOW_MEM}" == "true" ]] && configure_lowmem_purge
+    [[ "${IS_LOW_MEMORY}" == "true" ]] && configure_lowmem_purge
     configure_fstab
     configure_journald
     configure_dns
@@ -312,7 +312,7 @@ main() {
         log_info "纯优化模式，跳过软件安装"
         local did_install=false
     else
-        install_build_deps
+        [[ "${INSTALL_DEPS}" == "true" ]] && install_build_deps
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
         local did_install=true

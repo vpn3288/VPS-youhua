@@ -29,22 +29,41 @@ detect_platform() {
     local board_info
     board_info=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\0' | xargs 2>/dev/null || echo "")
 
-    if [[ "$board_info" == *"NanoPi R4S"* ]] || [[ "$board_info" == *"R4S"* ]]; then
+    # GCP 检测（优先级高：通过元数据端点）
+    if curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" \
+       http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+        echo "google-cloud-e2"
+    elif [[ "$board_info" == *"NanoPi R4S"* ]] || [[ "$board_info" == *"R4S"* ]]; then
         echo "nanopi-r4s"
     elif [[ "$board_info" == *"NanoPC T6"* ]] || [[ "$board_info" == *"T6"* ]] && [[ "$board_info" == *"3588"* ]]; then
         echo "nanopi-t6"
     elif [[ "$cpu_info" == *"Ampere"* ]]; then
-        if curl -s --connect-timeout 2 169.254.169.254 >/dev/null 2>&1; then
-            echo "oracle-arm"
+        # Oracle Cloud 检测（通过元数据端点）
+        if curl -s --connect-timeout 3 -o /dev/null http://169.254.0.23/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+            # Oracle 1C4G vs 2C16G：通过内存判断
+            local mem_kb
+            mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+            local mem_mb=$((mem_kb / 1024))
+            if [[ "$mem_mb" -lt 8192 ]]; then
+                echo "oracle-1c4g"
+            else
+                echo "oracle-arm"
+            fi
         else
             echo "generic-arm"
         fi
     elif grep -qi "n5105\|n5095\|jasper lake" /proc/cpuinfo 2>/dev/null; then
         echo "n5105"
     elif [[ -f /etc/oracle-auto-detect ]] || hostnamectl 2>/dev/null | grep -qi "oracle"; then
-        echo "oracle-arm"
+        local mem_kb
+        mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+        local mem_mb=$((mem_kb / 1024))
+        if [[ "$mem_mb" -lt 8192 ]]; then
+            echo "oracle-1c4g"
+        else
+            echo "oracle-arm"
+        fi
     elif grep -qi "rockchip\|rk3399" /proc/cpuinfo 2>/dev/null && [[ -d /sys/class/net/eth0 ]]; then
-        # Fallback: RK3399 chip with eth0 interface (NanoPi R4S detected by CPU)
         echo "nanopi-r4s"
     else
         echo "generic-x86"
@@ -407,6 +426,14 @@ check_sysctl_memory() {
     fi
     if [[ "$zram_log_dev" == *zram* ]]; then
         echo -e "    ${GREEN}✓${RESET} armbian-ramlog /var/log在zram中 (零TF卡写入)"
+        # BUG#42 Fix: 检查 armbian-ramlog SIZE 是否合理（应为 128M 或以上）
+        local ramlog_size
+        ramlog_size=$(grep -oP '(?<=^SIZE=).+' /etc/default/armbian-ramlog 2>/dev/null | tr -d '"' || echo "")
+        if [[ -n "$ramlog_size" ]]; then
+            log_pair "armbian-ramlog SIZE" "$ramlog_size"
+        else
+            echo -e "    ${YELLOW}⚠ armbian-ramlog SIZE 未配置（建议 ≥128M）${RESET}"
+        fi
     fi
     if swapon --show 2>/dev/null | grep -qE "^/swapfile|^/swap\.img"; then
         echo -e "    ${RED}⚠ 物理swap文件已启用 (会写TF卡, 必须禁用!)${RESET}"
