@@ -95,7 +95,7 @@ configure_tf_card_protection() {
     # ext4 挂载参数（减少随机写入）
     if grep -q "^UUID=" /etc/fstab 2>/dev/null; then
         # 追加 noatime,nodiratime,commit=600 到 root 条目
-        sed -i '/^UUID=.* \/ .* ext4/s/ext4$/ext4,noatime,nodiratime,commit=600/' /etc/fstab
+        sed -i '/^UUID=.*\/.*ext4/s/ext4[^[:space:]]*/ext4,noatime,nodiratime,commit=600/' /etc/fstab
     fi
 
     log_info "TF 卡 ext4 优化完成"

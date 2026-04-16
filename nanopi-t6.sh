@@ -171,8 +171,8 @@ net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
-local ct_max=$(( SYS_MEM_MB * 32 ))
-net.netfilter.nf_conntrack_max = ${ct_max}
+conntrack_max=$(( SYS_MEM_MB * 32 ))
+net.netfilter.nf_conntrack_max = ${conntrack_max}
 net.netfilter.nf_conntrack_hashsize = ${CT_HASH_SIZE}
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
