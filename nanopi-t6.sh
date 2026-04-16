@@ -300,7 +300,15 @@ optimize_io_scheduler() {
 
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    root_dev=$(basename "$root_dev" 2>/dev/null)
+    
+    # 去除分区号，获取块设备名称
+    # /dev/mmcblk0p1 -> mmcblk0, /dev/sda1 -> sda, /dev/nvme0n1p1 -> nvme0n1
+    root_dev=$(lsblk -no pkname "$root_dev" 2>/dev/null || echo "")
+    
+    if [[ -z "$root_dev" ]]; then
+        log_warn "无法检测根设备，跳过 I/O Scheduler 配置"
+        return 0
+    fi
 
     if [[ "$root_dev" == mmcblk* ]]; then
         # eMMC 或 TF 卡：none
