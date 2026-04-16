@@ -161,7 +161,7 @@ net.core.rmem_max = ${TCP_BUF_MAX}
 net.core.wmem_max = ${TCP_BUF_MAX}
 net.ipv4.tcp_rmem = 4096 262144 ${TCP_BUF_MAX}
 net.ipv4.tcp_wmem = 4096 262144 ${TCP_BUF_MAX}
-net.ipv4.tcp_mem = ${TCP_BUF_MAX} ${TCP_BUF_MAX} ${TCP_BUF_MAX}
+net.ipv4.tcp_mem = 4096 87380 262144
 
 # ── 本地端口范围 ─────────────────────────────────────────────────────────────
 net.ipv4.ip_local_port_range = 10240 65535
@@ -434,6 +434,19 @@ uninstall_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 软件安装桩函数（oracle-1c4g 调用 install_docker / install_nodejs）
+# 这些函数在 source common-optimize.sh 时若未定义，则在此提供空实现
+# ─────────────────────────────────────────────────────────────────────────────
+install_docker() {
+    log_warn "Docker 安装未对此平台实现，跳过"
+    return 0
+}
+install_nodejs() {
+    log_warn "Node.js 安装未对此平台实现，跳过"
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
@@ -451,7 +464,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 1核4G 专用优化安装脚本 v${SCRIPT_VERSION} R61${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 1核4G 专用优化安装脚本 v${SCRIPT_VERSION} R64${NC}"
     echo "========================================================================"
     echo ""
 
@@ -539,14 +552,8 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
-        log_info "纯优化模式，跳过 Docker / Node.js 安装"
-        local did_install=false
-    else
-        [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
-        [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
-    fi
+    # Proxy-only 平台不安装 Docker / Node.js
+    log_info "代理节点专用模式，跳过 Docker / Node.js 安装"
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
@@ -555,7 +562,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM 1核4G v${SCRIPT_VERSION} R61 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM 1核4G v${SCRIPT_VERSION} R64 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

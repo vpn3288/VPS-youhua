@@ -282,10 +282,16 @@ install_docker() {
     "https://docker.xuanyuan.me"
   ],
   "log-driver": "json-file",
-  "log-opts": {"max-size": "10m", "max-file": "3"}
+    "log-opts": {"max-size": "10m", "max-file": "3"}
 }
 EOF
     systemctl restart docker 2>/dev/null || true
+    # Docker 健康检查
+    if docker ps >/dev/null 2>&1; then
+        log_info "Docker 运行正常: $(docker ps -q | wc -l) 个容器在运行"
+    else
+        log_warn "Docker 守护进程可能未正常启动"
+    fi
     log_info "Docker 安装完成"
 }
 
@@ -293,7 +299,7 @@ EOF
 # Node.js
 # ─────────────────────────────────────────────────────────────────────────────
 install_nodejs() {
-    [[ "$INSTALL_NODEJS" != "true" ]] && return 0
+    [[ "${INSTALL_NODEJS:-false}" != "true" ]] && return 0
     log_step "安装 Node.js..."
 
     if command -v node &>/dev/null; then

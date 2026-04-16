@@ -95,7 +95,7 @@ configure_tf_card_protection() {
     # ext4 挂载参数（减少随机写入）
     if grep -q "^UUID=" /etc/fstab 2>/dev/null; then
         # 追加 noatime,nodiratime,commit=600 到 root 条目
-        sed -i 's/\(UUID=.*\s\/\s ext4\s*\)/\1noatime,nodiratime,commit=600/' /etc/fstab
+        sed -i '/^UUID=.* \/ .* ext4/s/ext4$/ext4,noatime,nodiratime,commit=600/' /etc/fstab
     fi
 
     log_info "TF 卡 ext4 优化完成"
@@ -181,6 +181,7 @@ optimize_memory_r4s() {
     # ── Armbian ramlog：/var/log tmpfs（Armbian 官方推荐，减少 TF 卡写入）─
     if ! mount | grep -q "tmpfs on /var/log"; then
         mkdir -p /etc/systemd/systemdisable
+        if [ ! -d /var/log/journal ]; then mkdir -p /var/log/journal; fi
         systemctl mask rsyslog 2>/dev/null || true
         # 将 /var/log 改为 tmpfs（重启后生效）
         if ! grep -q "tmpfs /var/log" /etc/fstab 2>/dev/null; then
@@ -211,6 +212,7 @@ optimize_memory_r4s() {
 # R4S sysctl（TF 卡保护 + 网络优化）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_sysctl_r4s() {
+    local conntrack_max=$(( SYS_MEM_MB * 32 ))
     log_step "配置 sysctl (NanoPi R4S)..."
 
     backup_file "$SYSCTL_FILE"
@@ -244,7 +246,7 @@ net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 # BUG 修复: 动态计算 conntrack_max（R4S 4GB: 4096*32=131072）
-net.netfilter.nf_conntrack_max = $(( SYS_MEM_MB * 32 ))
+net.netfilter.nf_conntrack_max = ${conntrack_max}
 net.netfilter.nf_conntrack_hashsize = 65536
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
@@ -422,6 +424,12 @@ install_docker() {
 }
 EOF
     systemctl restart docker 2>/dev/null || true
+    # Docker 健康检查
+    if docker ps >/dev/null 2>&1; then
+        log_info "Docker 运行正常: $(docker ps -q | wc -l) 个容器在运行"
+    else
+        log_warn "Docker 守护进程可能未正常启动"
+    fi
     log_info "Docker 安装完成"
 }
 
@@ -429,6 +437,7 @@ EOF
 # Node.js（R4S）
 # ─────────────────────────────────────────────────────────────────────────────
 install_nodejs() {
+    [[ "${INSTALL_NODEJS:-false}" != "true" ]] && return 0
     log_step "安装 Node.js..."
 
     if command -v node &>/dev/null; then

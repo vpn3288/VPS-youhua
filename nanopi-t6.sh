@@ -171,8 +171,8 @@ net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
-# BUG 修复: 动态计算 conntrack_max（不再硬编码）
-net.netfilter.nf_conntrack_max = $(( SYS_MEM_MB * 32 ))
+local ct_max=$(( SYS_MEM_MB * 32 ))
+net.netfilter.nf_conntrack_max = ${ct_max}
 net.netfilter.nf_conntrack_hashsize = ${CT_HASH_SIZE}
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
@@ -354,6 +354,12 @@ install_docker() {
 }
 EOF
     systemctl restart docker 2>/dev/null || true
+    # Docker 健康检查
+    if docker ps >/dev/null 2>&1; then
+        log_info "Docker 运行正常: $(docker ps -q | wc -l) 个容器在运行"
+    else
+        log_warn "Docker 守护进程可能未正常启动"
+    fi
     log_info "Docker 安装完成"
 }
 
@@ -361,7 +367,7 @@ EOF
 # Node.js
 # ─────────────────────────────────────────────────────────────────────────────
 install_nodejs() {
-    [[ "$INSTALL_NODEJS" != "true" ]] && return 0
+    [[ "${INSTALL_NODEJS:-false}" != "true" ]] && return 0
     log_step "安装 Node.js..."
 
     if command -v node &>/dev/null; then

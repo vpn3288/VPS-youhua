@@ -300,6 +300,17 @@ uninstall_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 软件安装桩函数（generic-1c1g 调用 install_docker / install_nodejs）
+install_docker() {
+    log_warn "Docker 安装未对此平台实现，跳过"
+    return 0
+}
+install_nodejs() {
+    log_warn "Node.js 安装未对此平台实现，跳过"
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
@@ -317,7 +328,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  通用 1核 1G VPS 极简优化脚本 v${SCRIPT_VERSION} R61${NC}"
+    echo -e "${GREEN}  通用 1核 1G VPS 极简优化脚本 v${SCRIPT_VERSION} R64${NC}"
     echo "========================================================================"
     echo ""
 
@@ -376,14 +387,8 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
-        log_info "纯优化模式，跳过 Docker / Node.js 安装"
-        local did_install=false
-    else
-        [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
-        [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
-    fi
+    # Proxy-only 平台不安装 Docker / Node.js
+    log_info "代理节点专用模式，跳过 Docker / Node.js 安装"
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
@@ -392,7 +397,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ 通用 1核 1G VPS v${SCRIPT_VERSION} R61 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ 通用 1核 1G VPS v${SCRIPT_VERSION} R64 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

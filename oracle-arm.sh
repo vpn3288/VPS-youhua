@@ -144,7 +144,6 @@ net.ipv4.tcp_keepalive_probes = 3
 # ── Oracle Cloud 连接追踪 ────────────────────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
-net.ipv4.netfilter.ip_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
 net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30
@@ -303,6 +302,12 @@ install_docker() {
 }
 EOF
     systemctl restart docker 2>/dev/null || true
+    # Docker 健康检查
+    if docker ps >/dev/null 2>&1; then
+        log_info "Docker 运行正常: $(docker ps -q | wc -l) 个容器在运行"
+    else
+        log_warn "Docker 守护进程可能未正常启动"
+    fi
     log_info "Docker 安装完成"
 }
 
@@ -310,7 +315,7 @@ EOF
 # Node.js
 # ─────────────────────────────────────────────────────────────────────────────
 install_nodejs() {
-    [[ "$INSTALL_NODEJS" != "true" ]] && return 0
+    [[ "${INSTALL_NODEJS:-false}" != "true" ]] && return 0
     log_step "安装 Node.js..."
 
     if command -v node &>/dev/null; then
