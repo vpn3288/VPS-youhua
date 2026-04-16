@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# N5105/N5095 小主机专用优化安装脚本 v3.1 R55
+# N5105/N5095 小主机专用优化安装脚本 v3.1 R56
 # 硬件: Intel N5105/N5095 x86_64, 有风扇, SSD
 # 特点: x86 高性能优化，有风扇所以不需要保守降频
 # =============================================================================
@@ -401,6 +401,13 @@ uninstall_all() {
     rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
 
+    # 停止并卸载 unattended-upgrades（如果安装了的话）
+    if command -v unattended-upgrades &>/dev/null; then
+        systemctl stop unattended-upgrades 2>/dev/null || true
+        systemctl disable unattended-upgrades 2>/dev/null || true
+        apt-get remove --purge -y unattended-upgrades >> /dev/null 2>&1 || true
+    fi
+
     # 停止并卸载 fail2ban（如果安装了的话）
     if command -v fail2ban-server &>/dev/null; then
         systemctl stop fail2ban 2>/dev/null || true
@@ -442,7 +449,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION} R55${NC}"
+    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION} R56${NC}"
     echo "========================================================================"
     echo ""
 
@@ -504,7 +511,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} R55 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} R56 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AIagent 环境优化脚本（统一入口） v3.1
+# AIagent 环境优化脚本（统一入口） v3.2
 # 支持平台: NanoPi R4S, NanoPC T6, Oracle ARM, N5105, 通用 x86 VPS
 # =============================================================================
 
@@ -17,12 +17,12 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="1a6a4a38e0829721b000e307f3d9b52512ea6750fc653befd9f4b52ffdb89daa"
-    ["nanopi-t6"]="fd71231b733390ba85ddae58d68c6d746ac5e8a17c86446f6d30729dbdc52fcd"
-    ["oracle-arm"]="fd36ef253eaeebeaa6f73ac13ae85e678ee0543531b1f7fb9982c166ee6ce1ec"
-    ["n5105"]="4995fcbce76c1c06500f19b8442fa6c995353b299981289ff3395fd8642a22e8"
-    ["generic-x86"]="f3c43faf281ecd48896127c077cc8ba1fa9073affb2e2f69a57d0d5198076741"
-    ["verify-v3.1"]="4eedf8d0cc1b9d31d3333a4ccceeafc85c8d425c65391df2881f4f6141c94b90"
+    ["nanopi-r4s"]="794c8c9857a179574f3de426f516044356526ba1f98d2ed2c2a1f2b4d8645aa2"
+    ["nanopi-t6"]="9f6ccfef5c29cca68a86feb0ec9dd6fafc95ed347feb02241498dbf426370478"
+    ["oracle-arm"]="05713890f6dc24f3f5f7bf1d0be20b6ec85edc1d4d0cf976935579ad28d531b5"
+    ["n5105"]="221fa081fab22b657286fee36c2920cc55879ac2938371536c7d8ac299438853"
+    ["generic-x86"]="15e4a7ee3c369e41a1dccef93d796760d0a4626925b4ca42857d234016e24807"
+    ["verify-v3.1"]="884a4e294436ac8e429cabfd31a0694b0222ad7e8f7e78c1c492ec497b7d77a1"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────

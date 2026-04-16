@@ -329,10 +329,12 @@ EOF
     write_mirror "$mirror_mode"
 
     # 如果选定源不可用，自动 fallback 到官方
-    # 从 sources.list 提取镜像地址（去掉协议前缀，避免 https:// 被错误拼接为 http://https://）
+    # 从 sources.list 提取 URL 时去掉协议前缀（支持 http/https 混合）
     local mirror_url
-    mirror_url=$(grep -m1 "^deb " "$sources_list" | awk '{print $2}' | sed 's|^https\?://||')
-    if ! curl --connect-timeout 5 -sf "http://${mirror_url}" > /dev/null 2>&1; then
+    mirror_url=$(grep -m1 "^deb " "$sources_list" | awk '{print $2}')
+    mirror_url="${mirror_url#http://}"
+    mirror_url="${mirror_url#https://}"
+    if ! curl --connect-timeout 5 -sf "http://${mirror_url}/" > /dev/null 2>&1; then
         log_warn "镜像 ${mirror_mode} 不可用，fallback 到官方源..."
         write_mirror official
     fi

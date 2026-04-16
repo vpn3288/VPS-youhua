@@ -228,11 +228,19 @@ check_locale_chain() {
 check_sysctl_network() {
     log_section "2. sysctl 网络参数"
 
-    local sysctl_file="${1:-/etc/sysctl.d/99-openclaw.conf}"
-    if [[ -f "$sysctl_file" ]]; then
-        echo -e "  ${GREEN}✓${RESET} 配置文件 ${DIM}${sysctl_file}${RESET} 存在 ($(wc -l < "$sysctl_file") 行)"
+    # 自动检测实际存在的 sysctl 配置文件
+    local sysctl_file=""
+    for f in /etc/sysctl.d/99-vps-youhua-*.conf \
+             /etc/sysctl.d/99-openclaw.conf \
+             /etc/sysctl.d/99-tf-optimize.conf; do
+        [[ -f "$f" ]] && { sysctl_file="$f"; break; }
+    done
+    sysctl_file="${sysctl_file:-/etc/sysctl.d/99-vps-youhua-*.conf}"
+
+    if [[ -n "$sysctl_file" && "$sysctl_file" != *'*'* ]]; then
+        echo -e "  ${GREEN}✓${RESET} 配置文件 ${DIM}${sysctl_file}${RESET} 存在 ($(wc -l < "$sysctl_file" 2>/dev/null || echo 0) 行)"
     else
-        echo -e "  ${RED}✗${RESET} 配置文件 ${DIM}${sysctl_file}${RESET} 不存在"
+        echo -e "  ${YELLOW}⚠${RESET} 未检测到 99-vps-youhua-*.conf 配置文件"
     fi
 
     echo ""

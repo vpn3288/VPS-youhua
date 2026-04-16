@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.1 R55
+# Oracle Cloud ARM 专用优化安装脚本 v3.1 R56
 # 硬件: Ampere Altra, 2核16GB, 100GB 云盘
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
@@ -431,6 +431,13 @@ uninstall_all() {
     rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
 
+    # 停止并卸载 unattended-upgrades（如果安装了的话）
+    if command -v unattended-upgrades &>/dev/null; then
+        systemctl stop unattended-upgrades 2>/dev/null || true
+        systemctl disable unattended-upgrades 2>/dev/null || true
+        apt-get remove --purge -y unattended-upgrades >> /dev/null 2>&1 || true
+    fi
+
     # 停止并卸载 fail2ban（如果安装了的话）
     if command -v fail2ban-server &>/dev/null; then
         systemctl stop fail2ban 2>/dev/null || true
@@ -472,7 +479,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R55${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R56${NC}"
     echo "========================================================================"
     echo ""
 
@@ -535,7 +542,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R55 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R56 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

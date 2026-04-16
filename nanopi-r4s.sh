@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.1 R55
+# NanoPi R4S 专用优化安装脚本 v3.1 R56
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -188,9 +188,10 @@ optimize_network_r4s() {
         local name; name=$(basename "$iface")
         ip link set "$name" txqueuelen 1000 2>/dev/null || true
         # RPS（RK3399 四核，CPU mask = 0xF）
+        local r4s_mask="F"
         for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
             [[ -f "$rps_file" ]] || continue
-            printf "%s" "F" > "$rps_file" 2>/dev/null || true
+            printf "%s" "$r4s_mask" > "$rps_file" 2>/dev/null || true
         done
         log_info "网卡 $name 已优化"
     done
@@ -461,6 +462,13 @@ uninstall_all() {
     rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
 
+    # 停止并卸载 unattended-upgrades（如果安装了的话）
+    if command -v unattended-upgrades &>/dev/null; then
+        systemctl stop unattended-upgrades 2>/dev/null || true
+        systemctl disable unattended-upgrades 2>/dev/null || true
+        apt-get remove --purge -y unattended-upgrades >> /dev/null 2>&1 || true
+    fi
+
     # 停止并卸载 fail2ban（如果安装了的话）
     if command -v fail2ban-server &>/dev/null; then
         systemctl stop fail2ban 2>/dev/null || true
@@ -503,7 +511,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R55${NC}"
+    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R56${NC}"
     echo "========================================================================"
     echo ""
 
@@ -568,7 +576,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R55 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R56 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
