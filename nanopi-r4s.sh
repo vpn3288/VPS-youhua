@@ -36,6 +36,17 @@ readonly NETDEV_BACKLOG=65535
 readonly SOMAXCONN=1024
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 加载通用函数库（必须在所有函数定义之前，让平台专属函数正确 override）
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ -f "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh" ]]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh"
+elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
+    source /tmp/vps-youhua-tmp/common-optimize.sh
+elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
+    source /tmp/vps-youhua/common-optimize.sh
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TF 卡检测（R4S 专项）
 # ─────────────────────────────────────────────────────────────────────────────
 detect_storage_type() {
@@ -176,10 +187,10 @@ optimize_network_r4s() {
         [[ -d "$iface" ]] || continue
         local name; name=$(basename "$iface")
         ip link set "$name" txqueuelen 1000 2>/dev/null || true
-        # RPS（RK3399 双核，CPU mask = 0x3）
+        # RPS（RK3399 四核，CPU mask = 0xF）
         for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
             [[ -f "$rps_file" ]] || continue
-            printf "%s" "3" > "$rps_file" 2>/dev/null || true
+            printf "%s" "F" > "$rps_file" 2>/dev/null || true
         done
         log_info "网卡 $name 已优化"
     done
@@ -433,8 +444,9 @@ uninstall_all() {
     # 停止服务
     systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
 
-    # 清理配置文件
+    # 清理所有配置文件
     rm -f /etc/sysctl.d/99-vps-youhua-r4s.conf
+    rm -f /etc/sysctl.d/99-tf-optimize.conf 2>/dev/null || true
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
     rm -f /etc/security/limits.d/99-vps-youhua.conf
     rm -f /etc/systemd/system.conf.d/99-memory-accounting.conf
@@ -445,6 +457,24 @@ uninstall_all() {
     rm -f /etc/logrotate.d/vps-youhua
     rm -f /etc/apt/apt.conf.d/99-noninteractive
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
+    rm -f /etc/apt/apt.conf.d/99-vps-youhua-unattended
+    rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
+    rm -f /etc/default/cpufrequtils 2>/dev/null || true
+
+    # 停止并卸载 fail2ban（如果安装了的话）
+    if command -v fail2ban-server &>/dev/null; then
+        systemctl stop fail2ban 2>/dev/null || true
+        systemctl disable fail2ban 2>/dev/null || true
+        rm -f /etc/fail2ban/jail.local
+        rm -f /etc/fail2ban/jail.d/*.local 2>/dev/null || true
+        apt-get remove --purge -y fail2ban >> /dev/null 2>&1 || true
+    fi
+
+    # 恢复 sources.list 备份（如果存在）
+    local backup
+    for backup in /etc/apt/sources.list.bak.*; do
+        [[ -f "$backup" ]] && cp "$backup" /etc/apt/sources.list && break
+    done
 
     systemctl daemon-reload
     echo ""
@@ -513,7 +543,7 @@ main() {
     optimize_arm
     optimize_network_r4s
     optimize_oom
-    disable_auto_updates
+    configure_unattended_upgrades
     configure_fail2ban
     optimize_ssh
     configure_cleanup_cron
@@ -570,20 +600,6 @@ main() {
 
     return 0
 }
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 加载通用函数库（必须在所有函数定义之后，main 调用之前）
-# ─────────────────────────────────────────────────────────────────────────────
-# 注意：platform-specific 函数（同名）会 override common-optimize.sh 中的同名函数
-# 使用 `source` 而非 `set -euo pipefail`，因为已在脚本开头设置
-# shellcheck source=/dev/null
-if [[ -f "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh" ]]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh"
-elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
-    source /tmp/vps-youhua-tmp/common-optimize.sh
-elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
-    source /tmp/vps-youhua/common-optimize.sh
-fi
 
 trap 'log_error "脚本异常退出 (行: ${LINENO})"; exit 1' ERR
 trap 'log_warn "被中断"; exit 130' INT TERM

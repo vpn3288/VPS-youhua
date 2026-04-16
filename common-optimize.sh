@@ -329,8 +329,10 @@ EOF
     write_mirror "$mirror_mode"
 
     # 如果选定源不可用，自动 fallback 到官方
-    local test_url="http://$(grep -m1 "^deb " "$sources_list" | awk '{print $2}')/"
-    if ! curl --connect-timeout 5 -sf "$test_url" > /dev/null 2>&1; then
+    # 从 sources.list 提取镜像地址（去掉协议前缀，避免 https:// 被错误拼接为 http://https://）
+    local mirror_url
+    mirror_url=$(grep -m1 "^deb " "$sources_list" | awk '{print $2}' | sed 's|^https\?://||')
+    if ! curl --connect-timeout 5 -sf "http://${mirror_url}" > /dev/null 2>&1; then
         log_warn "镜像 ${mirror_mode} 不可用，fallback 到官方源..."
         write_mirror official
     fi
@@ -353,11 +355,16 @@ EOF
 clean_system() {
     log_step "清理系统..."
 
-    # 关闭常见干扰服务
+    # 关闭常见干扰服务（仅当服务存在且处于激活状态时才停止）
     local stop_svcs=(snapd apache2 nginx postfix exim4 ufw)
     for svc in "${stop_svcs[@]}"; do
-        systemctl stop "$svc" 2>/dev/null || true
-        systemctl disable "$svc" 2>/dev/null || true
+        if systemctl list-unit-files "$svc.service" 2>/dev/null | grep -q "$svc.service"; then
+            systemctl is-active --quiet "$svc" 2>/dev/null && {
+                log_info "停止干扰服务: $svc"
+                systemctl stop "$svc" 2>/dev/null || true
+            }
+            systemctl disable "$svc" 2>/dev/null || true
+        fi
     done
 
     # Oracle Cloud 专属清理（节省资源 + 减少磁盘写入）
@@ -738,20 +745,20 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 禁用自动更新（避免生产环境被升级打断）
+# 自动安全更新（CONFIGURE_UNATTENDED 控制开关）
 # ─────────────────────────────────────────────────────────────────────────────
-disable_auto_updates() {
-    log_step "配置自动更新策略..."
+configure_unattended_upgrades() {
+    log_step "配置自动更新..."
 
-    # CONFIGURE_UNATTENDED=true → 安装并启用 unattended-upgrades
-    # CONFIGURE_UNATTENDED=false（默认）→ 禁用自动更新
-    if [[ "${CONFIGURE_UNATTENDED:-false}" == "true" ]]; then
+    if [[ "${CONFIGURE_UNATTENDED:-true}" == "true" ]]; then
+        # 启用自动安全更新
         if ! command -v unattended-upgrades &>/dev/null; then
             apt-get install -y unattended-upgrades >> "$APT_LOG" 2>&1 || {
                 log_warn "unattended-upgrades 安装失败"
                 return 0
             }
         fi
+        mkdir -p /etc/apt/apt.conf.d
         cat > /etc/apt/apt.conf.d/99-vps-youhua-unattended <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Download-Upgradeable-Packages "1";
@@ -759,10 +766,12 @@ APT::Periodic::AutocleanInterval "7";
 Unattended-Upgrade::Automatic-Reboot "false";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 EOF
+        systemctl enable --now unattended-upgrades 2>/dev/null || true
         log_info "自动安全更新已启用（每日检查，不自动重启）"
     else
         # 禁用自动更新（生产环境优先稳定）
         if command -v unattended-upgrades &>/dev/null; then
+            mkdir -p /etc/apt/apt.conf.d
             cat > /etc/apt/apt.conf.d/99-vps-youhua-no-unattended <<'EOF'
 APT::Periodic::Enable "0";
 Unattended-Upgrade::Automatic-Reboot "false";
@@ -771,9 +780,6 @@ EOF
         log_info "自动更新已禁用（防止生产环境被升级打断）"
     fi
 }
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SSH 加固
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_ssh() {
     log_step "加固 SSH..."
@@ -847,33 +853,6 @@ optimize_oracle_cloud() {
     done
 
     log_info "Oracle Cloud 特定优化完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 自动安全更新（可选，长期运行推荐）
-# ─────────────────────────────────────────────────────────────────────────────
-configure_unattended_upgrades() {
-    [[ "${CONFIGURE_UNATTENDED:-false}" != "true" ]] && return 0
-    log_step "配置自动安全更新..."
-
-    if ! command -v unattended-upgrades &>/dev/null; then
-        apt-get install -y unattended-upgrades >> "$APT_LOG" 2>&1 || {
-            log_warn "unattended-upgrades 安装失败"
-            return 0
-        }
-    fi
-
-    mkdir -p /etc/apt/apt.conf.d
-    cat > /etc/apt/apt.conf.d/99-vps-youhua-unattended <<'EOF'
-APT::Periodic::Update-Package-Lists "1";
-APT::Periodic::Download-Upgradeable-Packages "1";
-APT::Periodic::AutocleanInterval "7";
-Unattended-Upgrade::Automatic-Reboot "false";
-Unattended-Upgrade::Remove-Unused-Dependencies "true";
-Unattended-Upgrade::Automatic-Reboot-Time "03:00";
-EOF
-    systemctl enable --now unattended-upgrades 2>/dev/null || true
-    log_info "自动安全更新已启用"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

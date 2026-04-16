@@ -27,6 +27,17 @@ readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="1024M"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 加载通用函数库（必须在所有函数定义之前，让平台专属函数正确 override）
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ -f "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh" ]]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh"
+elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
+    source /tmp/vps-youhua-tmp/common-optimize.sh
+elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
+    source /tmp/vps-youhua/common-optimize.sh
+fi
+
 # N5105 内存分级
 _detect_n5105_memory_profile() {
     if [[ $SYS_MEM_MB -ge 16384 ]]; then
@@ -374,7 +385,7 @@ uninstall_all() {
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
     systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
-
+    # 清理所有配置文件
     rm -f /etc/sysctl.d/99-vps-youhua-n5105.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
     rm -f /etc/security/limits.d/99-vps-youhua.conf
@@ -386,6 +397,24 @@ uninstall_all() {
     rm -f /etc/logrotate.d/vps-youhua
     rm -f /etc/apt/apt.conf.d/99-noninteractive
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
+    rm -f /etc/apt/apt.conf.d/99-vps-youhua-unattended
+    rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
+    rm -f /etc/default/cpufrequtils 2>/dev/null || true
+
+    # 停止并卸载 fail2ban（如果安装了的话）
+    if command -v fail2ban-server &>/dev/null; then
+        systemctl stop fail2ban 2>/dev/null || true
+        systemctl disable fail2ban 2>/dev/null || true
+        rm -f /etc/fail2ban/jail.local
+        rm -f /etc/fail2ban/jail.d/*.local 2>/dev/null || true
+        apt-get remove --purge -y fail2ban >> /dev/null 2>&1 || true
+    fi
+
+    # 恢复 sources.list 备份（如果存在）
+    local backup
+    for backup in /etc/apt/sources.list.bak.*; do
+        [[ -f "$backup" ]] && cp "$backup" /etc/apt/sources.list && break
+    done
 
     systemctl daemon-reload 2>/dev/null || true
 
@@ -451,7 +480,7 @@ main() {
     configure_memory_accounting
     optimize_io_scheduler
     optimize_oom
-    disable_auto_updates
+    configure_unattended_upgrades
     configure_fail2ban
     optimize_ssh
     configure_cleanup_cron
@@ -504,15 +533,6 @@ main() {
 
     return 0
 }
-
-# 加载通用函数库
-if [[ -f "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh" ]]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh"
-elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
-    source /tmp/vps-youhua-tmp/common-optimize.sh
-elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
-    source /tmp/vps-youhua/common-optimize.sh
-fi
 
 trap 'log_error "脚本异常退出 (行: ${LINENO})"; exit 1' ERR
 trap 'log_warn "被中断"; exit 130' INT TERM

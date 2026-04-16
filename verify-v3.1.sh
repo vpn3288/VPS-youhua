@@ -650,12 +650,15 @@ check_vs_targets() {
     echo -e "  ${BOLD}[全平台 IPv6 安全]${RESET}"
     check_eq "net.ipv6.conf.all.accept_redirects"       "0"  "IPv6接受重定向"
     check_eq "net.ipv6.conf.default.accept_redirects" "0"  "IPv6接受重定向默认"
+    check_eq "net.ipv6.conf.all.accept_source_route"    "0"  "IPv6源路由"
+    check_eq "net.ipv6.conf.default.accept_source_route" "0" "IPv6源路由默认"
+    check_eq "net.ipv6.conf.all.accept_ra"            "0"  "IPv6 RA通告"
+    check_eq "net.ipv6.conf.default.accept_ra"        "0"  "IPv6 RA通告默认"
 
     echo ""
-    echo -e "  ${BOLD}[全平台 网关转发]${RESET}"
-    check_eq "net.ipv4.ip_forward"                  "1"  "IPv4转发"
-    check_eq "net.ipv6.conf.all.forwarding"         "1"  "IPv6转发"
-    check_eq "net.ipv6.conf.default.forwarding"     "1"  "IPv6默认转发"
+    echo -e "  ${BOLD}[全平台 网络基础]${RESET}"
+    check_eq "net.core.somaxconn"                      "65535" "监听队列上限"
+    check_eq "net.core.netdev_max_backlog"             "65535" "网卡最大积压"
 
     echo ""
     echo -e "  ${BOLD}[全平台 kernel hardening]${RESET}"
@@ -676,41 +679,35 @@ check_vs_targets() {
     echo ""
     if [[ "$platform" == "nanopi-r4s" ]]; then
         echo -e "  ${BOLD}[nanopi-r4s 专用]${RESET}"
-        check_eq "net.core.netdev_max_backlog"                                 "16384" "网卡队列"
-        check_eq "net.ipv4.tcp_max_syn_backlog"                                "16384" "SYN队列"
+        check_eq "net.core.netdev_max_backlog"                                 "65535" "网卡队列"
         check_eq "vm.dirty_ratio"                                               "8"     "dirty比例(TF卡)"
         check_eq "vm.dirty_background_ratio"                                    "3"     "dirty后台比例"
+        check_eq "vm.dirty_expire_centisecs"                                   "30000" "dirty过期时间(TF卡)"
         check_eq "vm.min_free_kbytes"                                          "65536" "min_free_kbytes(防OOM)"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
     elif [[ "$platform" == "oracle-arm" ]]; then
         echo -e "  ${BOLD}[oracle-arm 专用]${RESET}"
-        check_eq "net.ipv4.ip_forward"                                         "0"     "IPv4转发(单网卡默认关)"
         check_eq "net.core.netdev_max_backlog"                                 "65535" "网卡队列"
-        check_eq "net.ipv4.tcp_max_syn_backlog"                                "65535" "SYN队列"
         check_eq "vm.dirty_ratio"                                               "20"    "dirty比例(云)"
         check_eq "vm.dirty_background_ratio"                                    "10"    "dirty后台比例"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "10"    "TW超时(云)"
     elif [[ "$platform" == "nanopi-t6" ]]; then
         echo -e "  ${BOLD}[nanopi-t6 专用]${RESET}"
-        check_eq "net.core.netdev_max_backlog"                                 "65535" "网卡队列"
-        check_eq "net.ipv4.tcp_max_syn_backlog"                                "65535" "SYN队列"
+        check_eq "net.core.netdev_max_backlog"                                 "131072" "网卡队列(2.5GbE)"
         check_eq "vm.dirty_ratio"                                               "20"    "dirty比例(eMMC)"
         check_eq "vm.dirty_background_ratio"                                    "10"    "dirty后台比例"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
-        check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "10"    "TW超时"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"            "10"    "TW超时"
     elif [[ "$platform" == "n5105" ]]; then
         echo -e "  ${BOLD}[n5105 专用]${RESET}"
         check_eq "net.core.netdev_max_backlog"                                 "65535" "网卡队列"
-        check_eq "net.ipv4.tcp_max_syn_backlog"                                "65535" "SYN队列"
         check_eq "vm.dirty_ratio"                                               "15"    "dirty比例(SSD)"
         check_eq "vm.dirty_background_ratio"                                    "5"     "dirty后台比例"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "15"    "TW超时"
     else
         echo -e "  ${BOLD}[generic-x86 / 通用平台]${RESET}"
-        check_eq "net.core.netdev_max_backlog"                                 "65535" "网卡队列"
-        check_eq "net.ipv4.tcp_max_syn_backlog"                                "65535" "SYN队列"
         check_eq "vm.dirty_ratio"                                               "15"    "dirty比例"
         check_eq "vm.dirty_background_ratio"                                    "5"     "dirty后台比例"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
@@ -805,7 +802,7 @@ remote_check() {
 
         echo ''
         echo '=== IPv6 ==='
-        sysctl net.ipv6.conf.all.forwarding               net.ipv6.conf.all.accept_redirects               net.ipv6.conf.default.accept_redirects 2>/dev/null
+        sysctl net.ipv6.conf.all.accept_redirects net.ipv6.conf.default.accept_redirects net.ipv6.conf.all.accept_source_route net.ipv6.conf.default.accept_source_route net.ipv6.conf.all.accept_ra net.ipv6.conf.default.accept_ra 2>/dev/null
 
         echo ''
         echo '=== 内存/TF卡保护 ==='
