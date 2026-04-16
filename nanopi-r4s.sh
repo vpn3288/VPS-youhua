@@ -325,6 +325,32 @@ optimize_network_r4s() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# R4S conntrack hashsize 配置（通过 /sys/module 设置）
+# AUDIT-15 FIX: 添加缺失的 conntrack hashsize 配置函数
+# ─────────────────────────────────────────────────────────────────────────────
+configure_conntrack_hashsize_r4s() {
+    log_step "配置 conntrack hashsize（R4S）..."
+    
+    # 加载 nf_conntrack 模块
+    modprobe nf_conntrack 2>/dev/null || true
+    
+    # 计算 hashsize（通常为 conntrack_max 的 1/4）
+    local conntrack_max
+    conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "131072")
+    local hashsize=$((conntrack_max / 4))
+    
+    # 通过 /sys/module 设置（只读参数，不能用 sysctl）
+    if [[ -f /sys/module/nf_conntrack/parameters/hashsize ]]; then
+        echo "$hashsize" > /sys/module/nf_conntrack/parameters/hashsize 2>/dev/null || {
+            log_warn "无法设置 nf_conntrack hashsize（可能需要重启）"
+        }
+        log_info "nf_conntrack hashsize 已设置为 $hashsize"
+    else
+        log_warn "nf_conntrack 模块未加载，跳过 hashsize 配置"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # OOM killer 配置
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_oom() {
@@ -778,6 +804,7 @@ main() {
     optimize_io_scheduler
     optimize_arm
     optimize_network_r4s
+    configure_conntrack_hashsize_r4s
     optimize_oom
     configure_unattended_upgrades
     configure_fail2ban

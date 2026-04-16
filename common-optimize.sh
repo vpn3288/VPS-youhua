@@ -731,7 +731,8 @@ configure_fstab() {
     cp -a /etc/fstab /etc/fstab.vps-youhua-bak 2>/dev/null || true
 
     # 遍历所有 ext4/xfs 分区，添加 noatime,nodiratime
-    # 规则: 第4列(fs_freq)保持不变，第5,6列改为 0 或 1
+    # fstab格式: <device> <mount> <type> <options> <dump> <pass>
+    # 规则: 第5列(dump)保持不变，第6列(pass)改为 1(root) 或 2(其他)
     while IFS= read -r line; do
         # 跳过注释和空行
         [[ "$line" =~ ^#.*$ ]] && continue
@@ -765,8 +766,10 @@ configure_fstab() {
 
         # 重建行
         local new_line="${dev} ${mnt} ${fs_type} ${opts} ${dump} ${pass}"
-        # 替换原行
-        sed -i "\|^${dev} |s|^.*$|${new_line}|" /etc/fstab 2>/dev/null || true
+        # 替换原行（转义设备路径中的正则元字符，避免误匹配）
+        local escaped_dev
+        escaped_dev=$(printf '%s' "$dev" | sed 's/[.[\*^$]/\\&/g')
+        sed -i "\|^${escaped_dev} |s|^.*$|${new_line}|" /etc/fstab 2>/dev/null || true
         fstab_changed=true
     done < /etc/fstab
 
