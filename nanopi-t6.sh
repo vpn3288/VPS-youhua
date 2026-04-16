@@ -171,9 +171,10 @@ configure_sysctl_t6() {
 
 # ── T6 内存（16GB 平衡）──────────────────────────────────────────────────────
 vm.swappiness = ${SWAPPINESS}
-vm.min_free_kbytes = ${MIN_FREE_KB}
-vm.vfs_cache_pressure = 50
-vm.dirty_ratio = 15
+    local ct_max=$(( SYS_MEM_MB * 32 ))
+    cat >> "$SYSCTL_FILE" <<EOF
+net.netfilter.nf_conntrack_max = ${ct_max}
+EOF
 vm.dirty_background_ratio = 5
 vm.dirty_writeback_centisecs = 10000
 vm.dirty_expire_centisecs = 60000

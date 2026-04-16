@@ -142,9 +142,10 @@ configure_tf_card_protection() {
         # 确保 ramlog 启用
         if grep -q "^ENABLED=" /etc/default/armbian-ramlog 2>/dev/null; then
             sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog
-        else
-            echo "ENABLED=true" >> /etc/default/armbian-ramlog
-        fi
+    local conntrack_max=$(( SYS_MEM_MB * 32 ))
+    cat >> "$SYSCTL_FILE" <<EOF
+net.netfilter.nf_conntrack_max = ${conntrack_max}
+EOF
         # 将 ramlog SIZE 提升至 256M（默认 100M 对多 agent 不够用）
         if grep -q "^SIZE=" /etc/default/armbian-ramlog 2>/dev/null; then
             sed -i 's/^SIZE=.*/SIZE=256M/' /etc/default/armbian-ramlog
