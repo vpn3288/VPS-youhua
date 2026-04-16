@@ -559,7 +559,7 @@ main() {
     # BUG#46 Fix: install_build_deps 独立于 SKIP_SOFTWARE_SCRIPT
     # INSTALL_DEPS 由用户选择决定（Option 2 = true），与 Docker/NodeJS 分开
     # SKIP_SOFTWARE_SCRIPT 只阻止 Docker/NodeJS，不阻止编译依赖
-    if [[ "\${INSTALL_DEPS}" == "true" ]]; then
+    if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
