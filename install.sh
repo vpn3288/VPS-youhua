@@ -43,6 +43,7 @@ fi
 
 SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | oracle-1c4g | n5105 | generic-x86 | generic-1c1g | google-cloud-e2
 SELECTED_MODE=""          # optimize | full | custom
+MODE=""                  # uninstall | status（命令行特殊模式）
 INSTALL_DOCKER="ask"      # true | false | ask
 INSTALL_NODEJS="ask"       # true | false | ask
 CONFIGURE_UNATTENDED="true"   # true | false（自动安全更新，默认开）

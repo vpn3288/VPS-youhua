@@ -61,16 +61,36 @@ readonly CT_HASH_SIZE=131072
 # ─────────────────────────────────────────────────────────────────────────────
 # 加载通用函数库（必须在所有函数定义之前，让平台专属函数正确 override）
 # ─────────────────────────────────────────────────────────────────────────────
-if [[ -f "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh" ]]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh"
-elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
-    source /tmp/vps-youhua-tmp/common-optimize.sh
-elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
-    source /tmp/vps-youhua/common-optimize.sh
-else
-    echo "错误: 找不到 common-optimize.sh" >&2
+COMMON_OPTIMIZE_URL="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/common-optimize.sh"
+
+load_common_optimize() {
+    # 优先从本地加载
+    if [[ -f "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh" ]]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh"
+        return 0
+    fi
+    if [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
+        source /tmp/vps-youhua-tmp/common-optimize.sh
+        return 0
+    fi
+    if [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
+        source /tmp/vps-youhua/common-optimize.sh
+        return 0
+    fi
+    
+    # 下载到临时目录
+    local tmpdir="/tmp/vps-youhua"
+    mkdir -p "$tmpdir"
+    echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
+    if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
+        source "${tmpdir}/common-optimize.sh"
+        return 0
+    fi
+    echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh\033[0m" >&2
     exit 1
-fi
+}
+
+load_common_optimize
 
 # ─────────────────────────────────────────────────────────────────────────────
 # T6 eMMC 存储检测
