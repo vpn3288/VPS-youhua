@@ -45,7 +45,9 @@ readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="512M"
 
 # Oracle Cloud TCP 缓冲（动态自适应：内存的 5%，上限 64MB，下限 16MB）
-readonly TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.05*1024*1024>67108864)?67108864:(m*0.05*1024*1024<16777216)?16777216:m*0.05*1024*1024}' /proc/meminfo)
+# AUDIT-10 FIX: 使用纯整数运算代替浮点计算
+readonly TCP_BUF_MAX
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*5/100; if(buf>67108864) buf=67108864; if(buf<16777216) buf=16777216; printf "%.0f", buf}' /proc/meminfo)
 readonly CT_MAX=131072
 readonly SOMAXCONN=65535
 readonly NETDEV_BACKLOG=65535
@@ -123,6 +125,7 @@ optimize_memory_oracle() {
 # ─────────────────────────────────────────────────────────────────────────────
 # Oracle Cloud sysctl（高缓冲 + 连接追踪）
 # ─────────────────────────────────────────────────────────────────────────────
+    install_base_tools
 
 configure_sysctl_oracle() {
     log_step "配置 sysctl (Oracle Cloud ARM)..."
@@ -154,14 +157,15 @@ net.core.rmem_default = 262144
 net.core.wmem_default = 262144
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15
-net.ipv4.tcp_orphan_retries = 2
+net.ipv4.tcp_orphan_retries = 1
 net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 
 # ── Oracle Cloud 连接追踪 ────────────────────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${CT_MAX}
-net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
+# AUDIT-2 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# 将在 configure_conntrack_hashsize() 函数中通过 /sys/module 设置
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
 net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30
@@ -172,6 +176,33 @@ EOF
 
     apply_sysctl
     log_info "Oracle sysctl 配置完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDIT-2 FIX: 设置 nf_conntrack_hashsize（只读参数，不能通过 sysctl）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_conntrack_hashsize() {
+    log_step "配置 nf_conntrack_hashsize..."
+    
+    # 加载 nf_conntrack 模块
+    modprobe nf_conntrack 2>/dev/null || true
+    
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+    if [[ -f "$hashsize_file" ]]; then
+        echo "${CT_MAX}" > "$hashsize_file" 2>/dev/null || {
+            log_warn "nf_conntrack_hashsize 设置失败，尝试 modprobe 配置"
+            # 备用方案：通过 modprobe 配置
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=${CT_MAX}" > /etc/modprobe.d/nf_conntrack.conf
+            modprobe -r nf_conntrack 2>/dev/null || true
+            modprobe nf_conntrack 2>/dev/null || true
+        }
+        local current_hashsize
+        current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
+        log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
+    else
+        log_warn "nf_conntrack 模块未加载或不支持，跳过 hashsize 配置"
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -202,13 +233,16 @@ optimize_network_oracle() {
         ip link set "$name" txqueuelen 10000 2>/dev/null || true
 
         # RPS
+        # AUDIT-4 FIX: 防御性检查 cores=0 的情况
         if [[ $SYS_CPU_CORES -gt 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' "$(( (1 << cores) - 1 ))")
-            for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
-                [[ -f "$rps_file" ]] || continue
-                printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
-            done
+            if [[ $cores -gt 0 ]]; then
+                local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
+                for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
+                    [[ -f "$rps_file" ]] || continue
+                    printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
+                done
+            fi
         fi
         log_info "网卡 $name 已优化"
     done
@@ -260,15 +294,7 @@ optimize_io_scheduler() {
 
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    
-    # 去除分区号，获取块设备名称
-    # /dev/sda1 -> sda, /dev/nvme0n1p1 -> nvme0n1, /dev/vda1 -> vda
-    root_dev=$(lsblk -no pkname "$root_dev" 2>/dev/null || echo "")
-    
-    if [[ -z "$root_dev" ]]; then
-        log_warn "无法检测根设备，跳过 I/O Scheduler 配置"
-        return 0
-    fi
+    root_dev=$(basename "$root_dev" 2>/dev/null)
 
     local sched_file="/sys/block/${root_dev}/queue/scheduler"
     if [[ -f "$sched_file" ]]; then
@@ -328,6 +354,10 @@ install_docker() {
 }
 EOF
     systemctl restart docker 2>/dev/null || true
+    
+    # AUDIT-7 FIX: 等待 Docker daemon 启动
+    sleep 3
+    
     # Docker 健康检查
     if docker ps >/dev/null 2>&1; then
         log_info "Docker 运行正常: $(docker ps -q | wc -l) 个容器在运行"
@@ -576,9 +606,13 @@ main() {
     configure_dns_lock
     detect_system
     detect_oracle_cloud
-    check_oracle_metadata
     check_network
     preflight_check
+    
+    # AUDIT-3 FIX: 安装基础工具（包括 curl）后再检查元数据
+    configure_apt_sources
+    install_base_tools
+    check_oracle_metadata
 
     show_platform_summary
 
@@ -593,14 +627,13 @@ main() {
     echo ""
 
     backup_all
-    configure_apt_sources
-    install_base_tools
     clean_system
     oracle_cloud_cleanup
     optimize_memory_oracle
     # BUG#1 FIX: Oracle ARM 在 zram 之后才检查 swap（避免冲突）
     configure_swap
     configure_sysctl_oracle
+    configure_conntrack_hashsize
     configure_limits
     configure_fstab
     configure_journald
@@ -626,13 +659,13 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    local did_install=false
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
+        local did_install=false
     else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }

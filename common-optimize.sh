@@ -988,6 +988,25 @@ EOF
 apply_sysctl() {
     log_step "应用 sysctl 参数..."
     sysctl --system >> "$APT_LOG" 2>&1 || sysctl -e -f /etc/sysctl.d/*.conf 2>/dev/null || true
+    
+    # 验证关键参数是否生效
+    local failed_params=()
+    local critical_params=(
+        "net.core.somaxconn"
+        "net.ipv4.tcp_max_syn_backlog"
+        "vm.swappiness"
+    )
+    
+    for param in "${critical_params[@]}"; do
+        if ! sysctl -n "$param" >/dev/null 2>&1; then
+            failed_params+=("$param")
+        fi
+    done
+    
+    if [[ ${#failed_params[@]} -gt 0 ]]; then
+        log_warn "以下关键参数未生效: ${failed_params[*]}"
+    fi
+    
     log_info "sysctl 已应用"
 }
 
@@ -1129,7 +1148,15 @@ configure_fail2ban() {
         }
     fi
 
-    cat > /etc/fail2ban/jail.local <<'EOF'
+    # 动态检测 SSH 端口
+    local ssh_port="22"
+    if command -v sshd &>/dev/null; then
+        local detected_port
+        detected_port=$(sshd -T 2>/dev/null | awk '/^port /{print $2}' | head -1)
+        [[ -n "$detected_port" ]] && ssh_port="$detected_port"
+    fi
+
+    cat > /etc/fail2ban/jail.local <<EOF
 [DEFAULT]
 bantime = 3600
 findtime = 600
@@ -1140,7 +1167,7 @@ action = %(action_mwl)s
 
 [sshd]
 enabled = true
-port = 22
+port = ${ssh_port}
 maxretry = 3
 bantime = 3600
 findtime = 600
@@ -1148,7 +1175,7 @@ logpath = /var/log/auth.log
 EOF
 
     systemctl enable --now fail2ban 2>/dev/null || true
-    log_info "fail2ban 已启用（SSH 暴力破解防护）"
+    log_info "fail2ban 已启用（SSH 暴力破解防护，端口: ${ssh_port}）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

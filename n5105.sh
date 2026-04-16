@@ -144,6 +144,7 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # N5105 sysctl
 # ─────────────────────────────────────────────────────────────────────────────
+    install_base_tools
 
 configure_sysctl_n5105() {
     log_step "配置 sysctl (N5105)..."
@@ -183,7 +184,8 @@ net.ipv4.tcp_keepalive_probes = 3
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${CT_MAX}
-net.netfilter.nf_conntrack_hashsize = ${CT_MAX}
+# AUDIT-2 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# 将在 configure_conntrack_hashsize() 函数中通过 /sys/module 设置
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
 net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30
@@ -194,6 +196,31 @@ EOF
 
     apply_sysctl
     log_info "N5105 sysctl 配置完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUDIT-2 FIX: 设置 nf_conntrack_hashsize（只读参数，不能通过 sysctl）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_conntrack_hashsize() {
+    log_step "配置 nf_conntrack_hashsize..."
+    
+    modprobe nf_conntrack 2>/dev/null || true
+    
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+    if [[ -f "$hashsize_file" ]]; then
+        echo "${CT_MAX}" > "$hashsize_file" 2>/dev/null || {
+            log_warn "nf_conntrack_hashsize 设置失败，尝试 modprobe 配置"
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=${CT_MAX}" > /etc/modprobe.d/nf_conntrack.conf
+            modprobe -r nf_conntrack 2>/dev/null || true
+            modprobe nf_conntrack 2>/dev/null || true
+        }
+        local current_hashsize
+        current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
+        log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
+    else
+        log_warn "nf_conntrack 模块未加载或不支持，跳过 hashsize 配置"
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,15 +267,7 @@ optimize_io_scheduler() {
 
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    
-    # 去除分区号，获取块设备名称
-    # /dev/sda1 -> sda, /dev/nvme0n1p1 -> nvme0n1, /dev/vda1 -> vda
-    root_dev=$(lsblk -no pkname "$root_dev" 2>/dev/null || echo "")
-    
-    if [[ -z "$root_dev" ]]; then
-        log_warn "无法检测根设备，跳过 I/O Scheduler 配置"
-        return 0
-    fi
+    root_dev=$(basename "$root_dev" 2>/dev/null)
 
     if [[ -f "/sys/block/${root_dev}/queue/rotational" ]] && \
        [[ "$(cat "/sys/block/${root_dev}/queue/rotational" 2>/dev/null)" == "0" ]]; then
@@ -522,9 +541,7 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#6 FIX: _detect_n5105_memory_profile 必须在 optimize_memory_n5105 之前运行
-    _detect_n5105_memory_profile
-    # optimize_memory_n5105 先运行（决定是否需要 swap），configure_swap 后判断
+    # BUG#6 FIX: optimize_memory_n5105 先运行（决定是否需要 swap），configure_swap 后判断
     optimize_memory_n5105
     configure_swap
     # BUG#5: IPv6 黑洞检测
@@ -535,6 +552,7 @@ main() {
     detect_storage_type
     check_network
     preflight_check
+    _detect_n5105_memory_profile
 
     show_platform_summary
 
@@ -550,9 +568,9 @@ main() {
 
     backup_all
     configure_apt_sources
-    install_base_tools
     clean_system
     configure_sysctl_n5105
+    configure_conntrack_hashsize
     configure_limits
     configure_fstab
     configure_journald
@@ -577,13 +595,13 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    local did_install=false
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
+        local did_install=false
     else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }

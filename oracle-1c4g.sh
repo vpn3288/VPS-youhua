@@ -46,8 +46,9 @@ readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="256M"
 
 # Oracle Cloud 1C4G TCP 缓冲（动态自适应：内存的 3%，上限 16MB，下限 8MB）
+readonly TCP_BUF_MAX
 # TCP 缓冲: 内存 4-6% 自适应（1C4G proxy 专用，省内存+够用）
-readonly TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.04*1024*1024>16777216)?16777216:(m*0.04*1024*1024<4194304)?4194304:m*0.04*1024*1024}' /proc/meminfo)
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.04*1024*1024>16777216)?16777216:(m*0.04*1024*1024<4194304)?4194304:m*0.04*1024*1024}' /proc/meminfo)
 readonly CT_MAX=8192  # 1C4G 精简资源限制
 readonly SOMAXCONN=1024
 readonly NETDEV_BACKLOG=4096
@@ -116,17 +117,32 @@ optimize_memory_oracle() {
     echo "never"  > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
 
     # zram 保留（1C4G 开启 zram，内存压缩比 2:1，等效扩展内存）
-    if [[ -f /sys/block/zram0/comp_algorithm ]]; then
-        echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || true
-        local mem_kb
-        mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-        local zram_size=$((mem_kb * 2))
-        if [[ -f /sys/block/zram0/disksize ]]; then
-            echo "${zram_size}K" > /sys/block/zram0/disksize 2>/dev/null || true
-            mkswap /dev/zram0 >/dev/null 2>&1 || true
-            swapon /dev/zram0 -p 32767 2>/dev/null || true
-            log_info "zram 开启，压缩后约等效 $((mem_kb * 2 / 1024))MB 可用内存"
+    # AUDIT-5 FIX: 添加 zram 设备存在性和激活状态检查
+    if [[ -b /dev/zram0 ]] && [[ -f /sys/block/zram0/comp_algorithm ]]; then
+        # 检查 zram0 是否已激活
+        if swapon -s | grep -q "/dev/zram0" 2>/dev/null; then
+            log_info "zram0 已激活，跳过配置"
+        else
+            # 检查 disksize 是否已设置
+            local current_disksize
+            current_disksize=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
+            if [[ "$current_disksize" != "0" ]]; then
+                log_info "zram0 disksize 已设置，跳过配置"
+            else
+                echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || true
+                local mem_kb
+                mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+                local zram_size=$((mem_kb * 2 * 1024))  # 转换为字节
+                if [[ -f /sys/block/zram0/disksize ]]; then
+                    echo "${zram_size}" > /sys/block/zram0/disksize 2>/dev/null || true
+                    mkswap /dev/zram0 >/dev/null 2>&1 || true
+                    swapon /dev/zram0 -p 32767 2>/dev/null || true
+                    log_info "zram 开启，压缩后约等效 $((mem_kb * 2 / 1024))MB 可用内存"
+                fi
+            fi
         fi
+    else
+        log_info "zram0 设备不存在或不支持，跳过 zram 配置"
     fi
 
     # TCP 缓冲（已在顶部常量定义）
@@ -140,6 +156,7 @@ optimize_memory_oracle() {
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl Oracle Cloud 1C4G 专项配置
 # ─────────────────────────────────────────────────────────────────────────────
+    install_base_tools
 
 configure_sysctl_oracle() {
     log_step "配置 sysctl 系统参数..."
@@ -208,9 +225,8 @@ optimize_network_oracle() {
     log_step "优化 Oracle Cloud 网络..."
 
     # Oracle Cloud MTU 检测（不强制修改）
-    local iface mtu
-    iface=$(ip route get 8.8.8.8 2>/dev/null | awk '{print $5; exit}')
-    mtu=$(ip link show "$iface" 2>/dev/null | grep -oP 'mtu \K\d+' || echo "1500")
+    local mtu
+    mtu=$(ip link show $(ip route get 8.8.8.8 2>/dev/null | awk '{print $5; exit}') 2>/dev/null | grep -oP 'mtu \K\d+' || echo "1500")
     log_info "当前网卡 MTU: $mtu"
 
     for iface in /sys/class/net/en* /sys/class/net/eth*; do
@@ -225,7 +241,7 @@ optimize_network_oracle() {
         # RPS（单核，CPU掩码 = 1）
         if [[ $SYS_CPU_CORES -ge 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' "$(( (1 << cores) - 1 ))")
+            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
             for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                 [[ -f "$rps_file" ]] || continue
                 printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
@@ -532,7 +548,6 @@ main() {
 
     backup_all
     configure_apt_sources
-    install_base_tools
     clean_system
     oracle_cloud_cleanup
     optimize_memory_oracle

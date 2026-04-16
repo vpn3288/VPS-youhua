@@ -46,7 +46,8 @@ readonly JOURNALD_MAX_USE="30M"
 readonly TMPFS_SIZE="256M"
 
 # 1C1G TCP 缓冲（极保守：内存 3%，上限 8MB，下限 4MB）
-readonly TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
+readonly TCP_BUF_MAX
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
 readonly CT_MAX=16384
 readonly SOMAXCONN=512       # 1C1G 低资源限制
 readonly NETDEV_BACKLOG=2048  # 1C1G
@@ -70,6 +71,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl 1核1G 极简配置
 # ─────────────────────────────────────────────────────────────────────────────
+    install_base_tools
 
 configure_sysctl_generic_1c1g() {
     log_step "配置 sysctl 系统参数..."
@@ -200,7 +202,7 @@ journalctl --vacuum-time=2d 2>/dev/null || true
 apt-get clean 2>/dev/null || true
 rm -rf /tmp/pear 2>/dev/null || true
 rm -rf /var/cache/apt/archives/*.deb 2>/dev/null || true
-find /var/tmp -mindepth 1 -maxdepth 1 ! -type l -delete 2>/dev/null || true
+rm -rf /var/tmp 2>/dev/null || true
 EOF
     chmod +x /etc/cron.daily/vps-youhua-clean
     log_info "每日清理任务已配置"
@@ -373,8 +375,7 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#1 FIX: 先配置 zram，再检查 swap（避免创建物理 swap）
-    configure_zram_1c1g
+    # BUG#1: 低内存 Swap 创建
     configure_swap
     # BUG#5: IPv6 黑洞检测
     configure_ipv6_health
@@ -398,7 +399,6 @@ main() {
 
     backup_all
     configure_apt_sources
-    install_base_tools
     clean_system
     configure_sysctl_generic_1c1g
     configure_limits
@@ -412,6 +412,7 @@ main() {
     configure_locale
     configure_firewall_lo
     configure_tmp_tmpfs
+    configure_zram_1c1g
     # BUG#FIX: 补充通用函数调用
     configure_npm_cache_tmpfs
     configure_memory_accounting

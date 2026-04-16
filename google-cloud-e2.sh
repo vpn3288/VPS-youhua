@@ -46,7 +46,8 @@ readonly JOURNALD_MAX_USE="50M"
 readonly TMPFS_SIZE="256M"
 
 # GCP e2-micro TCP 缓冲（1GB 内存 3%，上限 8MB，下限 4MB）
-readonly TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
+readonly TCP_BUF_MAX
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
 readonly CT_MAX=16384
 readonly SOMAXCONN=512
 readonly NETDEV_BACKLOG=2048
@@ -174,6 +175,7 @@ optimize_memory_gcp() {
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl GCP e2-micro 专项配置
 # ─────────────────────────────────────────────────────────────────────────────
+    install_base_tools
 
 configure_sysctl_gcp() {
     log_step "配置 sysctl 系统参数..."
@@ -294,7 +296,7 @@ optimize_network_gcp() {
         # RPS（共享 CPU 单核，CPU 掩码 = 1）
         if [[ $SYS_CPU_CORES -ge 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' "$(( (1 << cores) - 1 ))")
+            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
             for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                 [[ -f "$rps_file" ]] || continue
                 printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
@@ -567,7 +569,6 @@ main() {
 
     backup_all
     configure_apt_sources
-    install_base_tools
     clean_system
     gcp_cloud_cleanup
     configure_sysctl_gcp

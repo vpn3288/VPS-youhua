@@ -171,6 +171,10 @@ configure_sysctl_t6() {
 
 # ── T6 内存（16GB 平衡）──────────────────────────────────────────────────────
 vm.swappiness = ${SWAPPINESS}
+    local ct_max=$(( SYS_MEM_MB * 32 ))
+    cat >> "$SYSCTL_FILE" <<EOF
+net.netfilter.nf_conntrack_max = ${ct_max}
+EOF
 vm.dirty_background_ratio = 5
 vm.dirty_writeback_centisecs = 10000
 vm.dirty_expire_centisecs = 60000
@@ -244,7 +248,7 @@ optimize_network_t6() {
         # RPS（RK3588S 多核）
         if [[ $SYS_CPU_CORES -gt 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' "$(( (1 << cores) - 1 ))")
+            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
             for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                 [[ -f "$rps_file" ]] || continue
                 printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
@@ -300,15 +304,7 @@ optimize_io_scheduler() {
 
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    
-    # 去除分区号，获取块设备名称
-    # /dev/mmcblk0p1 -> mmcblk0, /dev/sda1 -> sda, /dev/nvme0n1p1 -> nvme0n1
-    root_dev=$(lsblk -no pkname "$root_dev" 2>/dev/null || echo "")
-    
-    if [[ -z "$root_dev" ]]; then
-        log_warn "无法检测根设备，跳过 I/O Scheduler 配置"
-        return 0
-    fi
+    root_dev=$(basename "$root_dev" 2>/dev/null)
 
     if [[ "$root_dev" == mmcblk* ]]; then
         # eMMC 或 TF 卡：none
@@ -645,13 +641,13 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    local did_install=false
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
+        local did_install=false
     else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }

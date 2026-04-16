@@ -106,36 +106,16 @@ detect_storage_type() {
 # ─────────────────────────────────────────────────────────────────────────────
 # R4S TF 卡保护（ext4 挂载参数 + dirty）
 # ─────────────────────────────────────────────────────────────────────────────
+    install_base_tools
 
 configure_tf_card_protection() {
     [[ "$SYS_IS_TF_CARD" != "true" ]] && return 0
     log_step "配置 TF 卡写入保护..."
 
-    # ext4 挂载参数（减少随机写入）- 幂等性修复
+    # ext4 挂载参数（减少随机写入）
     if grep -q "^UUID=" /etc/fstab 2>/dev/null; then
-        # 备份 fstab
-        cp /etc/fstab /etc/fstab.bak.$(date +%s) 2>/dev/null || true
-        
-        # 使用 awk 正确修改根分区挂载选项（幂等）
-        awk '
-        /^UUID=.*[[:space:]]+\/[[:space:]]+ext4/ {
-            # 检查是否已经有 noatime
-            if ($4 !~ /noatime/) {
-                # 移除 defaults（如果存在）
-                gsub(/defaults,?/, "", $4)
-                gsub(/^,/, "", $4)
-                # 添加优化参数
-                if ($4 == "") {
-                    $4 = "noatime,nodiratime,commit=600"
-                } else {
-                    $4 = $4 ",noatime,nodiratime,commit=600"
-                }
-            }
-        }
-        {print}
-        ' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
-        
-        log_info "TF 卡 ext4 挂载选项已优化（noatime,nodiratime,commit=600）"
+        # 追加 noatime,nodiratime,commit=600 到 root 条目
+        sed -i '/^UUID=.*\/.*ext4/s/ext4[^[:space:]]*/ext4,noatime,nodiratime,commit=600/' /etc/fstab
     fi
 
     log_info "TF 卡 ext4 优化完成"
@@ -162,7 +142,10 @@ configure_tf_card_protection() {
         # 确保 ramlog 启用
         if grep -q "^ENABLED=" /etc/default/armbian-ramlog 2>/dev/null; then
             sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog
-        fi
+    local conntrack_max=$(( SYS_MEM_MB * 32 ))
+    cat >> "$SYSCTL_FILE" <<EOF
+net.netfilter.nf_conntrack_max = ${conntrack_max}
+EOF
         # 将 ramlog SIZE 提升至 256M（默认 100M 对多 agent 不够用）
         if grep -q "^SIZE=" /etc/default/armbian-ramlog 2>/dev/null; then
             sed -i 's/^SIZE=.*/SIZE=256M/' /etc/default/armbian-ramlog
@@ -218,6 +201,7 @@ optimize_memory_r4s() {
 
     # ── Armbian ramlog：/var/log tmpfs（Armbian 官方推荐，减少 TF 卡写入）─
     if ! mount | grep -q "tmpfs on /var/log"; then
+        mkdir -p /etc/systemd/systemdisable
         if [ ! -d /var/log/journal ]; then mkdir -p /var/log/journal; fi
         systemctl mask rsyslog 2>/dev/null || true
         # 将 /var/log 改为 tmpfs（重启后生效）
@@ -388,15 +372,7 @@ optimize_io_scheduler() {
 
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    
-    # 去除分区号，获取块设备名称
-    # /dev/mmcblk0p1 -> mmcblk0, /dev/sda1 -> sda, /dev/nvme0n1p1 -> nvme0n1
-    root_dev=$(lsblk -no pkname "$root_dev" 2>/dev/null || echo "")
-    
-    if [[ -z "$root_dev" ]]; then
-        log_warn "无法检测根设备，跳过 I/O Scheduler 配置"
-        return 0
-    fi
+    root_dev=$(basename "$root_dev" 2>/dev/null)
 
     if [[ "$root_dev" == mmcblk* ]]; then
         # TF 卡：none（noop 简化调度，减少卡顿）
@@ -821,13 +797,13 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    local did_install=false
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
+        local did_install=false
     else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
