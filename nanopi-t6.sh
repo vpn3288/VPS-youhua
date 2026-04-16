@@ -137,10 +137,11 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # T6 sysctl（高性能网络 + 平衡内存）
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
-
 configure_sysctl_t6() {
     log_step "配置 sysctl (NanoPC T6)..."
+
+    # BUG 修复: 在 cat heredoc 之前计算 conntrack_max
+    local conntrack_max=$(( SYS_MEM_MB * 32 ))
 
     backup_file "$SYSCTL_FILE"
 
@@ -171,7 +172,6 @@ net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
-conntrack_max=$(( SYS_MEM_MB * 32 ))
 net.netfilter.nf_conntrack_max = ${conntrack_max}
 net.netfilter.nf_conntrack_hashsize = ${CT_HASH_SIZE}
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
@@ -579,6 +579,7 @@ main() {
 
     backup_all
     configure_apt_sources
+    install_base_tools
     clean_system
     optimize_memory_t6
     # BUG#1 FIX: T6 在 zram 之后才检查 swap（避免与 zram 冲突）

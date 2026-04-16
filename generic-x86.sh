@@ -126,8 +126,6 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # generic-x86 sysctl（自适应参数）
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
-
 configure_sysctl_generic() {
     log_step "配置 sysctl (${PROFILE_DESC})..."
 
@@ -542,6 +540,7 @@ main() {
 
     backup_all
     configure_apt_sources
+    install_base_tools
     clean_system
     configure_sysctl_generic
     configure_limits

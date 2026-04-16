@@ -198,7 +198,6 @@ wait_for_apt_lock() {
             log_warn "停止后台服务: $svc"
             systemctl stop $svc 2>/dev/null || true
         fi
-        systemctl mask $svc 2>/dev/null || true
     done
 
     # 等待锁释放（检查进程而不是文件）
@@ -275,7 +274,7 @@ detect_platform() {
             # ── Google Cloud 检测（优先于内存路由）─────────────────────────────
             local gcp_meta
             gcp_meta=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
-                "http://metadata.google.internal/compute/v1/instance/machine-type" 2>/dev/null || echo "")
+                "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null || echo "")
             if echo "$gcp_meta" | grep -q "e2-micro\|e2-small\|e2-medium\|f1-micro\|g1-small"; then
                 log_info "Google Cloud 检测通过（${gcp_meta}），使用 GCP e2 优化"
                 echo "google-cloud-e2"

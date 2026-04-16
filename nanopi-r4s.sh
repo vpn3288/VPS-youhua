@@ -732,6 +732,7 @@ main() {
 
     backup_all
     configure_apt_sources
+    install_base_tools
     clean_system
     configure_tf_card_protection
     optimize_memory_r4s

@@ -922,6 +922,127 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# BUG#5: IPv6 黑洞检测 — 若 ping6 失败则强制禁用 IPv6
+# 美国低端/免费 VPS 的 IPv6 路由常损坏，会导致代理请求超时
+# ─────────────────────────────────────────────────────────────────────────────
+configure_ipv6_health() {
+    log_step "IPv6 连通性检测..."
+
+    # 先检查 IPv6 是否已禁用
+    if grep -q "net.ipv6.conf.all.disable_ipv6 = 1" /etc/sysctl.d/99-vps-youhua*.conf 2>/dev/null; then
+        log_info "IPv6 已禁用，跳过"
+        return 0
+    fi
+
+    # 检测 IPv6 是否通（允许超时）
+    if ping -6 -c 1 -W 2 ipv6.google.com >/dev/null 2>&1; then
+        log_info "IPv6 连通正常，保持开启"
+    else
+        log_warn "IPv6 黑洞检测失败（ping6 超时），强制禁用 IPv6"
+
+        # 写入 sysctl
+        mkdir -p /etc/sysctl.d
+        cat >> /etc/sysctl.d/99-vps-youhua-ipv6.conf <<'EOF'
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+EOF
+        sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null || true
+        sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null || true
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUG#7: DNS 锁定防篡改
+# ─────────────────────────────────────────────────────────────────────────────
+configure_dns_lock() {
+    log_step "加固 DNS 配置（防篡改）..."
+
+    # 备份
+    cp -a /etc/resolv.conf /etc/resolv.conf.vps-youhua-bak 2>/dev/null || true
+
+    # 写入可信 DNS
+    cat > /etc/resolv.conf <<'EOF'
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+nameserver 2001:4860:4860::8888
+EOF
+
+    # 防止 DHCP/云厂商自动覆盖（BUG#7 核心修复）
+    chattr +i /etc/resolv.conf 2>/dev/null || true
+    log_info "DNS 已锁定（1.1.1.1 + 8.8.8.8），chattr +i 保护"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUG#10: 低内存极限清理
+# ─────────────────────────────────────────────────────────────────────────────
+configure_lowmem_purge() {
+    log_step "低内存极限清理（释放 ~100MB）..."
+
+    local PKGS_TO_REMOVE="rpcbind apache2 snapd ufw"
+    local removed=false
+
+    for pkg in ${PKGS_TO_REMOVE}; do
+        if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+            log_info "  移除 $pkg（释放内存）"
+            apt-get purge -y "$pkg" >/dev/null 2>&1 && removed=true || true
+        fi
+    done
+
+    [[ "$removed" == "true" ]] && log_info "低内存清理完成（释放约 100MB）" || log_info "无需清理（这些包未安装）"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUG#5: configure_swap 实现（低内存机器自动创建 1GB Swap）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_swap() {
+    log_step "配置 Swap（低内存防护）..."
+
+    # 检查是否已有 Swap（物理 swap + zram swap 都算）
+    local swap_total zram_total=0
+    swap_total=$(awk '/SwapTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+    # zram 也算 Swap（/proc/meminfo 的 Swap 统计不包含 zram，需手动计算）
+    # disksize 单位是字节，除以 1024 得到 KB
+    if [[ -d /sys/block/zram0 ]]; then
+        local zram_size
+        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
+        zram_total=$((zram_size / 1024))  # KB
+    fi
+    local total_swap=$((swap_total + zram_total))
+    if [[ "${total_swap}" -gt 0 ]]; then
+        log_info "Swap 已存在（物理: ${swap_total}KB + zram: ${zram_total}KB），跳过"
+        return 0
+    fi
+
+    log_info "检测到无 Swap，创建 1GB swapfile..."
+
+    # 创建 1GB swapfile
+    if fallocate -l 1G /swapfile 2>/dev/null; then
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+    elif dd if=/dev/zero of=/swapfile bs=1M count=1024 status=progress 2>/dev/null; then
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+    else
+        log_warn "Swap 创建失败，跳过"
+        return 1
+    fi
+
+    # 持久化 fstab
+    if ! grep -q "/swapfile" /etc/fstab 2>/dev/null; then
+        echo "/swapfile none swap sw 0 0" >> /etc/fstab
+    fi
+
+    # swappiness: 低内存代理节点设为 10-30（与 R4S 相反）
+    # 1C1G/GCP 场景希望尽量用 Swap 保护内存
+    echo 20 > /proc/sys/vm/swappiness 2>/dev/null || true
+    sysctl -w vm.swappiness=20 2>/dev/null || true
+
+    log_info "Swap 1GB 创建完成，swappiness=20"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 内核参数（通用部分，所有平台共享）
 # 所有平台共享的内核加固参数
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1120,48 +1241,8 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Oracle Cloud 专属优化（MTU / TSO-GRO / RPS）
+# Oracle Cloud 专属优化已移除（这些是平台专属函数，应在 oracle-arm.sh 中实现）
 # ─────────────────────────────────────────────────────────────────────────────
-optimize_oracle_cloud() {
-    [[ "$SYS_IS_ORACLE_CLOUD" != "true" ]] && return 0
-    log_step "Oracle Cloud 特定优化..."
-
-    # 检测主网卡 MTU（Oracle 内部网络 MTU=9001，公网=1500）
-    local primary_iface
-    primary_iface=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}')
-    if [[ -n "$primary_iface" ]] && [[ -d "/sys/class/net/$primary_iface" ]]; then
-        local mtu; mtu=$(cat "/sys/class/net/$primary_iface/mtu" 2>/dev/null || echo "unknown")
-        if [[ "$mtu" == "1500" ]]; then
-            log_warn "主网卡 $primary_iface MTU=1500（公网）；Oracle 内部网络 MTU=9001"
-        elif [[ "$mtu" =~ ^[0-9]+$ ]] && [[ $mtu -gt 1500 ]]; then
-            log_info "主网卡 $primary_iface MTU=$mtu（内部网络）"
-        fi
-    fi
-
-    # 网卡优化（匹配所有网卡命名风格：eth*, en*, em*, p*p*, sl*, etc.）
-    for iface in /sys/class/net/*; do
-        [[ -d "$iface" ]] || continue
-        local name; name=$(basename "$iface")
-
-        ethtool -K "$name" tso on 2>/dev/null || true
-        ethtool -K "$name" gso on 2>/dev/null || true
-        ethtool -K "$name" gro on 2>/dev/null || true
-        ip link set "$name" txqueuelen 10000 2>/dev/null || true
-
-        # RPS（多核 CPU 时启用）
-        if [[ $SYS_CPU_CORES -gt 1 ]]; then
-            local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
-            for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
-                [[ -f "$rps_file" ]] || continue
-                printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
-            done
-        fi
-        log_info "网卡 $name 已优化"
-    done
-
-    log_info "Oracle Cloud 特定优化完成"
-}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # fail2ban（可选，SSH 暴力破解防护）
