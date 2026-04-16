@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # =============================================================================
 # NanoPi R4S 专用优化安装脚本 v3.2 R64
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
@@ -44,6 +45,9 @@ elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
     source /tmp/vps-youhua-tmp/common-optimize.sh
 elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
     source /tmp/vps-youhua/common-optimize.sh
+else
+    echo "错误: 找不到 common-optimize.sh" >&2
+    exit 1
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

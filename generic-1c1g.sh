@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # =============================================================================
 # 通用 1核 1G VPS 极简优化安装脚本 v3.2 R64
 # 硬件: 任意 1核 1GB x86_64 VPS（最低配套餐）
@@ -46,6 +47,9 @@ elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
     source /tmp/vps-youhua-tmp/common-optimize.sh
 elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
     source /tmp/vps-youhua/common-optimize.sh
+else
+    echo "错误: 找不到 common-optimize.sh" >&2
+    exit 1
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

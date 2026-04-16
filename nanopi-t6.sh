@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # =============================================================================
 # NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.2 R64
 # 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
@@ -50,6 +51,9 @@ elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
     source /tmp/vps-youhua-tmp/common-optimize.sh
 elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
     source /tmp/vps-youhua/common-optimize.sh
+else
+    echo "错误: 找不到 common-optimize.sh" >&2
+    exit 1
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

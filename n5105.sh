@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # =============================================================================
 # N5105/N5095 小主机专用优化安装脚本 v3.2 R64
 # 硬件: Intel N5105/N5095 x86_64, 有风扇, SSD
@@ -36,6 +37,9 @@ elif [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
     source /tmp/vps-youhua-tmp/common-optimize.sh
 elif [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
     source /tmp/vps-youhua/common-optimize.sh
+else
+    echo "错误: 找不到 common-optimize.sh" >&2
+    exit 1
 fi
 
 # N5105 内存分级
