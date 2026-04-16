@@ -118,13 +118,20 @@ detect_oracle_cloud() {
 check_network() {
     log_step "检测网络连接..."
 
-    if ! ping -c1 -W3 8.8.8.8 &>/dev/null; then
-        # 三级降级：DNS → HTTPS HEAD → ping
-        if ! host -W3 debian.org &>/dev/null; then
-            if ! curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" https://deb.debian.org/ | grep -q "200\|301\|302"; then
-                log_error "无法连接到网络，请检查网络配置"
-                exit 1
-            fi
+    # 国内可达目标优先（避免 8.8.8.8 在大陆受干扰导致误判）
+    if ping -c1 -W3 1.1.1.1 &>/dev/null || \
+       ping -c1 -W3 223.5.5.5 &>/dev/null; then
+        log_info "网络连接正常"
+        return 0
+    fi
+
+    # 二级降级：DNS 解析测试
+    if ! host -W3 debian.org &>/dev/null; then
+        # 三级降级：HTTPS HEAD 检查
+        if ! curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" \
+            https://deb.debian.org/ 2>/dev/null | grep -q "200\|301\|302"; then
+            log_error "无法连接到网络，请检查网络配置"
+            exit 1
         fi
     fi
     log_info "网络连接正常"
@@ -152,8 +159,9 @@ preflight_check() {
         log_warn "内存 ${SYS_MEM_MB}MB < 256MB，可能不稳定"
     fi
 
-    if ! ping -c1 -W3 github.com &>/dev/null; then
-        log_warn "无法访问 GitHub，部分功能可能受限"
+    if ! ping -c1 -W3 1.1.1.1 &>/dev/null && \
+       ! ping -c1 -W3 223.5.5.5 &>/dev/null; then
+        log_warn "无法访问互联网，部分功能可能受限"
     fi
 
     [[ $errors -gt 0 ]] && exit 1
@@ -285,34 +293,34 @@ EOF
         case "$m" in
             tencent)
                 cat > "$sources_list" <<EOF
-deb http://mirrors.tencent.com/debian/ ${codename} main contrib non-free non-free-firmware
-deb http://mirrors.tencent.com/debian/ ${codename}-updates main contrib non-free non-free-firmware
-deb http://mirrors.tencent.com/debian-security/ ${codename}-security main contrib non-free non-free-firmware
-deb http://mirrors.tencent.com/debian/ ${codename}-backports main contrib non-free non-free-firmware
+deb http://mirrors.tencent.com/debian/ ${codename} main contrib non-free-firmware
+deb http://mirrors.tencent.com/debian/ ${codename}-updates main contrib non-free-firmware
+deb http://mirrors.tencent.com/debian-security/ ${codename}-security main contrib non-free-firmware
+deb http://mirrors.tencent.com/debian/ ${codename}-backports main contrib non-free-firmware
 EOF
                 ;;
             ali)
                 cat > "$sources_list" <<EOF
-deb http://mirrors.aliyun.com/debian/ ${codename} main contrib non-free non-free-firmware
-deb http://mirrors.aliyun.com/debian/ ${codename}-updates main contrib non-free non-free-firmware
-deb http://mirrors.aliyun.com/debian-security/ ${codename}-security main contrib non-free non-free-firmware
-deb http://mirrors.aliyun.com/debian/ ${codename}-backports main contrib non-free non-free-firmware
+deb http://mirrors.aliyun.com/debian/ ${codename} main contrib non-free-firmware
+deb http://mirrors.aliyun.com/debian/ ${codename}-updates main contrib non-free-firmware
+deb http://mirrors.aliyun.com/debian-security/ ${codename}-security main contrib non-free-firmware
+deb http://mirrors.aliyun.com/debian/ ${codename}-backports main contrib non-free-firmware
 EOF
                 ;;
             tsinghua)
                 cat > "$sources_list" <<EOF
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename} main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename}-updates main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename}-security main contrib non-free non-free-firmware
-deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename}-backports main contrib non-free non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename} main contrib non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename}-updates main contrib non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian-security/ ${codename}-security main contrib non-free-firmware
+deb https://mirrors.tuna.tsinghua.edu.cn/debian/ ${codename}-backports main contrib non-free-firmware
 EOF
                 ;;
             official|*)
                 cat > "$sources_list" <<EOF
-deb http://deb.debian.org/debian ${codename} main contrib non-free non-free-firmware
-deb http://deb.debian.org/debian ${codename}-updates main contrib non-free non-free-firmware
-deb http://security.debian.org/debian-security ${codename}-security main contrib non-free non-free-firmware
-deb http://deb.debian.org/debian ${codename}-backports main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian ${codename} main contrib non-free-firmware
+deb http://deb.debian.org/debian ${codename}-updates main contrib non-free-firmware
+deb http://security.debian.org/debian-security ${codename}-security main contrib non-free-firmware
+deb http://deb.debian.org/debian ${codename}-backports main contrib non-free-firmware
 EOF
                 ;;
         esac
@@ -359,7 +367,10 @@ clean_system() {
         systemctl mask oracle-cloud-agent oracle-cloud-agent-updater 2>/dev/null || true
         # cloud-init 保留（用户可能需要），但禁用其网络探测
         mkdir -p /etc/cloud/cloud.cfg.d
-        echo "network: {config: disabled}" > /etc/cloud/cloud.cfg.d/99-disable-net.cfg 2>/dev/null || true
+        cat > /etc/cloud/cloud.cfg.d/99-disable-net.cfg <<'EOF'
+network:
+  config: disabled
+EOF
         log_info "Oracle 云监控已禁用（节省资源）"
     fi
 
@@ -475,21 +486,22 @@ configure_npm_cache_tmpfs() {
     mkdir -p "$cache_dir"
     chmod 1777 "$cache_dir"
 
-    if command -v npm &>/dev/null; then
-        mkdir -p /etc/profile.d
-        cat > /etc/profile.d/99-agent-cache.sh <<'EOFCACHE'
+    local profile_file="/etc/profile.d/99-agent-cache.sh"
+    local marker="# VPS-youhua agent cache config"
+    mkdir -p /etc/profile.d
+
+    # 防重复：检查是否已配置
+    if [[ -f "$profile_file" ]] && grep -q "$marker" "$profile_file" 2>/dev/null; then
+        log_info "npm/pip 缓存配置已存在（跳过）"
+    else
+        cat > "$profile_file" <<'EOFCACHE'
+# VPS-youhua agent cache config
 export npm_config_cache="/tmp/agent_cache"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/agent_cache}"
-EOFCACHE
-        chmod +x /etc/profile.d/99-agent-cache.sh
-        log_info "npm 缓存已指向 $cache_dir"
-    fi
-
-    if command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
-        cat >> /etc/profile.d/99-agent-cache.sh <<'EOFPIP'
 export PIP_CACHE_DIR="/tmp/agent_cache/pip"
-EOFPIP
-        log_info "pip 缓存已指向 $cache_dir/pip"
+EOFCACHE
+        chmod +x "$profile_file"
+        log_info "npm/pip 缓存已指向 $cache_dir"
     fi
 
     export npm_config_cache="/tmp/agent_cache"
@@ -640,6 +652,14 @@ kernel.panic = 10
 kernel.panic_on_io_nmi = 1
 kernel.panic_on_oops = 1
 
+# ── IPv6 安全（所有平台） ─────────────────────────────────────────────────
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
+net.ipv6.conf.all.accept_source_route = 0
+net.ipv6.conf.default.accept_source_route = 0
+net.ipv6.conf.all.accept_ra = 0
+net.ipv6.conf.default.accept_ra = 0
+
 # ── 网络基础 ──────────────────────────────────────────────────────────────
 net.core.rmem_default = 262144
 net.core.wmem_default = 262144
@@ -671,8 +691,9 @@ configure_tmp_tmpfs() {
     log_step "配置 /tmp 为 tmpfs..."
     local tmpfs_size="${TMPFS_SIZE:-512M}"
 
-    if grep -q "/tmp" /etc/fstab 2>/dev/null; then
-        log_info "/tmp 已配置（跳过）"
+    # 精确检查：是否已有 tmpfs 类型的 /tmp 条目
+    if grep -qE "^tmpfs\s+/tmp\s+" /etc/fstab 2>/dev/null; then
+        log_info "/tmp 已配置 tmpfs（跳过）"
         return 0
     fi
 
@@ -803,8 +824,8 @@ optimize_oracle_cloud() {
         fi
     fi
 
-    # 网卡优化
-    for iface in /sys/class/net/en* /sys/class/net/eth*; do
+    # 网卡优化（匹配所有网卡命名风格：eth*, en*, em*, p*p*, sl*, etc.）
+    for iface in /sys/class/net/*; do
         [[ -d "$iface" ]] || continue
         local name; name=$(basename "$iface")
 

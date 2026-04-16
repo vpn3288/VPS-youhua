@@ -171,8 +171,8 @@ EOF
 optimize_network_r4s() {
     log_step "R4S 网络优化..."
 
-    # 网卡 txqueuelen
-    for iface in /sys/class/net/en* /sys/class/net/eth*; do
+    # 网卡 txqueuelen（全匹配）
+    for iface in /sys/class/net/*; do
         [[ -d "$iface" ]] || continue
         local name; name=$(basename "$iface")
         ip link set "$name" txqueuelen 1000 2>/dev/null || true

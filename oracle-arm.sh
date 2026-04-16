@@ -64,7 +64,10 @@ oracle_cloud_cleanup() {
 
     # cloud-init 保留配置但禁用网络探测（避免每次启动执行脚本）
     mkdir -p /etc/cloud/cloud.cfg.d
-    echo "network: {config: disabled}" > /etc/cloud/cloud.cfg.d/99-disable-net.cfg 2>/dev/null || true
+    cat > /etc/cloud/cloud.cfg.d/99-disable-net.cfg <<'EOF'
+network:
+  config: disabled
+EOF
 
     log_info "Oracle Cloud 专属清理完成"
 }

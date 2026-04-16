@@ -38,7 +38,7 @@ fi
 # 全局状态（菜单选择结果）
 # ─────────────────────────────────────────────────────────────────────────────
 
-SELECTED_PLATFORM=""      # nanpi-r4s | nanpi-t6 | oracle-arm | n5105 | generic-x86
+SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | n5105 | generic-x86
 SELECTED_MODE=""          # optimize | full | custom
 INSTALL_DOCKER="ask"      # true | false | ask
 INSTALL_NODEJS="ask"       # true | false | ask
@@ -375,38 +375,44 @@ step4_choose_features() {
     echo -e "${BOLD}  Step 4/4：可选功能（安全加固）${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  ${GREEN}[1]${NC} ${BOLD}自动安全更新（unattended-upgrades）${NC} ${YELLOW}默认: 开启${NC}"
+    echo -e "  ${GREEN}[A]${NC} ${BOLD}自动安全更新（unattended-upgrades）${NC}"
     echo -e "       每日自动检查并安装安全更新，不自动重启"
-    echo -e "       ${CYAN}适合: 生产服务器、长期运行的设备${NC}"
+    echo -e "       ${CYAN}适合: 生产服务器、长期运行的设备${NC}  ${YELLOW}[默认: 开启]${NC}"
     echo ""
-    echo -e "  ${GREEN}[2]${NC} ${BOLD}SSH 防暴力破解（fail2ban）${NC} ${YELLOW}默认: 关闭${NC}"
+    echo -e "  ${GREEN}[B]${NC} ${BOLD}SSH 防暴力破解（fail2ban）${NC}"
     echo -e "       失败3次封IP 1小时，检测 SSH 暴力破解"
-    echo -e "       ${CYAN}适合: 有公网 IP 的 VPS（Oracle/通用 x86）${NC}"
+    echo -e "       ${CYAN}适合: 有公网 IP 的 VPS（Oracle/通用 x86）${NC}  ${YELLOW}[默认: 关闭]${NC}"
     echo ""
-    echo -e "  ${GREEN}[3]${NC} ${BOLD}APT 镜像源切换${NC}"
+    echo -e "  ${GREEN}[C]${NC} ${BOLD}APT 镜像源切换${NC}"
     echo -e "       自动测速选择最快镜像（腾讯/阿里/清华）"
-    echo -e "       ${YELLOW}默认: 自动测速${NC}  |  ${CYAN}选 0 则跳过，保持系统默认源${NC}"
+    echo -e "       ${CYAN}选 OFF 保持系统默认源${NC}  ${YELLOW}[默认: 自动测速]${NC}"
     echo ""
-    echo -e "  ${GREEN}[0]${NC}  使用全部默认值（安全更新开，其余关）"
+    echo -e "  ${GREEN}[D]${NC}  使用全部默认值（安全更新开，其余关）"
     echo ""
-    echo -n "请输入选项 [1/2/3/0，默认 0]: "
+    echo -n "请输入选项 [A/B/C/D，默认 D]: "
     read -r choice
-    choice="${choice:-0}"
+    choice="${choice:-D}"
     case "$choice" in
-        1)
-            CONFIGURE_FAIL2BAN="true"
-            CONFIGURE_MIRROR="auto"
-            ;;
-        2)
-            CONFIGURE_UNATTENDED="false"
-            CONFIGURE_MIRROR="auto"
-            ;;
-        3)
+        a|A)
             CONFIGURE_UNATTENDED="true"
-            CONFIGURE_FAIL2BAN="true"
+            CONFIGURE_FAIL2BAN="false"
+            CONFIGURE_MIRROR="off"
             ;;
-        0)
+        b|B)
+            CONFIGURE_UNATTENDED="false"
+            CONFIGURE_FAIL2BAN="true"
+            CONFIGURE_MIRROR="off"
+            ;;
+        c|C)
+            CONFIGURE_UNATTENDED="false"
+            CONFIGURE_FAIL2BAN="false"
+            CONFIGURE_MIRROR="auto"
+            ;;
+        d|D)
             # 全部使用默认值（已在变量声明中设置）
+            CONFIGURE_UNATTENDED="true"
+            CONFIGURE_FAIL2BAN="false"
+            CONFIGURE_MIRROR="auto"
             ;;
         *)
             echo -e "${YELLOW}无效选项${NC}"; step4_choose_features; return ;;
