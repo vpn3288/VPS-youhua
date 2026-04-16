@@ -237,14 +237,16 @@ optimize_network_oracle() {
         ethtool -K "$name" gro on 2>/dev/null || true
         ip link set "$name" txqueuelen 10000 2>/dev/null || true
 
-        # RPS（单核，CPU掩码 = 1）
-        if [[ $SYS_CPU_CORES -ge 1 ]]; then
+        # RPS（多核时启用，单核跳过）
+        if [[ $SYS_CPU_CORES -gt 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
-            for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
-                [[ -f "$rps_file" ]] || continue
-                printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
-            done
+            if [[ $cores -gt 0 ]]; then
+                local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
+                for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
+                    [[ -f "$rps_file" ]] || continue
+                    printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
+                done
+            fi
         fi
         log_info "网卡 $name 已优化"
     done
