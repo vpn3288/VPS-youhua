@@ -58,46 +58,6 @@ INTERACTIVE=true
 FORCE_MODE=""
 FORCE_PLATFORM=""
 
-for arg in "$@"; do
-    case "$arg" in
-        --optimize|--optimize-only) FORCE_MODE="optimize" ;;
-        --full|--install-all)        FORCE_MODE="full" ;;
-        --no-software)               FORCE_MODE="optimize" ;;
-        --install-deps)              INSTALL_DEPS="true" ;;
-        --proxy-mode)                FORCE_MODE="optimize"; SKIP_SOFTWARE_SCRIPT="true"; OPTIMIZE_ONLY="true" ;;
-        --non-interactive|-y|--yes)  INTERACTIVE=false; NONINTERACTIVE=1 ;;
-        --with-docker)               INSTALL_DOCKER="true" ;;
-        --without-docker)            INSTALL_DOCKER="false" ;;
-        --with-npm)                  INSTALL_NODEJS="true" ;;
-        --without-npm)               INSTALL_NODEJS="false" ;;
-        --with-unattended)           CONFIGURE_UNATTENDED="true" ;;
-        --without-unattended)        CONFIGURE_UNATTENDED="false" ;;
-        --with-fail2ban)             CONFIGURE_FAIL2BAN="true" ;;
-        --without-fail2ban)          CONFIGURE_FAIL2BAN="false" ;;
-        --mirror-auto)               CONFIGURE_MIRROR="auto" ;;
-        --mirror-off)                CONFIGURE_MIRROR="preserve" ;;
-        --clean-system)              CLEAN_SYSTEM="true" ;;
-        --uninstall)                 MODE="uninstall" ;;
-        --status)                    MODE="status" ;;
-        --help|-h)                   show_help; exit 0 ;;
-        --platform) ;; # skip, handled below
-        *)
-            if [[ "$arg" == --platform=* ]]; then
-                FORCE_PLATFORM="${arg#*=}"
-            elif [[ "$arg" == --* ]]; then
-                log_warn "未知选项: $arg"
-            fi
-            ;;
-    esac
-done
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 颜色
-# ─────────────────────────────────────────────────────────────────────────────
-
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
-
 log_info()  { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1" >&2; }
@@ -178,6 +138,46 @@ show_help() {
     bash install.sh --without-unattended    # 优化，安全更新保持系统默认
 EOF
 }
+for arg in "$@"; do
+    case "$arg" in
+        --optimize|--optimize-only) FORCE_MODE="optimize" ;;
+        --full|--install-all)        FORCE_MODE="full" ;;
+        --no-software)               FORCE_MODE="optimize" ;;
+        --install-deps)              INSTALL_DEPS="true" ;;
+        --proxy-mode)                FORCE_MODE="optimize"; SKIP_SOFTWARE_SCRIPT="true"; OPTIMIZE_ONLY="true" ;;
+        --non-interactive|-y|--yes)  INTERACTIVE=false; NONINTERACTIVE=1 ;;
+        --with-docker)               INSTALL_DOCKER="true" ;;
+        --without-docker)            INSTALL_DOCKER="false" ;;
+        --with-npm)                  INSTALL_NODEJS="true" ;;
+        --without-npm)               INSTALL_NODEJS="false" ;;
+        --with-unattended)           CONFIGURE_UNATTENDED="true" ;;
+        --without-unattended)        CONFIGURE_UNATTENDED="false" ;;
+        --with-fail2ban)             CONFIGURE_FAIL2BAN="true" ;;
+        --without-fail2ban)          CONFIGURE_FAIL2BAN="false" ;;
+        --mirror-auto)               CONFIGURE_MIRROR="auto" ;;
+        --mirror-off)                CONFIGURE_MIRROR="preserve" ;;
+        --clean-system)              CLEAN_SYSTEM="true" ;;
+        --uninstall)                 MODE="uninstall" ;;
+        --status)                    MODE="status" ;;
+        --help|-h)                   show_help; exit 0 ;;
+        --platform) ;; # skip, handled below
+        *)
+            if [[ "$arg" == --platform=* ]]; then
+                FORCE_PLATFORM="${arg#*=}"
+            elif [[ "$arg" == --* ]]; then
+                log_warn "未知选项: $arg"
+            fi
+            ;;
+    esac
+done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 颜色
+# ─────────────────────────────────────────────────────────────────────────────
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # APT 锁抢占处理（防止 unattended-upgrades 阻塞脚本）
