@@ -514,7 +514,9 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#6 FIX: optimize_memory_n5105 先运行（决定是否需要 swap），configure_swap 后判断
+    # BUG#6 FIX: _detect_n5105_memory_profile 必须在 optimize_memory_n5105 之前运行
+    _detect_n5105_memory_profile
+    # optimize_memory_n5105 先运行（决定是否需要 swap），configure_swap 后判断
     optimize_memory_n5105
     configure_swap
     # BUG#5: IPv6 黑洞检测
@@ -525,7 +527,6 @@ main() {
     detect_storage_type
     check_network
     preflight_check
-    _detect_n5105_memory_profile
 
     show_platform_summary
 
