@@ -75,10 +75,11 @@ optimize_memory_t6() {
 
     # 禁用物理 swap（eMMC 也尽量不用）
     for sw in /swapfile /swap.img; do
-        swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
+        swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
-    sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
+    sed -i '/swapfile/d' /etc/fstab 2>/dev/null || true
+    sed -i '/swap.img/d' /etc/fstab 2>/dev/null || true
 
     # Armbian zram-config 保留（zram 是压缩内存，零磁盘写入）
     if systemctl is-active armbian-zram-config &>/dev/null; then

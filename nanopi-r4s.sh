@@ -157,10 +157,11 @@ optimize_memory_r4s() {
 
     # ── 禁用物理 swap（TF 卡禁止 swap）────────────────────────────────
     for sw in /swapfile /swap.img; do
-        swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
+        swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
-    sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
+    sed -i '/swapfile/d' /etc/fstab 2>/dev/null || true
+    sed -i '/swap.img/d' /etc/fstab 2>/dev/null || true
 
     # ── zram 内存扩展（R4S 4GB TF，50% mem = ~1.9GB 等效）────────────
     if ! modprobe zram 2>/dev/null; then

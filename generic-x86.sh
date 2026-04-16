@@ -88,10 +88,12 @@ optimize_memory_generic() {
     log_step "配置内存优化 (${PROFILE_DESC})..."
 
     for sw in /swapfile /swap.img; do
-        swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
+        swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
-    sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
+    # 清理 fstab 中的 swap 条目（BUG FIX: 原来缺失）
+    sed -i '/swapfile/d' /etc/fstab 2>/dev/null || true
+    sed -i '/swap.img/d' /etc/fstab 2>/dev/null || true
 
     if [[ -f /sys/module/zswap/parameters/enabled ]]; then
         echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
