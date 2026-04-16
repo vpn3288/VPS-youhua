@@ -1,4 +1,20 @@
-#!/usr/bin/env bash
+#!/bin/bash
+#
+# VPS 优化脚本 - Oracle Cloud ARM
+#
+# 用法:
+#   sudo bash oracle-arm.sh                    # 完整安装（底层优化 + 软件依赖）
+#   sudo bash oracle-arm.sh --optimize-only    # 仅底层优化
+#   sudo bash oracle-arm.sh --uninstall        # 卸载所有优化
+#
+# 功能:
+#   - 系统内核参数优化（网络、内存、文件系统）
+#   - 安全加固（SSH、防火墙、fail2ban）
+#   - 性能调优（swap、tmpfs、I/O调度）
+#   - 可选软件安装（Docker、Node.js、开发工具）
+#
+# 项目: https://github.com/vpn3288/VPS-youhua
+#
 set -euo pipefail
 # =============================================================================
 # Oracle Cloud ARM 专用优化安装脚本 v3.2 R64
@@ -490,6 +506,7 @@ uninstall_all() {
     echo ""
     echo "========================================================================"
     echo -e "${GREEN}  ✅ VPS-youhua 卸载完成${NC}"
+    echo -e "${YELLOW}  ⚠️  建议重启系统以确保所有更改生效: sudo reboot${NC}"
     echo "========================================================================"
     exit 0
 }
