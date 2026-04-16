@@ -636,5 +636,6 @@ main() {
 }
 
 trap 'log_error "脚本异常退出 (行: ${LINENO})"; exit 1' ERR
+trap 'log_warn "被中断"; exit 130' INT TERM
 
 main "$@"
