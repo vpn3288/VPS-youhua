@@ -240,7 +240,8 @@ net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
-net.netfilter.nf_conntrack_max = 131072
+# BUG 修复: 动态计算 conntrack_max（R4S 4GB: 4096*32=131072）
+net.netfilter.nf_conntrack_max = $(( SYS_MEM_MB * 32 ))
 net.netfilter.nf_conntrack_hashsize = 65536
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
@@ -348,11 +349,12 @@ optimize_io_scheduler() {
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
     if [[ "$root_dev" == mmcblk* ]]; then
-        # TF 卡：mq-deadline（减少随机写入）
+        # TF 卡：none（noop 简化调度，减少卡顿）
+        # BUG 修复: TF 卡使用 mq-deadline/cfq 等调度器会引发高并发卡顿
         local sched_file="/sys/block/${root_dev}/queue/scheduler"
         if [[ -f "$sched_file" ]]; then
-            echo "mq-deadline" > "$sched_file" 2>/dev/null || true
-            log_info "TF 卡 $root_dev I/O Scheduler → mq-deadline"
+            echo "none" > "$sched_file" 2>/dev/null || true
+            log_info "TF 卡 $root_dev I/O Scheduler → none"
         fi
     elif [[ -f "/sys/block/${root_dev}/queue/rotational" ]] && \
          [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]]; then

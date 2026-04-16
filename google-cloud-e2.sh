@@ -231,6 +231,36 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# GCP Cloud CPU 调度器（共享 CPU 防护：ondemand 省电防降频）
+# ─────────────────────────────────────────────────────────────────────────────
+optimize_cpu_gcp() {
+    [[ "$SYS_IS_GCP_CLOUD" != "true" ]] && return 0
+    log_step "配置 GCP Cloud CPU 调度器..."
+
+    local avail_governors
+    avail_governors=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null || echo "")
+
+    local chosen="ondemand"
+    if echo "$avail_governors" | grep -qw "conservative"; then
+        chosen="conservative"
+        log_info "CPU 调度器: conservative"
+    elif echo "$avail_governors" | grep -qw "ondemand"; then
+        log_info "CPU 调度器: ondemand"
+    else
+        log_warn "CPU 调度器不可调: $avail_governors"
+        return 0
+    fi
+
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        local gf="$cpu/cpufreq/scaling_governor"
+        [[ -f "$gf" ]] && echo "$chosen" > "$gf" 2>/dev/null || true
+    done
+
+    local cur; cur=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
+    log_info "CPU 调度器: $cur"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # GCP Cloud 网络优化（VPC + 共享 CPU）
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_network_gcp() {
@@ -443,6 +473,7 @@ main() {
     configure_firewall_lo
     configure_tmp_tmpfs
     optimize_oom
+    optimize_cpu_gcp
     optimize_network_gcp
     configure_cleanup_cron
     configure_logrotate

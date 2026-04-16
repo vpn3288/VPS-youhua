@@ -402,6 +402,17 @@ EOF
 clean_system() {
     log_step "清理系统..."
 
+    # BUG 修复: 防止 APT 锁死冲突（DD 镜像 / 刚开机的 Debian 12）
+    # apt-daily / apt-daily-upgrade 在后台运行会持有 dpkg 锁导致 apt-get 失败
+    local apt_svcs=(apt-daily apt-daily-upgrade unattended-upgrades)
+    for svc in "${apt_svcs[@]}"; do
+        if systemctl is-active --quiet "$svc" 2>/dev/null; then
+            log_info "停止后台 APT 服务: $svc"
+            systemctl stop "$svc" 2>/dev/null || true
+        fi
+        systemctl mask "$svc" 2>/dev/null || true
+    done
+
     # 关闭常见干扰服务（仅当服务存在且处于激活状态时才停止）
     local stop_svcs=(snapd apache2 nginx postfix exim4 ufw)
     for svc in "${stop_svcs[@]}"; do
@@ -460,6 +471,12 @@ install_base_tools() {
         dirmngr ethtool pciutils bc dc cron
     )
     install_if_missing "${basic_tools[@]}"
+
+    # BUG 修复: DD 镜像根证书断层
+    # DD 出来的 Debian 可能证书链不完整，强制刷新
+    if command -v update-ca-certificates &>/dev/null; then
+        update-ca-certificates 2>/dev/null || true
+    fi
 
     # 编译依赖（任何 agent 安装脚本都需要）
     local compile_tools=(

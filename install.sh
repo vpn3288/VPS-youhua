@@ -64,7 +64,7 @@ for arg in "$@"; do
         --no-software)               FORCE_MODE="optimize" ;;
         --install-deps)              INSTALL_DEPS="true" ;;
         --proxy-mode)                FORCE_MODE="optimize"; SKIP_SOFTWARE_SCRIPT="true"; OPTIMIZE_ONLY="true" ;;
-        --non-interactive|-y|--yes)  INTERACTIVE=false ;;
+        --non-interactive|-y|--yes)  INTERACTIVE=false; NONINTERACTIVE=1 ;;
         --with-docker)               INSTALL_DOCKER="true" ;;
         --without-docker)            INSTALL_DOCKER="false" ;;
         --with-npm)                  INSTALL_NODEJS="true" ;;
@@ -399,7 +399,7 @@ show_platform_info() {
 #────────────────────────────────────────────────────────────────
 show_quick_start_menu() {
     # NONINTERACTIVE 模式跳过交互菜单
-    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
         quick_choice="${QUICK_CHOICE:-1}"
         log_info "非交互模式: quick_choice=${quick_choice}"
         return 0
@@ -503,7 +503,7 @@ show_quick_start_menu() {
 
 step1_choose_platform() {
     # NONINTERACTIVE 模式：跳过菜单，使用默认值
-    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
         log_info "非交互模式: platform 使用默认值或 FORCE_PLATFORM"
         return 0
     fi
@@ -532,7 +532,7 @@ step1_choose_platform() {
 
 step2_choose_subplatform() {
     # NONINTERACTIVE 模式：跳过菜单，使用 SELECTED_PLATFORM
-    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
         log_info "非交互模式: subplatform 使用 SELECTED_PLATFORM=${SELECTED_PLATFORM:-auto}"
         return 0
     fi
@@ -615,7 +615,7 @@ step2_choose_subplatform() {
 
 step3_choose_mode() {
     # NONINTERACTIVE 模式：跳过菜单，使用 SELECTED_MODE
-    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
         log_info "非交互模式: mode 使用 SELECTED_MODE=${SELECTED_MODE:-optimize}"
         return 0
     fi
@@ -649,7 +649,7 @@ step3_choose_mode() {
 
 step4_choose_features() {
     # NONINTERACTIVE 模式：跳过菜单，使用默认值
-    if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
+    if [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
         CONFIGURE_UNATTENDED="${CONFIGURE_UNATTENDED:-true}"
         CONFIGURE_FAIL2BAN="${CONFIGURE_FAIL2BAN:-false}"
         CONFIGURE_MIRROR="${CONFIGURE_MIRROR:-auto}"

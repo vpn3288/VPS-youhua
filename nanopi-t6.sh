@@ -36,7 +36,9 @@ readonly MIN_FREE_KB=65536                     # 16GB OOM 防线
 # T6 网络（2.5GbE × 2）
 readonly NETDEV_BACKLOG=131072
 readonly SOMAXCONN=65535
-readonly CT_MAX=262144
+# BUG 修复: T6 16GB 机器使用动态 conntrack 公式
+# 动态: RAM_MB * 32，范围 [16384, 1048576]
+# 公式: RAM_MB * 32 提供足够连接数同时不耗尽内存
 readonly CT_HASH_SIZE=131072
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -166,7 +168,8 @@ net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
-net.netfilter.nf_conntrack_max = ${CT_MAX}
+# BUG 修复: 动态计算 conntrack_max（不再硬编码）
+net.netfilter.nf_conntrack_max = $(( SYS_MEM_MB * 32 ))
 net.netfilter.nf_conntrack_hashsize = ${CT_HASH_SIZE}
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
@@ -279,11 +282,20 @@ optimize_io_scheduler() {
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    local sched_file="/sys/block/${root_dev}/queue/scheduler"
-    if [[ -f "$sched_file" ]]; then
-        if [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]]; then
+    if [[ "$root_dev" == mmcblk* ]]; then
+        # eMMC 或 TF 卡：none
+        local sched_file="/sys/block/${root_dev}/queue/scheduler"
+        if [[ -f "$sched_file" ]]; then
             echo "none" > "$sched_file" 2>/dev/null || true
-            log_info "SSD/eMMC $root_dev I/O Scheduler → none"
+            log_info "eMMC/TF $root_dev I/O Scheduler → none"
+        fi
+    elif [[ -f "/sys/block/${root_dev}/queue/rotational" ]] && \
+         [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]]; then
+        # SSD：none
+        local sched_file="/sys/block/${root_dev}/queue/scheduler"
+        if [[ -f "$sched_file" ]]; then
+            echo "none" > "$sched_file" 2>/dev/null || true
+            log_info "SSD $root_dev I/O Scheduler → none"
         fi
     fi
 }
