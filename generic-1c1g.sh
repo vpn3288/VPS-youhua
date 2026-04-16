@@ -56,7 +56,9 @@ fi
 configure_sysctl_generic_1c1g() {
     log_step "配置 sysctl 系统参数..."
 
-    cat > "$SYSCTL_FILE" <<EOF
+    write_common_sysctl "$SYSCTL_FILE"
+
+    cat >> "$SYSCTL_FILE" <<EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # VPS-youhua 通用 1核 1G VPS sysctl 极简配置
 # 平台: 任意 1核 1GB x86_64 VPS
@@ -291,6 +293,10 @@ uninstall_all() {
     rm -f /etc/profile.d/99-agent-cache.sh
 
     systemctl daemon-reload 2>/dev/null || true
+
+    # 清理 iptables 规则
+    iptables -D INPUT -i lo -j ACCEPT 2>/dev/null || true
+    log_info "iptables 规则已清理"
 
     echo ""
     echo "========================================================================"

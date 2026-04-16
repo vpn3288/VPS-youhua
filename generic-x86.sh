@@ -482,6 +482,10 @@ uninstall_all() {
 
     systemctl daemon-reload 2>/dev/null || true
 
+    # 清理 iptables 规则
+    iptables -D INPUT -i lo -j ACCEPT 2>/dev/null || true
+    log_info "iptables 规则已清理"
+
     echo ""
     echo "========================================================================"
     echo -e "${GREEN}  ✅ VPS-youhua 卸载完成${NC}"

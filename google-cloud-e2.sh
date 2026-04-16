@@ -169,7 +169,9 @@ optimize_memory_gcp() {
 configure_sysctl_gcp() {
     log_step "配置 sysctl 系统参数..."
 
-    cat > "$SYSCTL_FILE" <<EOF
+    write_common_sysctl "$SYSCTL_FILE"
+
+    cat >> "$SYSCTL_FILE" <<EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # VPS-youhua Google Cloud e2-micro sysctl 配置
 # 平台: GCP e2-micro 1vCPU 共享 1GB RAM
@@ -455,6 +457,10 @@ uninstall_all() {
 
     systemctl daemon-reload 2>/dev/null || true
 
+    # 清理 iptables 规则
+    iptables -D INPUT -i lo -j ACCEPT 2>/dev/null || true
+    log_info "iptables 规则已清理"
+
     echo ""
     echo "========================================================================"
     echo -e "${GREEN}  ✅ VPS-youhua 卸载完成${NC}"
@@ -501,7 +507,8 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#1: 低内存 Swap 创建
+    # BUG#6 FIX: optimize_memory_gcp 先运行（决定是否需要 swap），configure_swap 后判断
+    optimize_memory_gcp
     configure_swap
     # BUG#5: IPv6 黑洞检测
     configure_ipv6_health
@@ -529,7 +536,6 @@ main() {
     configure_apt_sources
     clean_system
     gcp_cloud_cleanup
-    optimize_memory_gcp
     configure_sysctl_gcp
     configure_limits
 
