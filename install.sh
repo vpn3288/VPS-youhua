@@ -17,11 +17,11 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="3da1c414592ff0a10006691ec5fd9497db93d9cedcf4f7a5fcaf9c65002f2b49"
-    ["nanopi-t6"]="4588ae91ecb7d994abd076d7d6e78e69188e7565e5ca3ffea773bfe97dba4fb7"
-    ["oracle-arm"]="8dd3e1aba7ad6f6b27f40e51b558a41c1b23d6c2aa9513defc2987a67c6a02ff"
-    ["n5105"]="e2e91ddf49d766cd17d916ab95c50a04b73048429635b947e6c3bebc97e79924"
-    ["generic-x86"]="11a58a322525d1d2cca573a02666f552fdd5c4f4ae1d3369e9f4b134cab96db7"
+    ["nanopi-r4s"]="acdb662f962b7edfaac1bd7984144fa3c64bce455ce193bf72641f73f78c08bf"
+    ["nanopi-t6"]="c30f9c8bcd90a9d90ba1253bf00806bea079b09b034ef1354547d05daceebdb9"
+    ["oracle-arm"]="64c4f836cc687aa32f55cb5686726cc4796025104c8ad33be73f9b276cac3a92"
+    ["n5105"]="2ab6dfbcd92282f4c4bd5908c74ad5fe3909ae4411927699491dd023c25e133d"
+    ["generic-x86"]="289ac743ffbbfb606333c40bde35587f5fb26728aca99876eef0350920cae737"
     ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
 
@@ -72,6 +72,7 @@ for arg in "$@"; do
         --mirror-off)                CONFIGURE_MIRROR="off" ;;
         --clean-system)              CLEAN_SYSTEM="true" ;;
         --uninstall)                 MODE="uninstall" ;;
+        --status)                    run_verify_status; exit $? ;;
         --help|-h)                   show_help; exit 0 ;;
         --platform) ;; # skip, handled below
         *)
@@ -95,6 +96,36 @@ log_info()  { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1" >&2; }
 log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 健康检查（--status）
+# ─────────────────────────────────────────────────────────────────────────────
+
+run_verify_status() {
+    echo -e "${BOLD}正在下载并运行环境健康检查...${NC}"
+    local verify_url="${RAW_BASE}/verify-v3.1.sh"
+    local verify_file="/tmp/vps-youhua-verify-$(date +%s).sh"
+
+    if ! curl -fsSL "$verify_url" -o "$verify_file"; then
+        log_error "无法下载 verify-v3.1.sh，请检查网络连接"
+        return 1
+    fi
+
+    bash "$verify_file"; local rv=$?
+
+    # 清理临时文件
+    rm -f "$verify_file"
+
+    if [[ $rv -eq 0 ]]; then
+        echo ""
+        echo -e "${GREEN}✅ 环境健康检查通过！${NC}"
+    else
+        echo ""
+        echo -e "${YELLOW}⚠️  环境健康检查有异常，请查看上方输出${NC}"
+    fi
+
+    return $rv
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 帮助信息
@@ -128,6 +159,7 @@ show_help() {
     --non-interactive   非交互模式，使用默认选项
     --clean-system      优化前清理系统缓存
     --uninstall         卸载所有优化配置
+    --status            运行环境健康检查（查看当前优化状态）
     --help, -h          显示本帮助信息
 
 示例:
@@ -135,6 +167,7 @@ show_help() {
     bash install.sh --optimize              # 只做优化，不装软件
     bash install.sh --full                  # 优化 + 全量安装
     bash install.sh --full --without-docker  # 优化 + 安装但跳过 Docker
+    bash install.sh --status                 # 查看当前环境健康状态
     bash install.sh --with-fail2ban         # 优化 + 开启 fail2ban
     bash install.sh --without-unattended    # 优化，安全更新保持系统默认
 EOF
@@ -448,6 +481,11 @@ step4_choose_features() {
             CONFIGURE_UNATTENDED="false"
             CONFIGURE_FAIL2BAN="true"
             CONFIGURE_MIRROR="off"
+            echo ""
+            echo -e "${YELLOW}⚠️  重要提示：fail2ban 开启后，请确保已配置 SSH 密钥登录！${NC}"
+            echo -e "${YELLOW}   否则如果密码登录失败3次，当前 IP 会被封禁1小时。${NC}"
+            echo -e "${YELLOW}   如需保留密码登录作为备份，请先编辑 /etc/ssh/sshd_config 添加密钥后再继续。${NC}"
+            echo ""
             ;;
         c|C)
             CONFIGURE_UNATTENDED="false"

@@ -333,11 +333,14 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 
 ## 版本历史
 
-### v3.2 R60（最新）
+### v3.2 R61（最新）
+- 新增：`--status` 参数直接调用 verify-v3.1.sh 健康检查（install.sh），并更新帮助文档
+- 新增：R4S `install_nodejs()` 编译前临时挂载 1G tmpfs 到 /tmp（TF 卡保护），编译完自动卸载
+- 新增：fail2ban 选项 B 增加新手警告"请确保已配置 SSH 密钥登录，否则可能锁死"
+- 新增：Oracle Cloud ARM 增加 `check_oracle_metadata()` 元数据健康检查（非 Oracle 环境自动跳过）
 - 修复：verify-v3.1.sh 删除残留 `99-openclaw.conf`（替换为 `99-vps-youhua-*.conf`）
 - 修复：Oracle ARM TCP 缓冲从固定 32MB 改为动态自适应（内存 5%，上限 64MB，下限 16MB）
 - 新增：所有平台添加 `vm.oom_kill_allocating_task=1`（sysctl 配置 + 运行时立即生效）
-- 已知实现良好：BBR + `default_qdisc=fq` 已在 common-optimize.sh（行 678-679）；tcp_tw_recycle 全脚本不存在（无害）；irqbalance T6 已安装；chrony 已安装；lo 防火墙已放行；R4S schedutil（非 performance）；Oracle Cloud Agent 卸载已存在
 - 新增：幂等性检测，重复运行时提示"系统已完成过优化"（检测 /etc/vps-youhua-optimized 标记文件，-y 参数跳过确认）
 - 新增：所有平台脚本完成时写入 /etc/vps-youhua-optimized 标记（date 时间戳）
 - 新增：R4S TF 卡检测升级为多方法交叉验证（df + sys/class/block + eMMC 存在性检测）

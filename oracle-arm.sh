@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.1 R60
+# Oracle Cloud ARM 专用优化安装脚本 v3.1 R61
 # 硬件: Ampere Altra, 2核16GB, 100GB 云盘
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
@@ -482,6 +482,35 @@ uninstall_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Oracle Cloud 元数据健康检查（可选，防云端 kill）
+# ─────────────────────────────────────────────────────────────────────────────
+check_oracle_metadata() {
+    log_step "检查 Oracle Cloud 元数据..."
+
+    # 检测是否在 Oracle Cloud 环境中
+    local meta_status
+    meta_status=$(curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" \
+        http://169.254.169.254/latest/meta-data/ 2>/dev/null || echo "000")
+
+    if [[ "$meta_status" == "200" ]]; then
+        local instance_id
+        instance_id=$(curl -s --connect-timeout 3 http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "unknown")
+        log_info "Oracle Cloud 元数据正常（实例: $instance_id）"
+
+        # 检测是否启用了 Oracle Cloud Agent（消耗资源）
+        local agent_status
+        agent_status=$(systemctl is-active oracle-cloud-agent 2>/dev/null || echo "inactive")
+        if [[ "$agent_status" == "active" ]]; then
+            log_warn "检测到 Oracle Cloud Agent 运行中（消耗内存/CPU），已安排卸载"
+        else
+            log_info "Oracle Cloud Agent 未运行（已卸载或不存在）"
+        fi
+    else
+        log_info "非 Oracle Cloud 环境或元数据端点不可访问（元数据检查跳过）"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
@@ -498,13 +527,14 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R60${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R61${NC}"
     echo "========================================================================"
     echo ""
 
     init_script
     detect_system
     detect_oracle_cloud
+    check_oracle_metadata
     check_network
     preflight_check
 
@@ -561,7 +591,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R60 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R61 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

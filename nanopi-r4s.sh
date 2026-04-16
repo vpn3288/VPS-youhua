@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.1 R60
+# NanoPi R4S 专用优化安装脚本 v3.1 R61
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -399,13 +399,25 @@ install_nodejs() {
         return 0
     fi
 
+    # R4S TF 卡保护：编译期间临时挂载 1G tmpfs 到 /tmp
+    # 避免 npm 百万级小文件写坏 TF 卡
+    local tmpfs_mounted=false
+    if [[ "$SYS_IS_TF_CARD" == "true" ]] && ! mount | grep -q "tmpfs on /tmp"; then
+        mount -t tmpfs -o size=1G tmpfs /tmp && tmpfs_mounted=true
+        log_info "已挂载 tmpfs 1G 到 /tmp（TF 卡保护）"
+    fi
+
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || {
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
+            [[ "$tmpfs_mounted" == "true" ]] && umount /tmp 2>/dev/null
             return 1
         }
     }
+
+    # 卸载临时 tmpfs（编译已完成）
+    [[ "$tmpfs_mounted" == "true" ]] && umount /tmp && log_info "已卸载临时 tmpfs"
 
     if command -v node &>/dev/null; then
         log_info "Node.js 安装完成: $(node --version)"
@@ -595,7 +607,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R60${NC}"
+    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R61${NC}"
     echo "========================================================================"
     echo ""
 
@@ -660,7 +672,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R60 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R61 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
