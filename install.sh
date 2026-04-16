@@ -17,11 +17,11 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="c31f77dec46b89a2433597e93c1d816571f1ae645d73e8aea734ae3c4d0a02e2"
-    ["nanopi-t6"]="a226ec559c17c2dd50fb6f6db9d4d0bf1575708f2c5ceea28c760472259adc18"
-    ["oracle-arm"]="af0634930e4a4ca1506186bad438447c2e30c01c8eb6de479d85a93498a33a07"
-    ["n5105"]="4776cc49dd2c4cfc248b8772a8d9c30acb87b9cfbdc3e9c32b7322c6e078649b"
-    ["generic-x86"]="c54cdb48d2f1460ce76bc7ee9fcb90ae1953b65bd6edf4a5f0a13f21f135e236"
+    ["nanopi-r4s"]="edfd0c445e9b9b4e5604970fe50b8b5dd8e5aea62cc5e942751acab0fdc3888f"
+    ["nanopi-t6"]="90d8f584db91210ad1c94e7730889d3e71baffc096a465b87fb4328977c22d68"
+    ["oracle-arm"]="6f35e199ee5eeaf52302874346d90fbe2924bcb667bf3615dce60254eb67ea55"
+    ["n5105"]="815546e92fb1501a8fa2944361fdce464072d4fe2493277cb232199a4082bbea"
+    ["generic-x86"]="5f5679477b69a19592c87582334d6434a8eb1131e35c3777371a5db9966bcf77"
     ["verify-v3.1"]="884a4e294436ac8e429cabfd31a0694b0222ad7e8f7e78c1c492ec497b7d77a1"
 )
 
@@ -141,6 +141,50 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# APT 锁抢占处理（防止 unattended-upgrades 阻塞脚本）
+# ─────────────────────────────────────────────────────────────────────────────
+
+wait_for_apt_lock() {
+    local max_wait=60
+    local waited=0
+    local lock_files=(/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock)
+
+    # 检测是否有 apt 进程在运行
+    if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+       fuser /var/lib/dpkg/lock >/dev/null 2>&1; then
+        log_info "检测到 APT 进程正在运行，正在等待锁释放..."
+    fi
+
+    # 优雅停止 apt-daily 服务
+    for svc in apt-daily apt-daily-upgrade unattended-upgrades; do
+        if systemctl is-active --quiet $svc 2>/dev/null; then
+            log_warn "停止后台服务: $svc"
+            systemctl stop $svc 2>/dev/null || true
+        fi
+        systemctl mask $svc 2>/dev/null || true
+    done
+
+    # 等待锁释放
+    while [[ -f /var/lib/dpkg/lock-frontend ]] || [[ -f /var/lib/dpkg/lock ]]; do
+        if [[ $waited -ge $max_wait ]]; then
+            log_error "APT 锁等待超时（${max_wait}s），请手动运行: systemctl status apt-daily"
+            return 1
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+
+    # 确保 dpkg 状态正常
+    if [[ -f /var/lib/dpkg/status-old ]] && ! command -v dpkg &>/dev/null; then
+        # 极端情况：dpkg 被破坏
+        log_warn "dpkg 命令不可用，尝试修复..."
+        dpkg --configure -a 2>/dev/null || true
+    fi
+
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 平台检测
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -170,6 +214,8 @@ detect_platform() {
             elif echo "$cpu_model" | grep -qi "RK3399"; then
                 echo "nanopi-r4s"
             else
+                # 未知 ARM64 设备，fallback 到 nanopi-r4s（最通用ARM板）
+                log_warn "未知 ARM64 设备: ${cpu_model:-unknown}，将使用通用 ARM 配置"
                 echo "nanopi-r4s"
             fi
             ;;
@@ -651,6 +697,12 @@ main() {
     fi
 
     trap 'rm -f /tmp/vps-youhua-*.sh' EXIT
+
+    # ── 抢占 APT 锁（防止 unattended-upgrades 阻塞脚本）────────────────────────
+    if ! wait_for_apt_lock; then
+        log_error "APT 锁处理失败，请稍后重试或手动运行: systemctl status apt-daily"
+        exit 1
+    fi
 
     show_banner
     check_network
