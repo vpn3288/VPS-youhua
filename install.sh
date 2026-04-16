@@ -23,7 +23,7 @@ declare -A EXPECTED_SHA256=(
     ["oracle-1c4g"]="f6cbf6effbe51e3ce20f8cc056e4c15ec6613cd5d5a1957b46e8f3cfb81b0f6e"
     ["n5105"]="e8dbfee4348d6860fdd000b1b8ad31318021aab6f15736fd6753f4785186278a"
     ["generic-x86"]="4381868c945d48a9b6ac9d43bdb33a9e34e1d65373bfb3c7012351fb23c0a58b"
-    ["generic-1c1g"]="5a196e08a57665fe139a70e75691e00ba1670dbbc0a2aa4d03a023905c11e664"
+    ["generic-1c1g"]="6feb5fe90201607f0375775f323df4bae4c46b1520da8c9972684a8bfbe7a97e"
     ["google-cloud-e2"]="81469db7d63732fd753c6ed64efd27c519fedf9b3cc418b8a90a66ec454fa383"
     ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
@@ -251,7 +251,7 @@ detect_platform() {
                  echo "$cpu_model" | grep -qiE "Ampere|Altra"; then
                 # Oracle Cloud：根据内存自动选择规格
                 if [[ $sys_mem_mb -gt 0 ]] && [[ $sys_mem_mb -lt 8192 ]]; then
-                    log_info "Oracle Cloud 检测到内存 ${sys_mem_mb}MB，自动选择 1核4G 配置"
+                    echo "Oracle Cloud 检测到内存 ${sys_mem_mb}MB，自动选择 1核4G 配置" >&2
                     echo "oracle-1c4g"
                 else
                     echo "oracle-arm"
@@ -273,13 +273,13 @@ detect_platform() {
             gcp_meta=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
                 "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null || echo "")
             if echo "$gcp_meta" | grep -q "e2-micro\|e2-small\|e2-medium\|f1-micro\|g1-small"; then
-                log_info "Google Cloud 检测通过（${gcp_meta}），使用 GCP e2 优化"
+                echo "Google Cloud 检测通过（${gcp_meta}），使用 GCP e2 优化" >&2
                 echo "google-cloud-e2"
             elif echo "$cpu_model" | grep -qiE "N5105|N5095|J6412|J6413"; then
                 echo "n5105"
             elif [[ $sys_mem_mb -gt 0 ]] && [[ $sys_mem_mb -lt 2048 ]]; then
                 # 1GB 及以下内存，自动使用极简版
-                log_info "检测到内存 ${sys_mem_mb}MB，自动选择 1核1G 极简版配置"
+                echo "检测到内存 ${sys_mem_mb}MB，自动选择 1核1G 极简版配置" >&2
                 echo "generic-1c1g"
             else
                 echo "generic-x86"
