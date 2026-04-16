@@ -8,7 +8,7 @@
 [![Debian 12](https://img.shields.io/badge/Debian-12-AA0000?logo=debian)](https://www.debian.org/)
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v3.1](https://img.shields.io/badge/版本-v3.1-green.svg)](https://github.com/vpn3288/VPS-youhua)
+[![v3.2](https://img.shields.io/badge/版本-v3.2-green.svg)](https://github.com/vpn3288/VPS-youhua)
 [![5平台](https://img.shields.io/badge/平台-5个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
 
 </div>
@@ -19,9 +19,9 @@
 
 本项目为 AIagent（OpenClaw、Hermes 等）提供**安装前的环境优化**，让 AIagent 能以安全、稳定、高速、长期运行的状态部署。
 
-**默认行为：优化环境 + 安装 Docker + 安装 OpenClaw。**
+**交互模式默认行为：完整优化 + Docker + Node.js（适合新手快速部署）。**
 
-使用 `--optimize-only` 可跳过所有安装步骤，仅做纯环境优化（sysctl、journald、swap、CPU governor、inotify 等），适合"只想优化环境、后面装其他东西"的场景。
+使用 `--optimize-only` 可跳过所有安装步骤，仅做纯环境优化（sysctl、journald、swap、CPU governor、inotify 等），适合"只想优化环境、后面装其他东西"的场景。使用环境变量 `INSTALL_DOCKER=false` 或 `INSTALL_NODEJS=false` 可单独禁用某项安装。
 
 ### 核心原则
 
@@ -78,7 +78,7 @@ openclaw onboard                          # 首次配置
 | 平台 | CPU | 内存 | 存储 | 推荐脚本 |
 |------|-----|------|------|----------|
 | NanoPi R4S | RK3399 (ARM64) | 4GB | **TF卡** | `nanopi-r4s.sh` |
-| NanoPC T6 | RK3588S (ARM64) | 8GB | **eMMC** | `nanopi-t6.sh` |
+| NanoPC T6 | RK3588S (ARM64) | 16GB | **eMMC** | `nanopi-t6.sh` |
 | Oracle Cloud ARM | Ampere Altra (ARM64) | 16GB | 云盘 | `oracle-arm.sh` |
 | N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | SSD | `n5105.sh` |
 | 通用 x86 VPS | 任意 x86_64 | 自动适配 | 自动检测（SSD/HDD） | `generic-x86.sh` |
@@ -333,7 +333,15 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 
 ## 版本历史
 
-### v3.1（最新）
+### v3.2（最新）
+- 修复：所有平台脚本 uninstall 函数完整移除 unattended-upgrades 包（之前只删配置文件，包裹残留）
+- 修复：install.sh VERSION="3.1"→"3.2"（上次漏改）
+- 修复：common-optimize.sh 头注释 R55→R56（上次漏改）
+- 安全：APT 腾讯/阿里镜像 http→https（防中间人攻击）
+- 健壮：install_docker() / install_nodejs() 安装失败时报错并 return 1，不再静默继续
+- 健壮：verify-v3.1.sh sysctl 配置文件路径从硬编码改为自动扫描
+
+### v3.1
 - 移除 OpenClaw 相关代码及文本残留（纯优化定位更清晰）
 - R57: 5个平台脚本 uninstall 函数清理 OpenClaw 残留
 - 统一全平台 conntrack timeout（close_wait=5, fin_wait=10）
