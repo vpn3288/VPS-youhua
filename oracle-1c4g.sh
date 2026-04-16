@@ -126,7 +126,10 @@ optimize_memory_oracle() {
 configure_sysctl_oracle() {
     log_step "配置 sysctl 系统参数..."
 
-    cat > "$SYSCTL_FILE" <<EOF
+    # 先写入通用安全加固参数（BUG#FIX: 丢失通用参数）
+    write_common_sysctl "$SYSCTL_FILE"
+
+    cat >> "$SYSCTL_FILE" <<EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # VPS-youhua Oracle Cloud ARM 1C4G sysctl 配置
 # 平台: Oracle Cloud 1核 4GB AMPERE ALTA
@@ -348,6 +351,89 @@ check_oracle_metadata() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 卸载函数（BUG#FIX: oracle-1c4g.sh 原缺少卸载函数）
+# ─────────────────────────────────────────────────────────────────────────────
+uninstall_all() {
+    echo ""
+    echo "========================================================================"
+    echo -e "${RED}  VPS-youhua 卸载 / 回滚${NC}"
+    echo "========================================================================"
+    echo ""
+
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}[✗] 需要 root 权限${NC}"
+        exit 1
+    fi
+
+    if [[ "${1:-}" != "--uninstall" ]]; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
+    echo ""
+    echo -n "确认卸载？(输入 'yes' 继续): "
+    read -r confirm
+    if [[ "$confirm" != "yes" ]]; then
+        echo "已取消卸载。"
+        exit 0
+    fi
+
+    echo ""
+    echo -e "${CYAN}[➜] 开始卸载...${NC}"
+
+    systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
+
+    # 清理所有配置文件
+    rm -f /etc/sysctl.d/99-vps-youhua-oracle-1c4g.conf
+    rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
+    rm -f /etc/security/limits.d/99-vps-youhua.conf
+    rm -f /etc/systemd/system.conf.d/99-memory-accounting.conf
+    rm -f /etc/systemd/system.conf.d/99-resource-limits.conf
+    rm -f /etc/systemd/system.conf.d/99-oom-policy.conf
+    rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
+    rm -f /etc/cron.d/vps-youhua-cleanup
+    rm -f /etc/cron.daily/vps-youhua-clean
+    rm -f /etc/logrotate.d/vps-youhua
+    rm -f /etc/apt/apt.conf.d/99-noninteractive
+    rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
+    rm -f /etc/apt/apt.conf.d/99-vps-youhua-unattended
+    rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
+    rm -f /etc/profile.d/99-agent-cache.sh
+    rm -f /etc/default/cpufrequtils 2>/dev/null || true
+    rm -f /etc/default/zramswap 2>/dev/null || true
+
+    # 停止并卸载 unattended-upgrades
+    if command -v unattended-upgrades &>/dev/null; then
+        systemctl stop unattended-upgrades 2>/dev/null || true
+        systemctl disable unattended-upgrades 2>/dev/null || true
+        apt-get remove --purge -y unattended-upgrades >> /dev/null 2>&1 || true
+    fi
+
+    # 停止并卸载 fail2ban
+    if command -v fail2ban-server &>/dev/null; then
+        systemctl stop fail2ban 2>/dev/null || true
+        systemctl disable fail2ban 2>/dev/null || true
+        rm -f /etc/fail2ban/jail.local
+        rm -f /etc/fail2ban/jail.d/*.local 2>/dev/null || true
+        apt-get remove --purge -y fail2ban >> /dev/null 2>&1 || true
+    fi
+
+    # 恢复 sources.list 备份
+    local backup
+    for backup in /etc/apt/sources.list.bak.*; do
+        [[ -f "$backup" ]] && cp "$backup" /etc/apt/sources.list && break
+    done
+
+    systemctl daemon-reload 2>/dev/null || true
+
+    echo ""
+    echo "========================================================================"
+    echo -e "${GREEN}  ✅ VPS-youhua 卸载完成${NC}"
+    echo "========================================================================"
+    exit 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
@@ -359,6 +445,7 @@ main() {
     done
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
+    FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
     uninstall_all "$@" || exit 1
 
@@ -411,6 +498,9 @@ main() {
     configure_locale
     configure_firewall_lo
     configure_tmp_tmpfs
+    # BUG#FIX: 补充通用函数调用（npm缓存/tmpfs + 内存统计）
+    configure_npm_cache_tmpfs
+    configure_memory_accounting
 
     # ── CPU governor powersave（Oracle 1C4G 代理节点省电）────────────
     if [[ -d /sys/devices/system/cpu/cpu0/cpufreq ]]; then

@@ -539,12 +539,24 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 configure_firewall_lo() {
     log_step "配置防火墙 lo 网卡放行..."
-    if command -v iptables &>/dev/null; then
-        iptables -C INPUT -i lo -j ACCEPT 2>/dev/null || iptables -A INPUT -i lo -j ACCEPT
-        iptables -C OUTPUT -o lo -j ACCEPT 2>/dev/null || iptables -A OUTPUT -o lo -j ACCEPT
-        log_info "lo 网卡已无脑放行"
-    else
+    if ! command -v iptables &>/dev/null; then
         log_info "iptables 未安装，跳过"
+        return 0
+    fi
+
+    iptables -C INPUT -i lo -j ACCEPT 2>/dev/null || iptables -A INPUT -i lo -j ACCEPT
+    iptables -C OUTPUT -o lo -j ACCEPT 2>/dev/null || iptables -A OUTPUT -o lo -j ACCEPT
+    log_info "lo 网卡已无脑放行"
+
+    # BUG#FIX: iptables 规则持久化（重启后保留）
+    mkdir -p /etc/iptables
+    if command -v iptables-save &>/dev/null; then
+        iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+        log_info "iptables 规则已持久化（/etc/iptables/rules.v4）"
+    fi
+    # 安装 iptables-persistent 以便下次重启自动加载规则
+    if ! dpkg -l iptables-persistent &>/dev/null; then
+        DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent >> "$APT_LOG" 2>&1 || true
     fi
 }
 

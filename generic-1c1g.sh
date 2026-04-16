@@ -244,6 +244,62 @@ run_doctor() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 卸载函数（BUG#FIX: generic-1c1g.sh 原缺少卸载函数）
+# ─────────────────────────────────────────────────────────────────────────────
+uninstall_all() {
+    echo ""
+    echo "========================================================================"
+    echo -e "${RED}  VPS-youhua 卸载 / 回滚${NC}"
+    echo "========================================================================"
+    echo ""
+
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}[✗] 需要 root 权限${NC}"
+        exit 1
+    fi
+
+    if [[ "${1:-}" != "--uninstall" ]]; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
+    echo ""
+    echo -n "确认卸载？(输入 'yes' 继续): "
+    read -r confirm
+    if [[ "$confirm" != "yes" ]]; then
+        echo "已取消卸载。"
+        exit 0
+    fi
+
+    echo ""
+    echo -e "${CYAN}[➜] 开始卸载...${NC}"
+
+    # 清理所有配置文件
+    rm -f /etc/sysctl.d/99-vps-youhua-generic-1c1g.conf
+    rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
+    rm -f /etc/security/limits.d/99-vps-youhua.conf
+    rm -f /etc/systemd/system.conf.d/99-memory-accounting.conf
+    rm -f /etc/systemd/system.conf.d/99-resource-limits.conf
+    rm -f /etc/systemd/system.conf.d/99-oom-policy.conf
+    rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
+    rm -f /etc/cron.daily/vps-youhua-clean
+    rm -f /etc/logrotate.d/vps-youhua
+    rm -f /etc/apt/apt.conf.d/99-noninteractive
+    rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
+    rm -f /etc/apt/apt.conf.d/99-vps-youhua-unattended
+    rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
+    rm -f /etc/profile.d/99-agent-cache.sh
+
+    systemctl daemon-reload 2>/dev/null || true
+
+    echo ""
+    echo "========================================================================"
+    echo -e "${GREEN}  ✅ VPS-youhua 卸载完成${NC}"
+    echo "========================================================================"
+    exit 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
@@ -255,6 +311,7 @@ main() {
     done
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
+    FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
     uninstall_all "$@" || exit 1
 
@@ -304,6 +361,9 @@ main() {
     configure_firewall_lo
     configure_tmp_tmpfs
     configure_zram_1c1g
+    # BUG#FIX: 补充通用函数调用
+    configure_npm_cache_tmpfs
+    configure_memory_accounting
     optimize_oom
     # 1核1G 不安装 unattended-upgrades（太重后台进程）
     configure_cleanup_cron

@@ -1037,7 +1037,6 @@ fi
         CONFIGURE_FAIL2BAN="false"
         CONFIGURE_MIRROR="auto"
         log_info "极低内存机器，已强制锁定为纯代理模式"
-        return 0
     fi
 
     # ── 低内存警告 (<2G) ───────────────────────────────────────────────

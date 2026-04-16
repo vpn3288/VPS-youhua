@@ -495,6 +495,7 @@ main() {
     done
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
+    FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
     uninstall_all "$@" || exit 1
 
@@ -506,7 +507,8 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#1: 低内存 Swap 创建
+    # BUG#6 FIX: optimize_memory_generic 先运行（决定是否需要 swap），configure_swap 后判断
+    optimize_memory_generic
     configure_swap
     # BUG#5: IPv6 黑洞检测
     configure_ipv6_health
@@ -533,7 +535,6 @@ main() {
     backup_all
     configure_apt_sources
     clean_system
-    optimize_memory_generic
     configure_sysctl_generic
     configure_limits
     configure_fstab

@@ -90,16 +90,10 @@ EOF
 optimize_memory_oracle() {
     log_step "配置内存 (Oracle Cloud ARM)..."
 
-    # 禁用物理 swap（云盘不怕写但 zram 更快）
-    for sw in /swapfile /swap.img; do
-        swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
-        [[ -f "$sw" ]] && rm -f "$sw"
-    done
-    sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
-
-    # zram 保留（内存峰值泄洪区，零磁盘写入）
+    # 保留 zram 泄洪区（不在此禁用 swap，由 configure_swap 统一决策）
+    # 如果 Armbian zram 已配置，configure_swap 会检测到并跳过 swap 创建
     if [[ -d /sys/block/zram0 ]]; then
-        log_info "zram 保持原状（内存峰值泄洪区）"
+        log_info "zram 保持原状（configure_swap 将根据 zram 状态决定是否创建 swap）"
     fi
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
@@ -524,6 +518,7 @@ main() {
     done
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
+    FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
     uninstall_all "$@" || exit 1
 

@@ -537,6 +537,7 @@ main() {
         esac
     done
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
+    FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
     uninstall_all "$@" || exit 1
 
