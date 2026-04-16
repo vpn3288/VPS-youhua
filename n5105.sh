@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# N5105/N5095 小主机专用优化安装脚本 v3.1 R56
+# N5105/N5095 小主机专用优化安装脚本 v3.1 R57
 # 硬件: Intel N5105/N5095 x86_64, 有风扇, SSD
 # 特点: x86 高性能优化，有风扇所以不需要保守降频
 # =============================================================================
@@ -252,8 +252,17 @@ install_docker() {
     fi
 
     curl -fsSL https://get.docker.com | sh >> "$APT_LOG" 2>&1 || {
-        apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || true
+        log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
+        apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
+            log_error "Docker 安装失败，请查看 $APT_LOG"
+            return 1
+        }
     }
+
+    if ! command -v docker &>/dev/null; then
+        log_error "Docker 安装后仍未找到 docker 命令"
+        return 1
+    fi
 
     systemctl enable docker 2>/dev/null || true
     systemctl start docker 2>/dev/null || true
@@ -285,11 +294,19 @@ install_nodejs() {
         return 0
     fi
 
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || true
-    apt-get install -y nodejs >> "$APT_LOG" 2>&1 || true
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || {
+        log_warn "NodeSource 安装失败，尝试 apt 安装..."
+        apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
+            log_error "Node.js 安装失败，请查看 $APT_LOG"
+            return 1
+        }
+    }
 
     if command -v node &>/dev/null; then
         log_info "Node.js 安装完成: $(node --version)"
+    else
+        log_error "Node.js 安装后仍未找到 node 命令"
+        return 1
     fi
 }
 
@@ -449,7 +466,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION} R56${NC}"
+    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION} R57${NC}"
     echo "========================================================================"
     echo ""
 
@@ -511,7 +528,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} R56 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} R57 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

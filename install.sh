@@ -7,7 +7,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-readonly VERSION="3.1"
+readonly VERSION="3.2"
 readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -17,11 +17,11 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="794c8c9857a179574f3de426f516044356526ba1f98d2ed2c2a1f2b4d8645aa2"
-    ["nanopi-t6"]="9f6ccfef5c29cca68a86feb0ec9dd6fafc95ed347feb02241498dbf426370478"
-    ["oracle-arm"]="05713890f6dc24f3f5f7bf1d0be20b6ec85edc1d4d0cf976935579ad28d531b5"
-    ["n5105"]="221fa081fab22b657286fee36c2920cc55879ac2938371536c7d8ac299438853"
-    ["generic-x86"]="15e4a7ee3c369e41a1dccef93d796760d0a4626925b4ca42857d234016e24807"
+    ["nanopi-r4s"]="c31f77dec46b89a2433597e93c1d816571f1ae645d73e8aea734ae3c4d0a02e2"
+    ["nanopi-t6"]="a226ec559c17c2dd50fb6f6db9d4d0bf1575708f2c5ceea28c760472259adc18"
+    ["oracle-arm"]="af0634930e4a4ca1506186bad438447c2e30c01c8eb6de479d85a93498a33a07"
+    ["n5105"]="4776cc49dd2c4cfc248b8772a8d9c30acb87b9cfbdc3e9c32b7322c6e078649b"
+    ["generic-x86"]="c54cdb48d2f1460ce76bc7ee9fcb90ae1953b65bd6edf4a5f0a13f21f135e236"
     ["verify-v3.1"]="884a4e294436ac8e429cabfd31a0694b0222ad7e8f7e78c1c492ec497b7d77a1"
 )
 

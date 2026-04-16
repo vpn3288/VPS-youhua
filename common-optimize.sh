@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPS-youhua 通用函数库 v3.1 R55
+# VPS-youhua 通用函数库 v3.1 R56
 # 所有平台共享的函数和变量（各平台脚本 source 此文件）
 # =============================================================================
 
@@ -293,18 +293,18 @@ EOF
         case "$m" in
             tencent)
                 cat > "$sources_list" <<EOF
-deb http://mirrors.tencent.com/debian/ ${codename} main contrib non-free-firmware
-deb http://mirrors.tencent.com/debian/ ${codename}-updates main contrib non-free-firmware
-deb http://mirrors.tencent.com/debian-security/ ${codename}-security main contrib non-free-firmware
-deb http://mirrors.tencent.com/debian/ ${codename}-backports main contrib non-free-firmware
+deb https://mirrors.tencent.com/debian/ ${codename} main contrib non-free-firmware
+deb https://mirrors.tencent.com/debian/ ${codename}-updates main contrib non-free-firmware
+deb https://mirrors.tencent.com/debian-security/ ${codename}-security main contrib non-free-firmware
+deb https://mirrors.tencent.com/debian/ ${codename}-backports main contrib non-free-firmware
 EOF
                 ;;
             ali)
                 cat > "$sources_list" <<EOF
-deb http://mirrors.aliyun.com/debian/ ${codename} main contrib non-free-firmware
-deb http://mirrors.aliyun.com/debian/ ${codename}-updates main contrib non-free-firmware
-deb http://mirrors.aliyun.com/debian-security/ ${codename}-security main contrib non-free-firmware
-deb http://mirrors.aliyun.com/debian/ ${codename}-backports main contrib non-free-firmware
+deb https://mirrors.aliyun.com/debian/ ${codename} main contrib non-free-firmware
+deb https://mirrors.aliyun.com/debian/ ${codename}-updates main contrib non-free-firmware
+deb https://mirrors.aliyun.com/debian-security/ ${codename}-security main contrib non-free-firmware
+deb https://mirrors.aliyun.com/debian/ ${codename}-backports main contrib non-free-firmware
 EOF
                 ;;
             tsinghua)
@@ -647,7 +647,7 @@ write_common_sysctl() {
 
     cat > "$file" <<'EOF'
 # =============================================================================
-# VPS-youhua 通用内核加固参数 v3.1 R55
+# VPS-youhua 通用内核加固参数 v3.1 R56
 # 所有平台共享
 # =============================================================================
 

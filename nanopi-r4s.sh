@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.1 R56
+# NanoPi R4S 专用优化安装脚本 v3.1 R57
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -287,9 +287,17 @@ install_docker() {
 
     # Docker 官方安装脚本
     curl -fsSL https://get.docker.com | sh >> "$APT_LOG" 2>&1 || {
-        log_warn "Docker 安装失败，使用 apt"
-        apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || true
+        log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
+        apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
+            log_error "Docker 安装失败，请查看 $APT_LOG"
+            return 1
+        }
     }
+
+    if ! command -v docker &>/dev/null; then
+        log_error "Docker 安装后仍未找到 docker 命令"
+        return 1
+    fi
 
     systemctl enable docker 2>/dev/null || true
     systemctl start docker 2>/dev/null || true
@@ -321,13 +329,19 @@ install_nodejs() {
         return 0
     fi
 
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || true
-    apt-get install -y nodejs >> "$APT_LOG" 2>&1 || true
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || {
+        log_warn "NodeSource 安装失败，尝试 apt 安装..."
+        apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
+            log_error "Node.js 安装失败，请查看 $APT_LOG"
+            return 1
+        }
+    }
 
     if command -v node &>/dev/null; then
         log_info "Node.js 安装完成: $(node --version)"
     else
-        log_warn "Node.js 安装可能失败"
+        log_error "Node.js 安装后仍未找到 node 命令"
+        return 1
     fi
 }
 
@@ -511,7 +525,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R56${NC}"
+    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R57${NC}"
     echo "========================================================================"
     echo ""
 
@@ -576,7 +590,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R56 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R57 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
