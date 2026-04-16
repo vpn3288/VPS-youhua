@@ -46,8 +46,8 @@ readonly JOURNALD_MAX_USE="50M"
 readonly TMPFS_SIZE="256M"
 
 # GCP e2-micro TCP 缓冲（1GB 内存 3%，上限 8MB，下限 4MB）
-readonly TCP_BUF_MAX
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
+readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512
 readonly NETDEV_BACKLOG=2048
@@ -175,7 +175,6 @@ optimize_memory_gcp() {
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl GCP e2-micro 专项配置
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_gcp() {
     log_step "配置 sysctl 系统参数..."

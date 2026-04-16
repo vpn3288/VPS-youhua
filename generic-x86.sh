@@ -209,11 +209,9 @@ configure_conntrack_hashsize() {
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
         echo "${CT_MAX}" > "$hashsize_file" 2>/dev/null || {
-            log_warn "nf_conntrack_hashsize 设置失败，尝试 modprobe 配置"
+            log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
             mkdir -p /etc/modprobe.d
             echo "options nf_conntrack hashsize=${CT_MAX}" > /etc/modprobe.d/nf_conntrack.conf
-            modprobe -r nf_conntrack 2>/dev/null || true
-            modprobe nf_conntrack 2>/dev/null || true
         }
         local current_hashsize
         current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
@@ -557,6 +555,7 @@ main() {
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
+    local did_install=false
 
     uninstall_all "$@" || exit 1
 
@@ -625,11 +624,11 @@ main() {
     fi
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
-        local did_install=false
+        did_install=false
     else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }

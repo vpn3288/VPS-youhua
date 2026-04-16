@@ -46,8 +46,8 @@ readonly JOURNALD_MAX_USE="30M"
 readonly TMPFS_SIZE="256M"
 
 # 1C1G TCP 缓冲（极保守：内存 3%，上限 8MB，下限 4MB）
-readonly TCP_BUF_MAX
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
+readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512       # 1C1G 低资源限制
 readonly NETDEV_BACKLOG=2048  # 1C1G
@@ -71,7 +71,6 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl 1核1G 极简配置
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_generic_1c1g() {
     log_step "配置 sysctl 系统参数..."
@@ -144,13 +143,13 @@ configure_zram_1c1g() {
 
     local mem_kb
     mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-    local zram_size=$((mem_kb / 2))
+    local zram_size_bytes=$((mem_kb * 1024 / 2))
 
     if [[ -f /sys/block/zram0/disksize ]]; then
-        echo "${zram_size}K" > /sys/block/zram0/disksize 2>/dev/null || true
+        echo "${zram_size_bytes}" > /sys/block/zram0/disksize 2>/dev/null || true
         mkswap /dev/zram0 >/dev/null 2>&1 || true
         swapon /dev/zram0 -p 32767 2>/dev/null || true
-        log_info "zram 开启，约 +$((zram_size / 1024))MB 等效内存（lz4 压缩）"
+        log_info "zram 开启，约 +$((zram_size_bytes / 1024 / 1024))MB 等效内存（lz4 压缩）"
     fi
 }
 

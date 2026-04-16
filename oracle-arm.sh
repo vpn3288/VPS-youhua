@@ -46,8 +46,8 @@ readonly TMPFS_SIZE="512M"
 
 # Oracle Cloud TCP 缓冲（动态自适应：内存的 5%，上限 64MB，下限 16MB）
 # AUDIT-10 FIX: 使用纯整数运算代替浮点计算
-readonly TCP_BUF_MAX
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*5/100; if(buf>67108864) buf=67108864; if(buf<16777216) buf=16777216; printf "%.0f", buf}' /proc/meminfo)
+readonly TCP_BUF_MAX
 readonly CT_MAX=131072
 readonly SOMAXCONN=65535
 readonly NETDEV_BACKLOG=65535
@@ -125,7 +125,6 @@ optimize_memory_oracle() {
 # ─────────────────────────────────────────────────────────────────────────────
 # Oracle Cloud sysctl（高缓冲 + 连接追踪）
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_oracle() {
     log_step "配置 sysctl (Oracle Cloud ARM)..."
@@ -190,12 +189,10 @@ configure_conntrack_hashsize() {
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
         echo "${CT_MAX}" > "$hashsize_file" 2>/dev/null || {
-            log_warn "nf_conntrack_hashsize 设置失败，尝试 modprobe 配置"
-            # 备用方案：通过 modprobe 配置
+            log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
+            # 备用方案：通过 modprobe 配置（下次启动或模块重载时生效）
             mkdir -p /etc/modprobe.d
             echo "options nf_conntrack hashsize=${CT_MAX}" > /etc/modprobe.d/nf_conntrack.conf
-            modprobe -r nf_conntrack 2>/dev/null || true
-            modprobe nf_conntrack 2>/dev/null || true
         }
         local current_hashsize
         current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
@@ -589,6 +586,7 @@ main() {
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
+    local did_install=false
 
     uninstall_all "$@" || exit 1
 
@@ -661,11 +659,11 @@ main() {
     fi
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
-        local did_install=false
+        did_install=false
     else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && local did_install=true
+        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }

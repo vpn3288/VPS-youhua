@@ -144,7 +144,6 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # N5105 sysctl
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_n5105() {
     log_step "配置 sysctl (N5105)..."
@@ -209,11 +208,9 @@ configure_conntrack_hashsize() {
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
         echo "${CT_MAX}" > "$hashsize_file" 2>/dev/null || {
-            log_warn "nf_conntrack_hashsize 设置失败，尝试 modprobe 配置"
+            log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
             mkdir -p /etc/modprobe.d
             echo "options nf_conntrack hashsize=${CT_MAX}" > /etc/modprobe.d/nf_conntrack.conf
-            modprobe -r nf_conntrack 2>/dev/null || true
-            modprobe nf_conntrack 2>/dev/null || true
         }
         local current_hashsize
         current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
