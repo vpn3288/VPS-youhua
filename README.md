@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![v3.3](https://img.shields.io/badge/版本-v3.3-green.svg)](https://github.com/vpn3288/VPS-youhua)
 [![审查](https://img.shields.io/badge/审查-8轮0bug-blue.svg)](https://github.com/vpn3288/VPS-youhua)
-[![5平台](https://img.shields.io/badge/平台-5个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
+[![8平台](https://img.shields.io/badge/平台-8个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
 
 </div>
 
@@ -65,15 +65,19 @@ curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.1
 bash /tmp/verify-v3.1.sh
 ```
 
-### 第三步：使用 AIagent
+### 第三步：安装 AIagent
 
-Docker / Node.js / OpenClaw 已在第一步中安装完毕。如需重启服务：
+如果你在第一步选择了安装 Docker / Node.js，现在可以安装你的 AIagent：
 
+**OpenClaw（推荐）：**
 ```bash
+openclaw install      # 安装
+openclaw onboard      # 首次配置
 systemctl --user start openclaw-gateway   # 启动
 systemctl --user enable openclaw-gateway  # 开机自启
-openclaw onboard                          # 首次配置
 ```
+
+**或者纯优化用户：** 环境已优化完毕，直接安装你需要的软件即可。
 
 ---
 
@@ -83,11 +87,11 @@ openclaw onboard                          # 首次配置
 |------|-----|------|------|----------|
 | NanoPi R4S | RK3399 (ARM64) | 4GB | **TF卡** | `nanopi-r4s.sh` |
 | NanoPC T6 | RK3588S (ARM64) | 16GB | **eMMC** | `nanopi-t6.sh` |
-| Oracle Cloud ARM | Ampere Altra (ARM64) | 2C16GB | 云盘 | `oracle-arm.sh` |
-| Oracle Cloud ARM | Ampere Altra (ARM64) | 1C4GB | 云盘 | `oracle-1c4g.sh` |
+| Oracle Cloud ARM | Ampere Altra (ARM64) | 2核16GB | 云盘 | `oracle-arm.sh` |
+| Oracle Cloud ARM | Ampere Altra (ARM64) | 1核4GB | 云盘 | `oracle-1c4g.sh` |
 | N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | SSD | `n5105.sh` |
 | 通用 x86 VPS | 任意 x86_64 | 1C1G | 自动检测（SSD/HDD） | `generic-1c1g.sh` |
-| Google Cloud e2-micro | 共享 vCPU | 1GB | 云盘 | `google-cloud-e2.sh` |
+| Google Cloud e2-micro | 共享 vCPU | 1GB | **免费套餐** | `google-cloud-e2.sh` |
 | 通用 x86 VPS | 任意 x86_64 | 自动适配 | 自动检测（SSD/HDD） | `generic-x86.sh` |
 
 ---
@@ -132,19 +136,33 @@ eMMC 写入寿命比 TF 卡好得多，但仍需优化随机写入：
 | inotify watches | 1048576 | 大量文件监控支持 |
 
 
-### Oracle Cloud ARM（云环境）
+### Oracle Cloud ARM 2C16G（云环境）
 
 云上环境侧重吞吐量和连接处理：
 
 | 优化项 | 配置值 | 说明 |
 |--------|--------|------|
-| TCP缓冲 | 32MB | 云网络带宽优化 |
+| TCP缓冲 | 动态（内存5%） | 云网络带宽优化，上限64MB |
 | netdev_max_backlog | 65535 | 大吞吐量队列 |
 | conntrack_max | 262144 | 高并发连接数 |
 | conntrack timeout | 3600s | 长连接优化 |
 | dirty_ratio | 20 | 云盘写入更激进 |
 | TCP early_retrans | 3 | 丢包快速恢复 |
-| TCP MTU probing | 开启 | 阿里云/Oracle网络优化 |
+| TCP MTU probing | 开启 | Oracle网络优化 |
+
+### Oracle Cloud ARM 1C4G（低配云环境）
+
+低配版针对1核4GB内存优化，侧重内存压缩和资源控制：
+
+| 优化项 | 配置值 | 说明 |
+|--------|--------|------|
+| TCP缓冲 | 动态（内存5%） | 云网络优化，上限32MB |
+| netdev_max_backlog | 32768 | 适度队列 |
+| conntrack_max | 131072 | 中等并发连接数 |
+| vm.swappiness | 60 | 较高swap倾向（内存有限） |
+| zram | 启用（内存50%） | 内存压缩替代物理swap |
+| dirty_ratio | 15 | 保守回写 |
+| transparent_hugepage | 开启 | 对容器/数据库友好 |
 
 ### N5105/N5095（静音省电）
 
@@ -160,9 +178,9 @@ eMMC 写入寿命比 TF 卡好得多，但仍需优化随机写入：
 | dirty_ratio | 15 | SSD不怕写磨损 |
 | TCP缓冲 | 16MB | 平衡内存占用 |
 
-### Generic x86 VPS（通用）
+### Generic x86 VPS（通用中配）
 
-通用Debian12环境，自适应内存配置：
+通用Debian12环境，2核2GB以上，自适应内存配置：
 
 | 优化项 | 配置值 | 说明 |
 |--------|--------|------|
@@ -172,9 +190,37 @@ eMMC 写入寿命比 TF 卡好得多，但仍需优化随机写入：
 | BBR | 强制开启 | 拥塞控制优化 |
 | inotify watches | 1048576 | 大型agent支持 |
 
+### Generic 1C1G VPS（低配通用）
+
+极低配VPS，1核1GB，专为资源受限环境设计：
+
+| 优化项 | 配置值 | 说明 |
+|--------|--------|------|
+| TCP缓冲 | 动态（内存3%） | 最低4MB，最高8MB |
+| netdev_max_backlog | 16384 | 适度队列 |
+| conntrack_max | 65536 | 有限并发 |
+| vm.swappiness | 60 | 较高swap倾向 |
+| swap | 1GB文件swap | 低内存防护 |
+| dirty_ratio | 10 | 保守回写 |
+| inotify watches | 262144 | 有限但够用 |
+
+### Google Cloud e2-micro（免费套餐）
+
+GCP免费套餐，共享vCPU 1核1GB，针对资源共享优化：
+
+| 优化项 | 配置值 | 说明 |
+|--------|--------|------|
+| TCP缓冲 | 动态（内存3%） | 最低4MB，最高8MB |
+| netdev_max_backlog | 16384 | 适度队列 |
+| conntrack_max | 65536 | 有限并发 |
+| vm.swappiness | 60 | 较高swap倾向 |
+| swap | 1GB文件swap | 低内存防护 |
+| dirty_ratio | 10 | 保守回写 |
+| CPU限制 | GCP元数据 | 识别共享CPU |
+
 ---
 
-## v3.1 全部优化参数一览
+## v3.3 全部优化参数一览
 
 ### TCP 网络优化（全平台）
 
@@ -279,13 +325,18 @@ bash /tmp/verify-v3.1.sh --remote root@IP  # 远程SSH验证
 
 | 文件 | 路径 |
 |------|------|
-| sysctl 主配置 | `/etc/sysctl.d/99-openclaw.conf` |
-| sysctl TF卡优化 | `/etc/sysctl.d/99-tf-optimize.conf` (R4S) |
-| sysctl inotify | `/etc/sysctl.d/99-inotify.conf` |
+| sysctl 主配置 | `/etc/sysctl.d/99-vps-youhua-sysctl.conf` |
+| sysctl inotify | `/etc/sysctl.d/99-vps-youhua-inotify.conf` |
+| sysctl TF卡优化 | `/etc/sysctl.d/99-vps-youhua-tf-optimize.conf` (R4S) |
 | journald 配置 | `/etc/systemd/journald.conf` |
 | limits 配置 | `/etc/security/limits.conf` |
 | SSH 服务配置 | `/etc/ssh/sshd_config` |
 | log2ram 配置 | `/etc/log2ram.conf` (可选) |
+| 优化标记 | `/etc/vps-youhua-optimized` |
+
+### 卸载后配置文件自动清理
+
+使用 `--uninstall` 会自动删除上述所有配置文件。
 
 ---
 
@@ -294,11 +345,12 @@ bash /tmp/verify-v3.1.sh --remote root@IP  # 远程SSH验证
 ### Q: 脚本会修改哪些系统文件？
 
 主要修改以下文件（幂等设计，可重复运行）：
-- `/etc/sysctl.d/99-openclaw.conf` — sysctl网络/内存参数
+- `/etc/sysctl.d/99-vps-youhua-*.conf` — sysctl网络/内存参数
 - `/etc/systemd/journald.conf` — 日志配置
 - `/etc/security/limits.conf` — 进程限制
 - `/etc/ssh/sshd_config` — SSH加固
 - SSH 公钥authorized_keys（如果配置了）
+- `/etc/vps-youhua-optimized` — 优化完成标记
 
 **不会修改**：系统核心配置文件、用户数据、已有服务配置。
 
@@ -319,9 +371,9 @@ TF卡写入寿命有限。SWAP会产生大量随机小写入，严重影响TF卡
 - 减少 dirty_writeback 频率
 等多重手段减少对 TF 卡的写入。
 
-### Q: Oracle Cloud ARM 为什么 TCP缓冲只有 32MB？
+### Q: Oracle Cloud ARM 为什么 TCP缓冲不是固定值？
 
-Oracle Cloud 的网络带宽是有限制的（最大 50Mbps Small Tenant），不是越高越好。过大的 TCP缓冲会导致内存浪费和更高的延迟。32MB 是 Oracle Cloud ARM 的最优值。
+Oracle Cloud 的网络带宽是有限制的（最大 50Mbps Small Tenant），不是越高越好。脚本使用动态计算：内存的5%，上限64MB（2C16G）或32MB（1C4G）。这样在不同内存规格下都能获得最优值。
 
 ### Q: 如何确认 BBR 已开启？
 
@@ -352,6 +404,7 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 - 新增：所有平台函数调用顺序优化（detect_system先于configure_*）
 
 ### v3.2 R61
+- 新增：11个平台脚本完整支持（新增 oracle-1c4g、generic-1c1g、google-cloud-e2）
 - 新增：`--status` 参数直接调用 verify-v3.1.sh 健康检查（install.sh），并更新帮助文档
 - 新增：R4S `install_nodejs()` 编译前临时挂载 1G tmpfs 到 /tmp（TF 卡保护），编译完自动卸载
 - 新增：fail2ban 选项 B 增加新手警告"请确保已配置 SSH 密钥登录，否则可能锁死"
