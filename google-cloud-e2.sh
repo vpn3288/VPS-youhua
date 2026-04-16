@@ -54,7 +54,7 @@ fi
 detect_gcp_cloud() {
     local gcp_meta
     gcp_meta=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
-        "http://metadata.google.internal/compute/v1/instance/machine-type" 2>/dev/null || echo "")
+        "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null || echo "")
 
     if echo "$gcp_meta" | grep -q "e2-micro\|e2-small\|e2-medium\|f1-micro\|g1-small"; then
         SYS_IS_GCP_CLOUD=true
@@ -74,14 +74,14 @@ check_gcp_metadata() {
     local meta_status
     meta_status=$(curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" \
         -H "Metadata-Flavor: Google" \
-        "http://metadata.google.internal/compute/v1/instance/" 2>/dev/null || echo "000")
+        "http://metadata.google.internal/computeMetadata/v1/instance/" 2>/dev/null || echo "000")
 
     if [[ "$meta_status" == "200" ]]; then
         local instance_name instance_zone
         instance_name=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
-            "http://metadata.google.internal/compute/v1/instance/name" 2>/dev/null || echo "unknown")
+            "http://metadata.google.internal/computeMetadata/v1/instance/name" 2>/dev/null || echo "unknown")
         instance_zone=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
-            "http://metadata.google.internal/compute/v1/instance/zone" 2>/dev/null | grep -o '[^/]*$' || echo "unknown")
+            "http://metadata.google.internal/computeMetadata/v1/instance/zone" 2>/dev/null | grep -o '[^/]*$' || echo "unknown")
 
         log_info "GCP 实例: ${instance_name}（${instance_zone}）"
         log_info "GCP 机型: ${SYS_GCP_MACHINE_TYPE:-未知}"
@@ -98,7 +98,7 @@ check_gcp_metadata() {
         # GCP 外部 IP 信息
         local external_ip
         external_ip=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
-            "http://metadata.google.internal/compute/v1/instance/network-interfaces/0/access-configs/0/externalIp" 2>/dev/null || echo "未分配")
+            "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/externalIp" 2>/dev/null || echo "未分配")
         log_info "GCP 外部 IP: ${external_ip}"
     else
         log_info "非 GCP Cloud 环境或元数据端点不可访问"
