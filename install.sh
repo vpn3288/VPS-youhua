@@ -185,7 +185,6 @@ EOF
 wait_for_apt_lock() {
     local max_wait=60
     local waited=0
-    local lock_files=(/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock)
 
     # 检测是否有 apt 进程在运行
     if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
@@ -202,8 +201,9 @@ wait_for_apt_lock() {
         systemctl mask $svc 2>/dev/null || true
     done
 
-    # 等待锁释放
-    while [[ -f /var/lib/dpkg/lock-frontend ]] || [[ -f /var/lib/dpkg/lock ]]; do
+    # 等待锁释放（检查进程而不是文件）
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
         if [[ $waited -ge $max_wait ]]; then
             log_error "APT 锁等待超时（${max_wait}s），请手动运行: systemctl status apt-daily"
             return 1
@@ -504,7 +504,12 @@ show_quick_start_menu() {
 step1_choose_platform() {
     # NONINTERACTIVE 模式：跳过菜单，使用默认值
     if [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
-        log_info "非交互模式: platform 使用默认值或 FORCE_PLATFORM"
+        if [[ -z "$SELECTED_PLATFORM" ]]; then
+            SELECTED_PLATFORM=$(detect_platform)
+            log_info "非交互模式: 自动检测平台 = $SELECTED_PLATFORM"
+        else
+            log_info "非交互模式: 使用预设平台 = $SELECTED_PLATFORM"
+        fi
         return 0
     fi
 
@@ -808,7 +813,17 @@ download_and_run() {
     local mode="$2"   # optimize | full
 
     # 在临时目录下载平台脚本 + common-optimize.sh（确保 source 路径有效）
-    local tmpdir; tmpdir=$(mktemp -d)
+    local tmpdir
+    if ! tmpdir=$(mktemp -d 2>/dev/null); then
+        log_error "无法创建临时目录，请检查磁盘空间和权限"
+        return 1
+    fi
+    
+    if [[ ! -d "$tmpdir" ]]; then
+        log_error "临时目录创建失败: $tmpdir"
+        return 1
+    fi
+    
     chmod 755 "$tmpdir"
 
     local platform_url="${RAW_BASE}/${platform}.sh"
@@ -853,11 +868,10 @@ download_and_run() {
 
     log_step "执行 ${platform}.sh..."
 
-    # Armbian 检测：如果是 Armbian 设备，强制跳过 APT 镜像切换
-    # （Armbian 有自己的 apt 源，不应被 Debian 源替换）
-    if [[ -f /etc/armbian-release ]]; then
+    # Armbian 检测：仅在用户未明确选择时才跳过镜像切换
+    if [[ -f /etc/armbian-release ]] && [[ "$CONFIGURE_MIRROR" == "auto" ]]; then
         CONFIGURE_MIRROR="off"
-        log_info "检测到 Armbian，跳过 APT 镜像切换"
+        log_info "检测到 Armbian，自动跳过 APT 镜像切换"
     fi
 
     # 透传环境变量给平台脚本
@@ -960,6 +974,8 @@ uninstall_all() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 main() {
+    local APT_LOG="/tmp/vps-youhua-apt-$(date +%s).log"
+    
     if [[ "${MODE:-}" == "uninstall" ]]; then
         uninstall_all
         return
@@ -1000,7 +1016,7 @@ main() {
 # 或: ./install.sh --platform=xxx --mode=optimize -y
 # 自动设置默认选项，防止 read 永久挂起
 if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${1:-}" == "-y" ]]; then
-    export INTERACTIVE=0
+    export INTERACTIVE=false
     log_info "非交互模式（NONINTERACTIVE=1 / -y）: 使用默认选项"
 fi
 
@@ -1122,11 +1138,17 @@ fi
         echo -e "  ${CYAN}重启前可运行验证脚本检查优化效果:${NC}"
         echo -e "  ${GREEN}curl -fsSL ${RAW_BASE}/verify-v3.1.sh -o /tmp/verify-v3.1.sh && bash /tmp/verify-v3.1.sh${NC}"
         echo ""
-        echo -n "  是否立即重启？[y/N]: "
-        read -r yn
-        if [[ "$yn" =~ ^[yY]$ ]]; then
-            echo "正在重启..."
-            reboot
+        
+        # 非交互模式跳过重启询问
+        if [[ "$INTERACTIVE" == "true" ]]; then
+            echo -n "  是否立即重启？[y/N]: "
+            read -r yn
+            if [[ "$yn" =~ ^[yY]$ ]]; then
+                echo "正在重启..."
+                reboot
+            fi
+        else
+            log_info "非交互模式: 跳过重启询问"
         fi
     else
         echo ""
