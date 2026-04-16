@@ -654,54 +654,6 @@ configure_locale() {
 # BUG#1 FIX: 低内存机器自动创建 1GB Swap（GCP/1C1G 代理节点必选）
 # 适用: RAM < 1024MB 且无 Swap 的机器
 # ─────────────────────────────────────────────────────────────────────────────
-configure_swap() {
-    log_step "配置 Swap（低内存防护）..."
-
-    # 检查是否已有 Swap（物理 swap + zram swap 都算）
-    local swap_total zram_total=0
-    swap_total=$(awk '/Total Swap/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
-    # zram 也算 Swap（/proc/meminfo 的 Swap 统计不包含 zram，需手动计算）
-    # disksize 单位是字节，除以 1024 得到 KB
-    if [[ -d /sys/block/zram0 ]]; then
-        local zram_size
-        zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
-        zram_total=$((zram_size / 1024))  # KB
-    fi
-    local total_swap=$((swap_total + zram_total))
-    if [[ "${total_swap}" -gt 0 ]]; then
-        log_info "Swap 已存在（物理: ${swap_total}KB + zram: ${zram_total}KB），跳过"
-        return 0
-    fi
-
-    log_info "检测到无 Swap，创建 1GB swapfile..."
-
-    # 创建 1GB swapfile
-    if fallocate -l 1G /swapfile 2>/dev/null; then
-        chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
-    elif dd if=/dev/zero of=/swapfile bs=1M count=1024 status=progress 2>/dev/null; then
-        chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
-    else
-        log_warn "Swap 创建失败，跳过"
-        return 1
-    fi
-
-    # 持久化 fstab
-    if ! grep -q "/swapfile" /etc/fstab 2>/dev/null; then
-        echo "/swapfile none swap sw 0 0" >> /etc/fstab
-    fi
-
-    # swappiness: 低内存代理节点设为 10-30（与 R4S 相反）
-    # 1C1G/GCP 场景希望尽量用 Swap 保护内存
-    echo 20 > /proc/sys/vm/swappiness 2>/dev/null || true
-    sysctl -w vm.swappiness=20 2>/dev/null || true
-
-    log_info "Swap 1GB 创建完成，swappiness=20"
-}
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 文件句柄 / 资源限制
 # ─────────────────────────────────────────────────────────────────────────────
@@ -826,102 +778,6 @@ configure_fstab() {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# BUG#7 FIX: DNS 防篡改 — 写入 1.1.1.1/8.8.8.8 + chattr +i
-# DD 镜像和云厂商 DHCP 常篡改 resolv.conf
-# ─────────────────────────────────────────────────────────────────────────────
-configure_dns_lock() {
-    log_step "加固 DNS 配置（防篡改）..."
-
-    # 备份
-    cp -a /etc/resolv.conf /etc/resolv.conf.vps-youhua-bak 2>/dev/null || true
-
-    # 写入可信 DNS
-    cat > /etc/resolv.conf <<'EOF'
-nameserver 1.1.1.1
-nameserver 8.8.8.8
-nameserver 2001:4860:4860::8888
-EOF
-
-    # 防止 DHCP/云厂商自动覆盖（BUG#7 核心修复）
-    chattr +i /etc/resolv.conf 2>/dev/null || true
-    log_info "DNS 已锁定（1.1.1.1 + 8.8.8.8），chattr +i 保护"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# BUG#5 FIX: IPv6 黑洞检测 — 若 ping6 失败则强制禁用 IPv6
-# 美国低端/免费 VPS 的 IPv6 路由常损坏，会导致代理请求超时
-# ─────────────────────────────────────────────────────────────────────────────
-configure_ipv6_health() {
-    log_step "IPv6 连通性检测..."
-
-    # 先检查 IPv6 是否已禁用
-    if grep -q "net.ipv6.conf.all.disable_ipv6 = 1" /etc/sysctl.d/99-vps-youhua.conf 2>/dev/null; then
-        log_info "IPv6 已禁用，跳过"
-        return 0
-    fi
-
-    # 检测 IPv6 是否通（允许超时）
-    if ping -6 -c 1 -W 2 ipv6.google.com >/dev/null 2>&1; then
-        log_info "IPv6 连通正常，保持开启"
-    else
-        log_warn "IPv6 黑洞检测失败（ping6 超时），强制禁用 IPv6"
-
-        # 写入 sysctl
-        mkdir -p /etc/sysctl.d
-        cat >> /etc/sysctl.d/99-vps-youhua.conf <<'EOF'
-net.ipv6.conf.all.disable_ipv6 = 1
-net.ipv6.conf.default.disable_ipv6 = 1
-EOF
-        sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null || true
-        sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null || true
-    fi
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# BUG#8 FIX: 低内存极限清理 — apt-get purge rpcbind apache2 snapd ufw
-# 适用: RAM < 2048MB 且用户选择"纯代理底层优化"
-# ─────────────────────────────────────────────────────────────────────────────
-configure_lowmem_purge() {
-    log_step "低内存极限清理（释放 ~100MB）..."
-
-    local PKGS_TO_REMOVE="rpcbind apache2 snapd ufw"
-    local removed=false
-
-    for pkg in ${PKGS_TO_REMOVE}; do
-        if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
-            log_info "  移除 $pkg（释放内存）"
-            apt-get purge -y "$pkg" >/dev/null 2>&1 && removed=true || true
-        fi
-    done
-
-    [[ "$removed" == "true" ]] && log_info "低内存清理完成（释放约 100MB）" || log_info "无需清理（这些包未安装）"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# journald 配置（平台差异化）
-# ─────────────────────────────────────────────────────────────────────────────
-configure_journald() {
-    log_step "配置 journald..."
-    mkdir -p /etc/systemd/journald.conf.d
-
-    # 默认：50MB，单文件50MB，压缩
-    local volatile="${JOURNALD_VOLATILE:-false}"
-    local max_use="${JOURNALD_MAX_USE:-50M}"
-
-    cat > /etc/systemd/journald.conf.d/99-vps-youhua.conf <<EOF
-[Journal]
-SystemMaxUse=${max_use}
-SystemMaxFileSize=50M
-MaxRetentionSec=7day
-Compress=yes
-Storage=${volatile:+volatile}${volatile:-persistent}
-Seal=yes
-EOF
-    systemctl restart systemd-journald 2>/dev/null || true
-    log_info "journald 配置完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
 # BUG#5: IPv6 黑洞检测 — 若 ping6 失败则强制禁用 IPv6
 # 美国低端/免费 VPS 的 IPv6 路由常损坏，会导致代理请求超时
 # ─────────────────────────────────────────────────────────────────────────────
@@ -935,7 +791,13 @@ configure_ipv6_health() {
     fi
 
     # 检测 IPv6 是否通（允许超时）
-    if ping -6 -c 1 -W 2 ipv6.google.com >/dev/null 2>&1; then
+    # 优先使用 ping6，fallback 到 ping -6
+    local ping_cmd="ping6"
+    if ! command -v ping6 &>/dev/null; then
+        ping_cmd="ping -6"
+    fi
+    
+    if $ping_cmd -c 1 -W 2 ipv6.google.com >/dev/null 2>&1; then
         log_info "IPv6 连通正常，保持开启"
     else
         log_warn "IPv6 黑洞检测失败（ping6 超时），强制禁用 IPv6"
@@ -970,6 +832,7 @@ EOF
     # 防止 DHCP/云厂商自动覆盖（BUG#7 核心修复）
     chattr +i /etc/resolv.conf 2>/dev/null || true
     log_info "DNS 已锁定（1.1.1.1 + 8.8.8.8），chattr +i 保护"
+    log_info "提示：卸载时需要 chattr -i /etc/resolv.conf 解锁"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1013,17 +876,25 @@ configure_swap() {
         return 0
     fi
 
+    # 检查磁盘空间（至少需要 1.2GB 可用空间）
+    local available_mb
+    available_mb=$(df / | awk 'NR==2 {print int($4/1024)}')
+    if [[ "${available_mb}" -lt 1200 ]]; then
+        log_warn "磁盘空间不足（可用: ${available_mb}MB），跳过 Swap 创建"
+        return 0
+    fi
+
     log_info "检测到无 Swap，创建 1GB swapfile..."
 
     # 创建 1GB swapfile
     if fallocate -l 1G /swapfile 2>/dev/null; then
         chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
-    elif dd if=/dev/zero of=/swapfile bs=1M count=1024 status=progress 2>/dev/null; then
+        mkswap /swapfile >/dev/null 2>&1 || { log_warn "mkswap 失败"; rm -f /swapfile; return 1; }
+        swapon /swapfile || { log_warn "swapon 失败"; rm -f /swapfile; return 1; }
+    elif dd if=/dev/zero of=/swapfile bs=1M count=1024 2>/dev/null; then
         chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
+        mkswap /swapfile >/dev/null 2>&1 || { log_warn "mkswap 失败"; rm -f /swapfile; return 1; }
+        swapon /swapfile || { log_warn "swapon 失败"; rm -f /swapfile; return 1; }
     else
         log_warn "Swap 创建失败，跳过"
         return 1
