@@ -124,7 +124,6 @@ optimize_memory_oracle() {
 # ─────────────────────────────────────────────────────────────────────────────
 # Oracle Cloud sysctl（高缓冲 + 连接追踪）
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_oracle() {
     log_step "配置 sysctl (Oracle Cloud ARM)..."
@@ -588,6 +587,7 @@ main() {
 
     backup_all
     configure_apt_sources
+    install_base_tools
     clean_system
     oracle_cloud_cleanup
     optimize_memory_oracle

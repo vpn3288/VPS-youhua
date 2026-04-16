@@ -71,7 +71,6 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl 1核1G 极简配置
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_generic_1c1g() {
     log_step "配置 sysctl 系统参数..."
@@ -399,6 +398,7 @@ main() {
 
     backup_all
     configure_apt_sources
+    install_base_tools
     clean_system
     configure_sysctl_generic_1c1g
     configure_limits

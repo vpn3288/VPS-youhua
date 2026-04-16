@@ -141,7 +141,6 @@ optimize_memory_oracle() {
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl Oracle Cloud 1C4G 专项配置
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_oracle() {
     log_step "配置 sysctl 系统参数..."
@@ -534,6 +533,7 @@ main() {
 
     backup_all
     configure_apt_sources
+    install_base_tools
     clean_system
     oracle_cloud_cleanup
     optimize_memory_oracle

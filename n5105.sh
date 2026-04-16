@@ -144,7 +144,6 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # N5105 sysctl
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_n5105() {
     log_step "配置 sysctl (N5105)..."
@@ -542,6 +541,7 @@ main() {
 
     backup_all
     configure_apt_sources
+    install_base_tools
     clean_system
     configure_sysctl_n5105
     configure_limits

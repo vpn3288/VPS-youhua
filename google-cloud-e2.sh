@@ -175,7 +175,6 @@ optimize_memory_gcp() {
 # ─────────────────────────────────────────────────────────────────────────────
 # sysctl GCP e2-micro 专项配置
 # ─────────────────────────────────────────────────────────────────────────────
-    install_base_tools
 
 configure_sysctl_gcp() {
     log_step "配置 sysctl 系统参数..."
@@ -569,6 +568,7 @@ main() {
 
     backup_all
     configure_apt_sources
+    install_base_tools
     clean_system
     gcp_cloud_cleanup
     configure_sysctl_gcp
