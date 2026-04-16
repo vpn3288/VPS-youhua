@@ -111,10 +111,31 @@ configure_tf_card_protection() {
     [[ "$SYS_IS_TF_CARD" != "true" ]] && return 0
     log_step "配置 TF 卡写入保护..."
 
-    # ext4 挂载参数（减少随机写入）
+    # ext4 挂载参数（减少随机写入）- 幂等性修复
     if grep -q "^UUID=" /etc/fstab 2>/dev/null; then
-        # 追加 noatime,nodiratime,commit=600 到 root 条目
-        sed -i '/^UUID=.*\/.*ext4/s/ext4[^[:space:]]*/ext4,noatime,nodiratime,commit=600/' /etc/fstab
+        # 备份 fstab
+        cp /etc/fstab /etc/fstab.bak.$(date +%s) 2>/dev/null || true
+        
+        # 使用 awk 正确修改根分区挂载选项（幂等）
+        awk '
+        /^UUID=.*[[:space:]]+\/[[:space:]]+ext4/ {
+            # 检查是否已经有 noatime
+            if ($4 !~ /noatime/) {
+                # 移除 defaults（如果存在）
+                gsub(/defaults,?/, "", $4)
+                gsub(/^,/, "", $4)
+                # 添加优化参数
+                if ($4 == "") {
+                    $4 = "noatime,nodiratime,commit=600"
+                } else {
+                    $4 = $4 ",noatime,nodiratime,commit=600"
+                }
+            }
+        }
+        {print}
+        ' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
+        
+        log_info "TF 卡 ext4 挂载选项已优化（noatime,nodiratime,commit=600）"
     fi
 
     log_info "TF 卡 ext4 优化完成"
@@ -197,7 +218,6 @@ optimize_memory_r4s() {
 
     # ── Armbian ramlog：/var/log tmpfs（Armbian 官方推荐，减少 TF 卡写入）─
     if ! mount | grep -q "tmpfs on /var/log"; then
-        mkdir -p /etc/systemd/systemdisable
         if [ ! -d /var/log/journal ]; then mkdir -p /var/log/journal; fi
         systemctl mask rsyslog 2>/dev/null || true
         # 将 /var/log 改为 tmpfs（重启后生效）

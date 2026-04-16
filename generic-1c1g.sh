@@ -373,7 +373,8 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#1: 低内存 Swap 创建
+    # BUG#1 FIX: 先配置 zram，再检查 swap（避免创建物理 swap）
+    configure_zram_1c1g
     configure_swap
     # BUG#5: IPv6 黑洞检测
     configure_ipv6_health
@@ -411,7 +412,6 @@ main() {
     configure_locale
     configure_firewall_lo
     configure_tmp_tmpfs
-    configure_zram_1c1g
     # BUG#FIX: 补充通用函数调用
     configure_npm_cache_tmpfs
     configure_memory_accounting
