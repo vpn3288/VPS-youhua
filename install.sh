@@ -21,10 +21,13 @@ declare -A EXPECTED_SHA256=(
     ["nanopi-t6"]="c30f9c8bcd90a9d90ba1253bf00806bea079b09b034ef1354547d05daceebdb9"
     ["oracle-arm"]="64c4f836cc687aa32f55cb5686726cc4796025104c8ad33be73f9b276cac3a92"
     ["oracle-1c4g"]="16644186747de97ed2539b95b5f2d03077a2e5df6681e22a0977bc86d60bb084"
+    ["oracle-1c4g-agent"]="c617cf2f21cde8329f52b3a66b4c3df14f6f1855fdac1406419f31379ce00e32"
     ["n5105"]="2ab6dfbcd92282f4c4bd5908c74ad5fe3909ae4411927699491dd023c25e133d"
     ["generic-x86"]="289ac743ffbbfb606333c40bde35587f5fb26728aca99876eef0350920cae737"
     ["generic-1c1g"]="05fc3ce02375f8c9b3e6274a154bda880d1216fe185a101ce561f300562136e3"
+    ["generic-1c1g-agent"]="2f17505ffc9eec972c749a2cc31ad1da9f770c497967165a775530b1675d49f2"
     ["google-cloud-e2"]="5a7b67b0e0fba35098fa4269012b5dce954246ddae5f505a82bf7fe72f94c0b9"
+    ["google-cloud-e2-agent"]="01e130a3b97d5bd234404251847be84b69fc960df1b141f3535016febb872aa1"
     ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
 
@@ -41,7 +44,7 @@ fi
 # 全局状态（菜单选择结果）
 # ─────────────────────────────────────────────────────────────────────────────
 
-SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | oracle-1c4g | n5105 | generic-x86 | generic-1c1g | google-cloud-e2
+SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | oracle-1c4g | oracle-1c4g-agent | n5105 | generic-x86 | generic-1c1g | generic-1c1g-agent | google-cloud-e2 | google-cloud-e2-agent
 SELECTED_MODE=""          # optimize | full | custom
 INSTALL_DOCKER="ask"      # true | false | ask
 INSTALL_NODEJS="ask"       # true | false | ask
@@ -375,10 +378,24 @@ show_platform_info() {
             echo -e "  ${BLUE}设备:     通用 1核 1G VPS（极简版）${NC}"
             echo -e "  ${BLUE}特点:     zram扩展 + 极保守资源限制${NC}"
             ;;
+        oracle-1c4g-agent)
+            echo -e "  ${BLUE}设备:     Oracle Cloud ARM 精选 + OpenClaw-Proxy 落地机${NC}"
+            echo -e "  ${BLUE}存储:     云盘${NC}"
+            echo -e "  ${BLUE}特点:     环境优化 + 自动安装 OpenClaw-Proxy 落地机${NC}"
+            ;;
+        generic-1c1g-agent)
+            echo -e "  ${BLUE}设备:     通用 1核 1G VPS + OpenClaw-Proxy 落地机${NC}"
+            echo -e "  ${BLUE}特点:     极简优化 + 自动安装 OpenClaw-Proxy 落地机${NC}"
+            ;;
         google-cloud-e2)
             echo -e "  ${BLUE}设备:     Google Cloud e2-micro（Always Free）${NC}"
             echo -e "  ${BLUE}存储:     30GB SSD${NC}"
             echo -e "  ${BLUE}特点:     共享 CPU(burstable) + Intel + VPC 网络优化${NC}"
+            ;;
+        google-cloud-e2-agent)
+            echo -e "  ${BLUE}设备:     Google Cloud e2-micro + OpenClaw-Proxy 落地机${NC}"
+            echo -e "  ${BLUE}存储:     30GB SSD${NC}"
+            echo -e "  ${BLUE}特点:     GCP 共享 CPU 优化 + 自动安装 OpenClaw-Proxy 落地机${NC}"
             ;;
     esac
     echo ""
@@ -441,11 +458,15 @@ step2_choose_subplatform() {
             echo -e "  ${GREEN}[2]${NC} Oracle Cloud ARM 精选（1核 4GB）"
             echo -e "       Ampere Altra | 1核 4GB | Oracle 促销机型"
             echo ""
-            echo -n "请输入选项 [1/2]: "
+            echo -e "  ${GREEN}[3]${NC} Oracle Cloud ARM 精选 + OpenClaw-Proxy 落地机"
+            echo -e "       同上 + 自动安装 OpenClaw-Proxy 代理节点"
+            echo ""
+            echo -n "请输入选项 [1/2/3]: "
             read -r choice
             case "$choice" in
                 1) SELECTED_PLATFORM="oracle-arm" ;;
                 2) SELECTED_PLATFORM="oracle-1c4g" ;;
+                3) SELECTED_PLATFORM="oracle-1c4g-agent" ;;
                 *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
             esac
             ;;
@@ -453,9 +474,16 @@ step2_choose_subplatform() {
             echo -e "  ${GREEN}[1]${NC} Google Cloud e2-micro（永久免费）"
             echo -e "       1vCPU 共享 | 1GB RAM | 30GB SSD | Always Free"
             echo ""
-            echo -n "请输入选项 [1]: "
+            echo -e "  ${GREEN}[2]${NC} Google Cloud e2-micro + OpenClaw-Proxy 落地机"
+            echo -e "       同上 + 自动安装 OpenClaw-Proxy 代理节点"
+            echo ""
+            echo -n "请输入选项 [1/2]: "
             read -r choice
-            SELECTED_PLATFORM="google-cloud-e2"
+            case "$choice" in
+                1) SELECTED_PLATFORM="google-cloud-e2" ;;
+                2) SELECTED_PLATFORM="google-cloud-e2-agent" ;;
+                *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
+            esac
             ;;
         n5105)
             echo -e "  ${GREEN}[1]${NC} N5105 / N5095 小主机"
@@ -470,13 +498,17 @@ step2_choose_subplatform() {
             echo -e "       任何 x86_64 云服务器均可（2GB 及以上内存）"
             echo ""
             echo -e "  ${GREEN}[2]${NC} 通用 1核 1G VPS（极简版）"
-            echo -e "       最低配套餐 | 1GB 内存 | 仅优化环境，不安装重软件"
+            echo -e "       最低配套餐 | 1GB 内存 | 仅优化环境"
             echo ""
-            echo -n "请输入选项 [1/2]: "
+            echo -e "  ${GREEN}[3]${NC} 通用 1核 1G VPS + OpenClaw-Proxy 落地机"
+            echo -e "       同上 + 自动安装 OpenClaw-Proxy 代理节点"
+            echo ""
+            echo -n "请输入选项 [1/2/3]: "
             read -r choice
             case "$choice" in
                 1) SELECTED_PLATFORM="generic-x86" ;;
                 2) SELECTED_PLATFORM="generic-1c1g" ;;
+                3) SELECTED_PLATFORM="generic-1c1g-agent" ;;
                 *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
             esac
             ;;
