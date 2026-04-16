@@ -27,8 +27,8 @@ log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" 
 # 全局常量（可被调用者 override）
 # ─────────────────────────────────────────────────────────────────────────────
 readonly SCRIPT_VERSION="3.1"
-readonly APT_LOG="${APT_LOG:-/var/log/vps-youhua-install.log}"
-readonly LOCK_FILE="${LOCK_FILE:-/var/lock/vps-youhua-install.lock}"
+readonly APT_LOG="/var/log/vps-youhua.log"         # 统一日志路径（所有平台共用）
+readonly LOCK_FILE="/var/lock/vps-youhua.lock"      # 统一锁文件
 
 # 系统信息（初始化为空）
 SYS_MEM_MB=0; SYS_CPU_CORES=0; SYS_ARCH=""
@@ -40,11 +40,24 @@ SYS_IS_ARMBIAN=false; SYS_IS_TF_CARD=false
 PROFILE_DESC=""
 
 # 安装选项（从环境变量读取默认值）
-INSTALL_DEPS="${INSTALL_DEPS:-true}"        # 基础编译依赖
-INSTALL_DOCKER="${INSTALL_DOCKER:-false}"
-INSTALL_NODEJS="${INSTALL_NODEJS:-false}"
+# ── 安装选项（所有平台统一逻辑）──────────────────────────────────────────
+# SKIP_SOFTWARE_SCRIPT=true  → 跳过 Docker / Node.js / build deps
+# OPTIMIZE_ONLY=true         → 等价于 SKIP_SOFTWARE_SCRIPT=true + INSTALL_DEPS=false
+# --proxy-mode               → FORCE_MODE=optimize + SKIP_SOFTWARE_SCRIPT=true + OPTIMIZE_ONLY=true
+INSTALL_DEPS="${INSTALL_DEPS:-true}"         # 基础编译依赖（可被 --install-deps 覆盖）
+INSTALL_DOCKER="${INSTALL_DOCKER:-false}"    # Docker（需显式开启）
+INSTALL_NODEJS="${INSTALL_NODEJS:-false}"   # Node.js（需显式开启）
 SKIP_SOFTWARE_SCRIPT="${SKIP_SOFTWARE_SCRIPT:-false}"
 OPTIMIZE_ONLY="${OPTIMIZE_ONLY:-false}"
+
+# OPTIMIZE_ONLY=true 时联动跳过所有软件安装
+if [[ "${OPTIMIZE_ONLY}" == "true" ]]; then
+    SKIP_SOFTWARE_SCRIPT="true"
+    INSTALL_DEPS="false"
+fi
+
+# ── 代理节点专用模式（低资源平台推荐）──────────────────────────────────
+CONFIGURE_PROXY_ONLY="${CONFIGURE_PROXY_ONLY:-false}"   # 代理节点专用（仅环境优化，不装重软件）
 
 # 平台标识（各平台脚本必须定义）
 readonly PLATFORM_NAME="${PLATFORM_NAME:-unknown}"
@@ -61,6 +74,24 @@ acquire_lock() {
     fi
 }
 
+# ── 幂等检查：重复运行提示 ───────────────────────────────────────────────
+check_idempotent() {
+    if [[ -f /etc/vps-youhua-optimized ]] && [[ "${FORCE_REAPPLY:-false}" != "true" ]]; then
+        log_warn "检测到系统已优化（/etc/vps-youhua-optimized 存在）"
+        if [[ -t 0 ]]; then
+            echo -n "  是否重新应用优化？(y/N，默认 N): "
+            read -r confirm
+            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+                log_info "跳过，已运行过优化"
+                exit 0
+            fi
+            log_info "重新应用中..."
+        else
+            log_warn "非交互模式，跳过幂等检查（使用 FORCE_REAPPLY=true 强制重试）"
+        fi
+    fi
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 初始化（各平台 main() 开头调用）
 # ─────────────────────────────────────────────────────────────────────────────
@@ -68,6 +99,7 @@ init_script() {
     acquire_lock
     export DEBIAN_FRONTEND=noninteractive
     mkdir -p "$(dirname "$APT_LOG")"
+    mkdir -p /var/lock /var/log
     : > "$APT_LOG"
 }
 
@@ -98,6 +130,14 @@ detect_system() {
 
     log_info "系统: ${SYS_OS_ID} ${SYS_OS_VERSION}"
     log_info "架构: ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
+
+    # ── 低内存自动检测 ────────────────────────────────────────────────
+    if [[ ${SYS_MEM_MB:-0} -gt 0 ]] && [[ ${SYS_MEM_MB} -lt 2048 ]]; then
+        export IS_LOW_MEMORY="true"
+        log_info "检测到低内存（${SYS_MEM_MB}MB），已启用低资源优化模式"
+    else
+        export IS_LOW_MEMORY="false"
+    fi
     [[ "$SYS_IS_ARMBIAN" == "true" ]] && log_info "Armbian 检测通过"
 }
 
@@ -247,7 +287,7 @@ $nrconf{kernelhints} = 0;
 $nrconf{unneeded} = 'a';
 EOF
 
-    # CONFIGURE_MIRROR: auto=测速选源, off=仅配APT参数不改源
+    # CONFIGURE_MIRROR: auto=测速选源, off=仅配APT参数, preserve=保留原源
     local mirror_mode="${CONFIGURE_MIRROR:-auto}"
     local selected_mirror=""
 
@@ -256,7 +296,12 @@ EOF
         if ! apt-get update -qq >> "$APT_LOG" 2>&1; then
             log_warn "APT 更新失败"
         fi
-        log_info "APT 源配置完成"
+        log_info "APT 源配置完成（仅配置参数）"
+        return 0
+    fi
+
+    if [[ "$mirror_mode" == "preserve" ]]; then
+        log_info "保留原始 sources.list，不做任何更改"
         return 0
     fi
 

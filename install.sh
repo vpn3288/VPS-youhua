@@ -17,14 +17,14 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["nanopi-r4s"]="acdb662f962b7edfaac1bd7984144fa3c64bce455ce193bf72641f73f78c08bf"
-    ["nanopi-t6"]="c30f9c8bcd90a9d90ba1253bf00806bea079b09b034ef1354547d05daceebdb9"
-    ["oracle-arm"]="64c4f836cc687aa32f55cb5686726cc4796025104c8ad33be73f9b276cac3a92"
-    ["oracle-1c4g"]="16644186747de97ed2539b95b5f2d03077a2e5df6681e22a0977bc86d60bb084"
-    ["n5105"]="2ab6dfbcd92282f4c4bd5908c74ad5fe3909ae4411927699491dd023c25e133d"
-    ["generic-x86"]="289ac743ffbbfb606333c40bde35587f5fb26728aca99876eef0350920cae737"
-    ["generic-1c1g"]="05fc3ce02375f8c9b3e6274a154bda880d1216fe185a101ce561f300562136e3"
-    ["google-cloud-e2"]="5a7b67b0e0fba35098fa4269012b5dce954246ddae5f505a82bf7fe72f94c0b9"
+    ["nanopi-r4s"]="e013601ae71899590f1af436c2010526aac06242fc1adc2a1f9a8a03bf636351"
+    ["nanopi-t6"]="6063dfab509911df3249824b477334cef38151a948185c60033d15e11dd3da5e"
+    ["oracle-arm"]="32d7d5a0d28a3955ef92426df21e10c2f1c56bd7c4b9e3864f3cb15f64a41433"
+    ["oracle-1c4g"]="6fa6393c282742edce5def13958afa57ac45a110b853749dc00c2e77d43799ca"
+    ["n5105"]="9dcf36c0f734fb7cb481966a821da176d3277ca734c8909984e925395b1cf212"
+    ["generic-x86"]="3aef593f432800bf7cd61c74381bd49f7838c0e3a481868cbcb4c978cccd0fdc"
+    ["generic-1c1g"]="62f41a4e99df0917fefe1d46f4d4529f5f8f1bed06caf77c10e4b3b3a525b0ac"
+    ["google-cloud-e2"]="6d54948e4c424fa58014b76f92daf41111890b3389af3f96d6342672e93dd689"
     ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
 
@@ -62,6 +62,8 @@ for arg in "$@"; do
         --optimize|--optimize-only) FORCE_MODE="optimize" ;;
         --full|--install-all)        FORCE_MODE="full" ;;
         --no-software)               FORCE_MODE="optimize" ;;
+        --install-deps)              INSTALL_DEPS="true" ;;
+        --proxy-mode)                FORCE_MODE="optimize"; SKIP_SOFTWARE_SCRIPT="true"; OPTIMIZE_ONLY="true" ;;
         --non-interactive|-y|--yes)  INTERACTIVE=false ;;
         --with-docker)               INSTALL_DOCKER="true" ;;
         --without-docker)            INSTALL_DOCKER="false" ;;
@@ -72,10 +74,10 @@ for arg in "$@"; do
         --with-fail2ban)             CONFIGURE_FAIL2BAN="true" ;;
         --without-fail2ban)          CONFIGURE_FAIL2BAN="false" ;;
         --mirror-auto)               CONFIGURE_MIRROR="auto" ;;
-        --mirror-off)                CONFIGURE_MIRROR="off" ;;
+        --mirror-off)                CONFIGURE_MIRROR="preserve" ;;
         --clean-system)              CLEAN_SYSTEM="true" ;;
         --uninstall)                 MODE="uninstall" ;;
-        --status)                    run_verify_status; exit $? ;;
+        --status)                    MODE="status" ;;
         --help|-h)                   show_help; exit 0 ;;
         --platform) ;; # skip, handled below
         *)
@@ -263,9 +265,10 @@ detect_platform() {
             elif echo "$cpu_model" | grep -qi "RK3399"; then
                 echo "nanopi-r4s"
             else
-                # 未知 ARM64 设备，fallback 到 nanopi-r4s（最通用ARM板）
-                log_warn "未知 ARM64 设备: ${cpu_model:-unknown}，将使用通用 ARM 配置"
-                echo "nanopi-r4s"
+                # 未知 ARM64 设备，必须显式选择
+                log_error "未知 ARM64 设备: ${cpu_model:-unknown}，不支持自动配置"
+                log_info "请通过 --platform=<name> 指定平台，或运行交互式菜单选择"
+                exit 1
             fi
             ;;
         x86_64)
@@ -332,6 +335,7 @@ show_banner() {
     echo "║                                                                       ║"
     echo "║              AIagent 环境优化脚本 v${VERSION}                             ║"
     echo "║              新手友好 · 自由选择 · 安全可控                           ║"
+    echo "║              支持代理节点纯环境优化模式                               ║"
     echo "║                                                                       ║"
     echo "╚═══════════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -375,17 +379,6 @@ show_platform_info() {
             echo -e "  ${BLUE}设备:     通用 1核 1G VPS（极简版）${NC}"
             echo -e "  ${BLUE}特点:     zram扩展 + 极保守资源限制${NC}"
             ;;
-        oracle-1c4g)
-            echo -e "  ${BLUE}设备:     Oracle Cloud ARM 精选（1核 4GB）${NC}"
-            echo -e "  ${BLUE}存储:     云盘${NC}"
-            echo -e "  ${BLUE}特点:     ARM 精简资源限制 + Oracle 元数据优化${NC}"
-            echo -e "  ${BLUE}说明:     仅环境优化，不安装 Docker / Node.js / Agent${NC}"
-            ;;
-        generic-1c1g)
-            echo -e "  ${BLUE}设备:     通用 1核 1G VPS（极简版）${NC}"
-            echo -e "  ${BLUE}特点:     zram扩展 + 极保守资源限制${NC}"
-            echo -e "  ${BLUE}说明:     仅环境优化，不安装 Docker / Node.js / Agent${NC}"
-            ;;
         google-cloud-e2)
             echo -e "  ${BLUE}设备:     Google Cloud e2-micro（Always Free）${NC}"
             echo -e "  ${BLUE}存储:     30GB SSD${NC}"
@@ -399,6 +392,107 @@ show_platform_info() {
 # ─────────────────────────────────────────────────────────────────────────────
 # 菜单步骤
 # ─────────────────────────────────────────────────────────────────────────────
+
+#────────────────────────────────────────────────────────────────
+# OPTIMIZE #3: 新手友好快速选择菜单（5选项）
+# 位置: 交互式入口，在 step1 之前调用
+#────────────────────────────────────────────────────────────────
+show_quick_start_menu() {
+    echo ""
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  ⚡ 快速选择（新手友好）${NC}"
+    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  ${GREEN}[1]${NC} ${BOLD}仅底层优化${NC} ← ${CYAN}新手推荐${NC}"
+    echo -e "       sysctl参数 / DNS / CPU调频 / journald / 防火墙"
+    echo -e "       ${YELLOW}不安装 Docker / Node.js / Agent${NC}"
+    echo -e "       ${GREEN}适合: 代理节点 / 后续自装软件 / 低配置小鸡${NC}"
+    echo ""
+    echo -e "  ${GREEN}[2]${NC} ${BOLD}底层优化 + 基础编译依赖${NC}"
+    echo -e "       纯优化 + build-essential / cmake / python3"
+    echo -e "       ${GREEN}适合: 后续编译安装软件（v2ray-core / xray 等）${NC}"
+    echo ""
+    echo -e "  ${GREEN}[3]${NC} ${BOLD}底层优化 + Docker${NC}"
+    echo -e "       纯优化 + Docker 最新版"
+    echo -e "       ${GREEN}适合: Docker Compose / 容器化部署${NC}"
+    echo ""
+    echo -e "  ${GREEN}[4]${NC} ${BOLD}底层优化 + Node.js${NC}"
+    echo -e "       纯优化 + Node.js LTS"
+    echo -e "       ${GREEN}适合: JavaScript 运行时 / npm 工具链${NC}"
+    echo ""
+    echo -e "  ${GREEN}[5]${NC} ${BOLD}全量安装（一步到位）${NC}"
+    echo -e "       底层优化 + Docker + Node.js"
+    echo -e "       ${GREEN}适合: 直接跑 AIagent / 完整开发环境${NC}"
+    echo ""
+    echo -e "  ${GREEN}[6]${NC} ${BOLD}专家模式（完全自定义）${NC}"
+    echo -e "       4步引导: 选平台 → 选套餐 → 选功能 → 确认"
+    echo ""
+    echo -n "请输入选项 [1/2/3/4/5/6，默认 1]: "
+    read -r quick_choice
+    quick_choice="${quick_choice:-1}"
+
+    case "$quick_choice" in
+        1)
+            SELECTED_MODE="optimize"
+            INSTALL_DOCKER="false"
+            INSTALL_NODEJS="false"
+            INSTALL_DEPS="false"
+            CONFIGURE_UNATTENDED="true"
+            CONFIGURE_FAIL2BAN="false"
+            CONFIGURE_MIRROR="auto"
+            log_info "快速模式: 仅底层优化"
+            ;;
+        2)
+            SELECTED_MODE="optimize"
+            INSTALL_DEPS="true"
+            INSTALL_DOCKER="false"
+            INSTALL_NODEJS="false"
+            CONFIGURE_UNATTENDED="true"
+            CONFIGURE_FAIL2BAN="false"
+            CONFIGURE_MIRROR="auto"
+            log_info "快速模式: 底层优化 + 基础依赖"
+            ;;
+        3)
+            SELECTED_MODE="full"
+            INSTALL_DOCKER="true"
+            INSTALL_NODEJS="false"
+            INSTALL_DEPS="true"
+            CONFIGURE_UNATTENDED="true"
+            CONFIGURE_FAIL2BAN="false"
+            CONFIGURE_MIRROR="auto"
+            log_info "快速模式: 底层优化 + Docker"
+            ;;
+        4)
+            SELECTED_MODE="full"
+            INSTALL_DOCKER="false"
+            INSTALL_NODEJS="true"
+            INSTALL_DEPS="true"
+            CONFIGURE_UNATTENDED="true"
+            CONFIGURE_FAIL2BAN="false"
+            CONFIGURE_MIRROR="auto"
+            log_info "快速模式: 底层优化 + Node.js"
+            ;;
+        5)
+            SELECTED_MODE="full"
+            INSTALL_DOCKER="true"
+            INSTALL_NODEJS="true"
+            INSTALL_DEPS="true"
+            CONFIGURE_UNATTENDED="true"
+            CONFIGURE_FAIL2BAN="false"
+            CONFIGURE_MIRROR="auto"
+            log_info "快速模式: 全量安装"
+            ;;
+        6)
+            # 专家模式: 使用原有 4 步流程
+            return 1  # 通知调用方继续 4-step 流程
+            ;;
+        *)
+            echo -e "${YELLOW}无效选项，默认仅底层优化${NC}"
+            SELECTED_MODE="optimize"
+            ;;
+    esac
+}
+
 
 step1_choose_platform() {
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -563,6 +657,28 @@ step4_choose_features() {
             CONFIGURE_MIRROR="off"
             echo ""
             echo -e "${YELLOW}⚠️  重要提示：fail2ban 开启后，请确保已配置 SSH 密钥登录！${NC}"
+            echo -e "${YELLOW}   否则如果密码登录失败3次，当前 IP 会被封禁1小时。${NC}"
+            echo -e "${YELLOW}   如需保留密码登录作为备份，请先编辑 /etc/ssh/sshd_config 添加密钥后再继续。${NC}"
+            echo ""
+            # ── SSH 密钥登录新手提示 ───────────────────────────────────────
+            if [[ -t 0 ]]; then
+                echo -e "  ${BOLD}是否配置 SSH 密钥登录？${NC}（推荐生产环境开启）"
+                echo -e "  ${GREEN}[1]${NC} 跳过（保持当前 SSH 配置不变）"
+                echo -e "  ${GREEN}[2]${NC} 引导配置（生成密钥对，显示公钥，提示添加到 ~/.ssh/authorized_keys）"
+                echo ""
+                echo -n "请输入选项 [1/2，默认 1]: "
+                read -r ssh_key_choice
+                ssh_key_choice="${ssh_key_choice:-1}"
+                case "$ssh_key_choice" in
+                    2)
+                        CONFIGURE_SSH_KEY="true"
+                        log_info "SSH 密钥登录引导已开启（请在下一步确认）"
+                        ;;
+                    *)
+                        CONFIGURE_SSH_KEY="false"
+                        ;;
+                esac
+            fi
             echo -e "${YELLOW}   否则如果密码登录失败3次，当前 IP 会被封禁1小时。${NC}"
             echo -e "${YELLOW}   如需保留密码登录作为备份，请先编辑 /etc/ssh/sshd_config 添加密钥后再继续。${NC}"
             echo ""
@@ -836,9 +952,37 @@ main() {
     fi
 
     show_banner
+
+    # ── MODE=status 直接运行验证 ─────────────────────────────────────────
+    if [[ "${MODE}" == "status" ]]; then
+        log_info "运行状态验证..."
+        local verify_script
+        verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.1.sh"
+        if [[ -f "$verify_script" ]]; then
+            bash "$verify_script"; local ret=$?; exit $ret
+        else
+            log_error "验证脚本不存在: $verify_script"; exit 1
+        fi
+    fi
+
     check_network
 
     # 自动检测平台（允许用户修改）
+    # ── 低内存警告 (<2G) ───────────────────────────────────────────────
+    if [[ -t 0 ]]; then
+        local check_mem
+        check_mem=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo "0")
+        if [[ "${check_mem:-0}" -gt 0 ]] && [[ "${check_mem}" -lt 2048 ]]; then
+            echo ""
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${YELLOW}  ⚠️  低内存警告: ${check_mem}MB < 2048MB${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "  ${YELLOW}检测到可用内存 < 2GB，建议使用${NC} ${GREEN}选项 [1] 仅底层优化${NC}"
+            echo -e "  ${YELLOW}代理节点/极小鸡推荐纯优化模式，不装 Docker/Node.js${NC}"
+            echo ""
+        fi
+    fi
+
     local auto_platform; auto_platform=$(detect_platform)
     show_platform_info "$auto_platform"
 
@@ -851,10 +995,33 @@ main() {
     else
         # ── 交互式菜单 ─────────────────────────────────────────────────────
         PLATFORM_CATEGORY=""
-        step1_choose_platform
-        step2_choose_subplatform
-        step3_choose_mode
-        step4_choose_features
+        # ── 新手友好：先问快速选择 ─────────────────────────────────────────
+        show_quick_start_menu
+        local quick_ret=$?
+
+        if [[ $quick_ret -eq 1 ]]; then
+            # 专家模式：走 4-step 流程
+            step1_choose_platform
+            step2_choose_subplatform
+            step3_choose_mode
+            step4_choose_features
+        else
+            # 快速模式：直接选平台
+            step1_choose_platform
+            step2_choose_subplatform
+            # 显示当前配置
+            echo ""
+            echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BOLD}  确认你的选择${NC}"
+            echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            show_platform_info "$SELECTED_PLATFORM"
+            echo ""
+            echo -e "  模式: ${GREEN}${SELECTED_MODE}${NC}"
+            echo -e "  Docker: ${GREEN}${INSTALL_DOCKER}${NC} | Node.js: ${GREEN}${INSTALL_NODEJS}${NC}"
+            echo -e "  编译依赖: ${GREEN}${INSTALL_DEPS}${NC}"
+            echo -e "  自动更新: ${GREEN}${CONFIGURE_UNATTENDED}${NC} | 暴力破解防护: ${YELLOW}${CONFIGURE_FAIL2BAN}${NC}"
+            echo ""
+        fi
 
         # full 模式：询问 Docker / Node.js
         if [[ "$SELECTED_MODE" == "full" ]]; then

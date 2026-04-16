@@ -32,10 +32,10 @@ readonly TMPFS_SIZE="256M"
 readonly TCP_BUF_MAX
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
 readonly CT_MAX=16384
-readonly SOMAXCONN=256
-readonly NETDEV_BACKLOG=1024
+readonly SOMAXCONN=512       # 1C1G 低资源限制
+readonly NETDEV_BACKLOG=2048  # 1C1G
 readonly SWAPPINESS=1
-readonly MIN_FREE_KB=8192
+readonly MIN_FREE_KB=16384  # 1C1G 防止OOM
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 加载通用函数库
@@ -73,6 +73,7 @@ vm.dirty_expire_centisecs = 30000
 # ── 网络（极保守）─────────────────────────────────────────────────────────────
 net.core.netdev_max_backlog = ${NETDEV_BACKLOG}
 net.core.somaxconn = ${SOMAXCONN}
+net.ipv4.tcp_max_syn_backlog = 1024  # 1C1G 低资源
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_tw_reuse = 1
@@ -253,6 +254,7 @@ main() {
     echo ""
 
     init_script
+    check_idempotent
     detect_system
     check_network
     preflight_check
@@ -266,7 +268,7 @@ main() {
     fi
 
     echo ""
-    log_step "开始优化..."
+    log_step "[1/12] 开始优化..."
     echo ""
 
     backup_all

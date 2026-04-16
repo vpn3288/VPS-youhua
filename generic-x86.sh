@@ -146,6 +146,7 @@ vm.dirty_expire_centisecs = 60000
 # ── generic-x86 网络 ─────────────────────────────────────────────────────────
 net.core.netdev_max_backlog = 65535
 net.core.somaxconn = 65535
+net.ipv4.tcp_max_syn_backlog = 8192  # 高并发连接
 net.core.rmem_max = ${TCP_BUF_MAX}
 net.core.wmem_max = ${TCP_BUF_MAX}
 net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
@@ -502,6 +503,7 @@ main() {
     echo ""
 
     init_script
+    check_idempotent
     detect_system
     detect_storage_type
     check_network
@@ -517,7 +519,7 @@ main() {
     fi
 
     echo ""
-    log_step "开始优化..."
+    log_step "[1/12] 开始优化..."
     echo ""
 
     backup_all

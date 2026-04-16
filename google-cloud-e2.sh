@@ -170,6 +170,7 @@ vm.swappiness = ${SWAPPINESS}
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = 50
 vm.oom_kill_allocating_task = 1
+vm.overcommit_memory = 1  # GCP 共享 CPU 允许内存超用
 vm.dirty_ratio = 10
 vm.dirty_background_ratio = 3
 vm.dirty_writeback_centisecs = 15000
@@ -178,9 +179,10 @@ vm.dirty_expire_centisecs = 30000
 # ── 网络（GCP VPC 优化，比普通 VPS 更高吞吐）─────────────────────────────────
 net.core.netdev_max_backlog = ${NETDEV_BACKLOG}
 net.core.somaxconn = ${SOMAXCONN}
-net.core.default_qdisc = fq
+net.core.default_qdisc = fq_codel  # GCP 共享 CPU 队列优化
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15  # GCP 共享 CPU 快速回收
 
 # ── conntrack（1GB 保守，仅基础 NAT）────────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${CT_MAX}
@@ -389,6 +391,7 @@ main() {
     echo ""
 
     init_script
+    check_idempotent
     detect_system
     detect_gcp_cloud
     check_gcp_metadata
@@ -404,7 +407,7 @@ main() {
     fi
 
     echo ""
-    log_step "开始优化..."
+    log_step "[1/12] 开始优化..."
     echo ""
 
     backup_all

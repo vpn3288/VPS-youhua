@@ -151,14 +151,46 @@ EOF
 # R4S 内存优化（禁用物理 swap，保留 Armbian 原生 zram）
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_memory_r4s() {
-    log_step "配置内存 (R4S TF卡保护)..."
+    log_step "[1/12] 配置内存 (R4S TF卡保护 + zram扩展)..."
 
-    # 禁用物理 swap（TF 卡禁止 swap）
+    # ── 禁用物理 swap（TF 卡禁止 swap）────────────────────────────────
     for sw in /swapfile /swap.img; do
         swapon --show 2>/dev/null | grep -q "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
     sed -i '/swapfile/d; /swap.img/d' /etc/fstab 2>/dev/null || true
+
+    # ── zram 内存扩展（R4S 4GB TF，50% mem = ~1.9GB 等效）────────────
+    if ! modprobe zram 2>/dev/null; then
+        log_warn "zram 模块不可用，跳过"
+    else
+        local mem_kb
+        mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+        local zram_size=$((mem_kb * 50 / 100))
+        if [[ -f /sys/block/zram0/disksize ]]; then
+            echo "${zram_size}K" > /sys/block/zram0/disksize 2>/dev/null || true
+            mkswap /dev/zram0 >/dev/null 2>&1 || true
+            swapon /dev/zram0 -p 32767 2>/dev/null || true
+            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))MB（Armbian 24.04 推荐）"
+        fi
+    fi
+
+    # ── Armbian ramlog：/var/log tmpfs（Armbian 官方推荐，减少 TF 卡写入）─
+    if ! mount | grep -q "tmpfs on /var/log"; then
+        mkdir -p /etc/systemd/systemdisable
+        systemctl mask rsyslog 2>/dev/null || true
+        # 将 /var/log 改为 tmpfs（重启后生效）
+        if ! grep -q "tmpfs /var/log" /etc/fstab 2>/dev/null; then
+            echo "tmpfs /var/log tmpfs defaults,noatime,nodiratime,size=128M,mode=0755 0 0" >> /etc/fstab
+        fi
+        # 当前会话临时生效
+        cp -a /var/log /tmp/var_log_backup 2>/dev/null || true
+        mount -t tmpfs -o size=128M,mode=0755,noatime,nodiratime tmpfs /var/log 2>/dev/null || true
+        cp -a /tmp/var_log_backup/* /var/log/ 2>/dev/null || true
+        log_info "Armbian ramlog tmpfs 已配置（128MB，减少 TF 卡写入）"
+    else
+        log_info "/var/log 已是 tmpfs，跳过"
+    fi
 
     # Armbian 原生 zram-config 保留，不碰
     if systemctl is-active armbian-zram-config &>/dev/null; then
@@ -591,6 +623,45 @@ uninstall_all() {
 # ─────────────────────────────────────────────────────────────────────────────
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# rc.local 确保 CPU governor 重启后仍生效（Armbian 内核特性）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_rc_local() {
+    log_step "配置 rc.local（CPU governor 持久化）..."
+
+    mkdir -p /etc/systemd/system
+    cat > /etc/systemd/system/rc-local.service << 'EOF'
+[Unit]
+Description=/etc/rc.local Compatibility
+After=network.target
+[Service]
+Type=forking
+ExecStart=/etc/rc.local start
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # 创建 rc.local（CPU governor + 网络优化）
+    cat > /etc/rc.local << 'EOF'
+#!/bin/sh
+# CPU governor 持久化（Armbian 推荐）
+for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+    [ -f "$cpu" ] && echo "schedutil" > "$cpu" 2>/dev/null || true
+done
+# 优化网络参数
+sysctl -p /etc/sysctl.d/99-vps-youhua.conf >/dev/null 2>&1 || true
+exit 0
+EOF
+    chmod +x /etc/rc.local
+
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable rc-local 2>/dev/null || true
+    systemctl start rc-local 2>/dev/null || true
+    log_info "rc.local 已启用（CPU governor schedutil）"
+}
+
 main() {
     # 参数解析
     for arg in "$@"; do

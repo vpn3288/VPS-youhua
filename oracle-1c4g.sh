@@ -30,8 +30,9 @@ readonly TMPFS_SIZE="256M"
 
 # Oracle Cloud 1C4G TCP 缓冲（动态自适应：内存的 3%，上限 16MB，下限 8MB）
 readonly TCP_BUF_MAX
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>16777216)?16777216:(m*0.03*1024*1024<8388608)?8388608:m*0.03*1024*1024}' /proc/meminfo)
-readonly CT_MAX=65536
+# TCP 缓冲: 内存 4-6% 自适应（1C4G proxy 专用，省内存+够用）
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.04*1024*1024>16777216)?16777216:(m*0.04*1024*1024<4194304)?4194304:m*0.04*1024*1024}' /proc/meminfo)
+readonly CT_MAX=8192  # 1C4G 精简资源限制
 readonly SOMAXCONN=1024
 readonly NETDEV_BACKLOG=4096
 readonly SWAPPINESS=10
@@ -366,6 +367,7 @@ main() {
     echo ""
 
     init_script
+    check_idempotent
     detect_system
     detect_oracle_cloud
     check_oracle_metadata
@@ -381,7 +383,7 @@ main() {
     fi
 
     echo ""
-    log_step "开始优化..."
+    log_step "[1/12] 开始优化..."
     echo ""
 
     backup_all
@@ -397,6 +399,15 @@ main() {
     configure_locale
     configure_firewall_lo
     configure_tmp_tmpfs
+
+    # ── CPU governor powersave（Oracle 1C4G 代理节点省电）────────────
+    if [[ -d /sys/devices/system/cpu/cpu0/cpufreq ]]; then
+        for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+            [ -f "$cpu" ] && echo "powersave" > "$cpu" 2>/dev/null || true
+        done
+        log_info "CPU governor 已设为 powersave（省电）"
+    fi
+
     optimize_oom
     configure_unattended_upgrades
     configure_fail2ban

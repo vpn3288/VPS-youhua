@@ -61,7 +61,69 @@ detect_cloud() {
     fi
 }
 
-#-------------------------------------------------------------------------------
+#------------------------------------------------
+#────────────────────────────────────────────────────────────────
+# zram 状态检查（Armbian/低内存系统）
+#────────────────────────────────────────────────────────────────
+check_zram_status() {
+    log_section "zram 内存扩展状态"
+    if lsmod 2>/dev/null | grep -q zram; then
+        local zram_devs
+        zram_devs=$(ls -la /sys/block/zram* 2>/dev/null | wc -l)
+        echo -e "  ${GREEN}✓ zram 模块已加载${RESET}（$(($zram_devs - 1)) 个设备）"
+        # 显示各 zram 设备大小
+        for dev in /sys/block/zram*; do
+            [[ -d "$dev" ]] || continue
+            local name
+            name=$(basename "$dev")
+            local disksize
+            disksize=$(cat "$dev/disksize" 2>/dev/null || echo "0")
+            local size_mb=$((disksize / 1024 / 1024))
+            if [[ $size_mb -gt 0 ]]; then
+                log_pair "zram/${name}" "${size_mb}MB"
+            fi
+        done
+    else
+        echo -e "  ${YELLOW}⚠ zram 未加载（低内存系统推荐启用）${RESET}"
+    fi
+    echo ""
+}
+
+#────────────────────────────────────────────────────────────────
+# fstrim cron 检查
+#────────────────────────────────────────────────────────────────
+check_fstrim_cron() {
+    log_section "fstrim 定时任务状态"
+    if [[ -f /etc/cron.daily/vps-youhua-clean ]]; then
+        if grep -q fstrim /etc/cron.daily/vps-youhua-clean 2>/dev/null; then
+            echo -e "  ${GREEN}✓ fstrim cron 已配置${RESET}"
+        else
+            echo -e "  ${YELLOW}⚠ vps-youhua-clean cron 存在但无 fstrim${RESET}"
+        fi
+    else
+        echo -e "  ${YELLOW}⚠ 无 vps-youhua-clean cron 任务${RESET}"
+    fi
+    echo ""
+}
+
+#────────────────────────────────────────────────────────────────
+# unattended-upgrades 检查
+#────────────────────────────────────────────────────────────────
+check_unattended_upgrades() {
+    log_section "unattended-upgrades 自动更新状态"
+    if dpkg -l unattended-upgrades 2>/dev/null | grep -q "^ii"; then
+        echo -e "  ${GREEN}✓ unattended-upgrades 已安装${RESET}"
+        if systemctl is-active --quiet unattended-upgrades 2>/dev/null; then
+            echo -e "  ${GREEN}✓ unattended-upgrades 服务运行中${RESET}"
+        else
+            echo -e "  ${YELLOW}⚠ unattended-upgrades 服务未运行${RESET}"
+        fi
+    else
+        echo -e "  ${YELLOW}⚠ unattended-upgrades 未安装${RESET}"
+    fi
+    echo ""
+}
+-------------------------------
 # 输出格式
 #-------------------------------------------------------------------------------
 log_header() {
@@ -753,6 +815,9 @@ main() {
     check_journald
     check_inotify
     check_swap
+    check_zram_status
+    check_fstrim_cron
+    check_unattended_upgrades
     check_cpu
     check_services
     check_sysctl_files

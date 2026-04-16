@@ -533,6 +533,7 @@ main() {
     echo ""
 
     init_script
+    check_idempotent
     detect_system
     detect_storage_type
     check_network

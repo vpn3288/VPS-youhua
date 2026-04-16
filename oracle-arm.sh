@@ -532,6 +532,7 @@ main() {
     echo ""
 
     init_script
+    check_idempotent
     detect_system
     detect_oracle_cloud
     check_oracle_metadata
@@ -547,7 +548,7 @@ main() {
     fi
 
     echo ""
-    log_step "开始优化..."
+    log_step "[1/12] 开始优化..."
     echo ""
 
     backup_all
