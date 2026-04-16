@@ -768,7 +768,7 @@ configure_fstab() {
         local new_line="${dev} ${mnt} ${fs_type} ${opts} ${dump} ${pass}"
         # 替换原行（转义设备路径中的正则元字符，避免误匹配）
         local escaped_dev
-        escaped_dev=$(printf '%s' "$dev" | sed 's/[.[\]*^$]/\\&/g')
+        escaped_dev=$(printf '%s' "$dev" | sed 's/[][.\*^$]/\\&/g')
         sed -i "\|^${escaped_dev} |s|^.*$|${new_line}|" /etc/fstab 2>/dev/null || true
         fstab_changed=true
     done < /etc/fstab
