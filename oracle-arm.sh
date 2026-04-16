@@ -558,6 +558,7 @@ main() {
     optimize_memory_oracle
     configure_sysctl_oracle
     configure_limits
+    configure_fstab
     configure_journald
     configure_dns
     configure_time_sync

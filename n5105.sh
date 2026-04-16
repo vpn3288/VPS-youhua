@@ -499,6 +499,7 @@ main() {
     optimize_memory_n5105
     configure_sysctl_n5105
     configure_limits
+    configure_fstab
     configure_journald
     configure_dns
     configure_time_sync

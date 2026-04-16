@@ -557,6 +557,7 @@ main() {
     optimize_memory_t6
     configure_sysctl_t6
     configure_limits
+    configure_fstab
     configure_journald
     configure_dns
     configure_time_sync

@@ -137,7 +137,7 @@ vm.vfs_cache_pressure = 50
 vm.oom_kill_allocating_task = 1
 vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
-vm.dirty_writeback_centisecs = 10000
+vm.dirty_writeback_centisecs = 3000   # 1C4G 低核省IO
 vm.dirty_expire_centisecs = 30000
 
 # ── 网络（Oracle Cloud 1C4G 精简）──────────────────────────────────────────
@@ -393,6 +393,7 @@ main() {
     optimize_memory_oracle
     configure_sysctl_oracle
     configure_limits
+    configure_fstab
     configure_journald
     configure_dns
     configure_time_sync

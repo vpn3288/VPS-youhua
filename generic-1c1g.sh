@@ -276,6 +276,7 @@ main() {
     clean_system
     configure_sysctl_generic_1c1g
     configure_limits
+    configure_fstab
     configure_journald
     configure_dns
     configure_time_sync

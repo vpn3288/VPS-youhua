@@ -707,6 +707,7 @@ main() {
     optimize_memory_r4s
     configure_sysctl_r4s
     configure_limits
+    configure_fstab
     configure_journald
     configure_dns
     configure_time_sync

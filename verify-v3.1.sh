@@ -260,20 +260,7 @@ check_locale_chain() {
 
     # Layer 6: systemd service 中的 LANG
     echo -e "  ${DIM}Layer 6 - systemd service Environment:${RESET}"
-    local svc_file
-    for svc_file in ~/.config/systemd/user/openclaw-gateway.service \
-                    /etc/systemd/system/openclaw-gateway.service \
-                    /etc/systemd/user/openclaw-gateway.service; do
-        if [[ -f "$svc_file" ]]; then
-            local lang_env
-            lang_env=$(grep -i "LANG=" "$svc_file" 2>/dev/null | grep -v "^#" | head -1)
-            if [[ -n "$lang_env" ]]; then
-                echo -e "    ${GREEN}✓${RESET} ${svc_file#$HOME}: ${lang_env}"
-            else
-                echo -e "    ${YELLOW}!${RESET} ${svc_file#$HOME}: 无LANG环境变量"
-            fi
-        fi
-    done
+    # 注意: systemd user/global service LANG 检查已移除（通用脚本不再绑定特定agent）
 
     echo ""
     if [[ $issues -eq 0 ]]; then
@@ -427,14 +414,7 @@ check_sysctl_memory() {
 
     echo ""
     echo -e "  ${BOLD}[OOM 保护]${RESET}"
-    if [[ -f /etc/systemd/system/openclaw-gateway.service.d/oom.conf ]]; then
-        echo -e "    ${GREEN}✓${RESET} OOM 配置文件存在"
-        grep -v "^#" /etc/systemd/system/openclaw-gateway.service.d/oom.conf 2>/dev/null | grep -v "^$" | while read -r line; do
-            echo -e "      $line"
-        done
-    else
-        echo -e "    ${DIM}• OOM 配置文件未找到 (非必需)${RESET}"
-    fi
+    # 注意: openclaw OOM 配置检查已移除（通用脚本不再绑定特定agent）
 }
 
 #-------------------------------------------------------------------------------

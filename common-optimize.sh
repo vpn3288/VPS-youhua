@@ -659,6 +659,68 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# OPTIMIZE #13: fstab 统一加 noatime,nodiratime + fsck 自动修复
+# 适用: 所有平台（TF卡/SSD/eMMC/云盘统一）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_fstab() {
+    log_step "配置 fstab（noatime + fsck）..."
+
+    [[ ! -f /etc/fstab ]] && log_warn "/etc/fstab 不存在，跳过" && return 0
+
+    local fstab_changed=false
+
+    # 备份
+    cp -a /etc/fstab /etc/fstab.vps-youhua-bak 2>/dev/null || true
+
+    # 遍历所有 ext4/xfs 分区，添加 noatime,nodiratime
+    # 规则: 第4列(fs_freq)保持不变，第5,6列改为 0 或 1
+    while IFS= read -r line; do
+        # 跳过注释和空行
+        [[ "$line" =~ ^#.*$ ]] && continue
+        [[ -z "$line" ]] && continue
+
+        # 解析: LABEL=/ /dev/sda1 UUID=xxx 等
+        local dev mnt fs_type opts dump pass
+        dev=$(echo "$line" | awk '{print $1}')
+        mnt=$(echo "$line" | awk '{print $2}')
+        fs_type=$(echo "$line" | awk '{print $3}')
+        opts=$(echo "$line" | awk '{print $4}')
+        dump=$(echo "$line" | awk '{print $5}')
+        pass=$(echo "$line" | awk '{print $6}')
+
+        # 仅处理 ext4/xfs/btrfs
+        [[ "$fs_type" != "ext4" && "$fs_type" != "xfs" && "$fs_type" != "btrfs" ]] && continue
+
+        # 如果是 / (root)，pass 改为 1（开机 fsck）
+        # 其他分区 pass 改为 2
+        [[ "$mnt" == "/" ]] && pass="1" || pass="2"
+
+        # 添加 noatime,nodiratime（如果尚未存在）
+        if [[ "$opts" != *"noatime"* ]]; then
+            opts="${opts},noatime"
+        fi
+        if [[ "$opts" != *"nodiratime"* ]]; then
+            opts="${opts},nodiratime"
+        fi
+        # 去重逗号
+        opts=$(echo "$opts" | sed 's/,,/,/g; s/^,//; s/,$//')
+
+        # 重建行
+        local new_line="${dev} ${mnt} ${fs_type} ${opts} ${dump} ${pass}"
+        # 替换原行
+        sed -i "\|^${dev} |s|^.*$|${new_line}|" /etc/fstab 2>/dev/null || true
+        fstab_changed=true
+    done < /etc/fstab
+
+    if [[ "$fstab_changed" == "true" ]]; then
+        log_info "fstab 已更新: noatime,nodiratime 已添加，fsck pass 已配置"
+    else
+        log_info "fstab 无需更改（已是最优配置）"
+    fi
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # journald 配置（平台差异化）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_journald() {

@@ -417,6 +417,7 @@ main() {
     optimize_memory_gcp
     configure_sysctl_gcp
     configure_limits
+    configure_fstab
     configure_journald
     configure_dns
     configure_time_sync
