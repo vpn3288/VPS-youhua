@@ -85,8 +85,9 @@ check_idempotent() {
         log_warn "检测到系统已优化（/etc/vps-youhua-optimized 存在）"
         if [[ -t 0 ]]; then
             echo -n "  是否重新应用优化？(y/N，默认 N): "
-            read -r confirm
-            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+            read -r -t 30 confirm || confirm="N"
+            confirm="${confirm,,}"
+            if [[ "$confirm" != "y" ]]; then
                 log_info "跳过，已运行过优化"
                 exit 0
             fi
@@ -529,11 +530,20 @@ EOF
     systemctl enable systemd-resolved 2>/dev/null || true
 
     # DNS 防篡改：锁定 resolv.conf（百毒不侵核心）
+    # 注意：systemd-resolved 激活时不能 chattr +i（由systemd管理）
     if [[ -f /etc/resolv.conf ]]; then
-        if ! lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
-            chattr -i /etc/resolv.conf 2>/dev/null || true
-            chattr +i /etc/resolv.conf 2>/dev/null || log_warn "chattr +i 失败（权限不足）"
-            log_info "DNS 配置已锁定（chattr +i）"
+        local resolved_active=false
+        if systemctl is-active systemd-resolved > /dev/null 2>&1; then
+            resolved_active=true
+        fi
+        if [[ "$resolved_active" == "true" ]]; then
+            log_info "DNS 由 systemd-resolved 管理，跳过 chattr +i"
+        else
+            if ! lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
+                chattr -i /etc/resolv.conf 2>/dev/null || true
+                chattr +i /etc/resolv.conf 2>/dev/null || log_warn "chattr +i 失败（权限不足）"
+                log_info "DNS 配置已锁定（chattr +i）"
+            fi
         fi
     fi
 
@@ -715,7 +725,9 @@ EOF
 
     # ── BUG#1: RAM<=1024MB 自动创建 1GB Swap（防止 GCP/1C1G OOM）──────────────
     if [[ "${IS_LOW_MEMORY}" == "true" ]]; then
-        configure_swap
+        if declare -f configure_swap > /dev/null 2>&1; then
+            configure_swap
+        fi
     fi
 
     log_info "资源限制配置完成（nofile=${NOFILE_VAL}, nproc=${NPROC_VAL}）"
@@ -839,6 +851,16 @@ configure_dns_lock() {
     # 检查是否已被锁定（幂等性）
     if lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
         log_info "DNS 已锁定（chattr +i），跳过"
+        return 0
+    fi
+
+    # 检查 systemd-resolved（不能对由systemd管理的文件加immutable）
+    local resolved_active=false
+    if systemctl is-active systemd-resolved > /dev/null 2>&1; then
+        resolved_active=true
+    fi
+    if [[ "$resolved_active" == "true" ]]; then
+        log_info "DNS 由 systemd-resolved 管理，跳过 chattr +i"
         return 0
     fi
 
