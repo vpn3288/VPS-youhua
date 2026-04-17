@@ -678,8 +678,13 @@ step4_choose_features() {
     echo -e "  ${GREEN}[D]${NC}  使用全部默认值（安全更新开，其余关）"
     echo ""
     echo -n "请输入选项 [A/B/C/D，默认 D]: "
-    read -r choice
+    read -r -t 30 choice || choice="D"
     choice="${choice:-D}"
+    # Sanitize: only accept valid choices
+    if [[ ! "$choice" =~ ^[aAbBcCdD]$ ]]; then
+        log_warn "无效选项 '$choice'，使用默认值 D"
+        choice="D"
+    fi
     case "$choice" in
         a|A)
             CONFIGURE_UNATTENDED="true"
