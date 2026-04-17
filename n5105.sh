@@ -202,6 +202,8 @@ net.ipv4.tcp_orphan_retries = 1
 net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
+# SYN cookies for DDoS protection on proxy servers
+net.ipv4.tcp_syncookies = 1
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${CT_MAX}
@@ -473,8 +475,9 @@ uninstall_all() {
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
     echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r confirm
-    [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    read -r -t 30 confirm || confirm=""
+    confirm="${confirm,,}"
+    [[ -z "$confirm" || "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
 
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
@@ -577,7 +580,7 @@ main() {
 
     if [[ -t 0 ]]; then
         echo -n "继续执行？(y/n，默认 y): "
-        read -r confirm
+        read -r -t 30 confirm || confirm="y"
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && exit 0
     fi
 
