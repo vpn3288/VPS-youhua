@@ -983,6 +983,22 @@ kernel.panic = 10
 kernel.panic_on_io_nmi = 1
 kernel.panic_on_oops = 1
 
+# ── IPv4 安全（所有平台） ─────────────────────────────────────────────────
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.default.secure_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_rfc1337 = 1
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_notsent_lowat = 16384
+
 # ── IPv6 安全（所有平台） ─────────────────────────────────────────────────
 net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
@@ -990,6 +1006,9 @@ net.ipv6.conf.all.accept_source_route = 0
 net.ipv6.conf.default.accept_source_route = 0
 net.ipv6.conf.all.accept_ra = 0
 net.ipv6.conf.default.accept_ra = 0
+
+# ── 内存管理 ──────────────────────────────────────────────────────────────
+vm.overcommit_memory = 1
 
 # ── 网络基础 ──────────────────────────────────────────────────────────────
 net.core.rmem_default = 262144
