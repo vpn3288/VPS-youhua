@@ -213,6 +213,8 @@ net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
+# SYN cookies for DDoS protection on proxy servers
+net.ipv4.tcp_syncookies = 1
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${conntrack_max}
@@ -666,6 +668,7 @@ main() {
     # BUG#1 FIX: T6 在 zram 之后才检查 swap（避免与 zram 冲突）
     configure_swap
     configure_sysctl_t6
+    configure_conntrack_hashsize_t6
     configure_limits
     configure_fstab
     configure_journald
