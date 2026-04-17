@@ -228,6 +228,8 @@ net.core.default_qdisc = fq_codel  # GCP 共享 CPU 队列优化
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15  # GCP 共享 CPU 快速回收
+# SYN cookies for DDoS protection on proxy servers
+net.ipv4.tcp_syncookies = 1
 
 # ── conntrack（1GB 保守，仅基础 NAT）────────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${CT_MAX}
@@ -464,8 +466,9 @@ uninstall_all() {
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
     echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r confirm
-    if [[ "$confirm" != "yes" ]]; then
+    read -r -t 30 confirm || confirm=""
+    confirm="${confirm,,}"
+    if [[ -z "$confirm" || "$confirm" != "yes" ]]; then
         echo "已取消卸载。"
         exit 0
     fi
@@ -582,7 +585,7 @@ main() {
 
     if [[ -t 0 ]]; then
         echo -n "继续执行？(y/n，默认 y): "
-        read -r confirm
+        read -r -t 30 confirm || confirm="y"
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && exit 0
     fi
 
@@ -595,6 +598,7 @@ main() {
     clean_system
     gcp_cloud_cleanup
     configure_sysctl_gcp
+    configure_conntrack_hashsize
     configure_limits
 
     # BUG#8: 低内存极限清理
