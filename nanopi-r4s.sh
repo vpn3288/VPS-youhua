@@ -294,6 +294,8 @@ net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
+# SYN cookies for DDoS protection on proxy servers
+net.ipv4.tcp_syncookies = 1
 # BUG 修复: 动态计算 conntrack_max（R4S 4GB: 4096*32=131072）
 net.netfilter.nf_conntrack_max = ${conntrack_max}
 # AUDIT-12 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
@@ -662,8 +664,9 @@ uninstall_all() {
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
     echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r confirm
-    if [[ "$confirm" != "yes" ]]; then
+    read -r -t 30 confirm || confirm=""
+    confirm="${confirm,,}"
+    if [[ -z "$confirm" || "$confirm" != "yes" ]]; then
         echo "已取消卸载。"
         exit 0
     fi
@@ -808,7 +811,7 @@ main() {
 
     if [[ -t 0 ]]; then
         echo -n "继续执行？(y/n，默认 y): "
-        read -r confirm
+        read -r -t 30 confirm || confirm="y"
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && exit 0
     fi
 
@@ -825,6 +828,7 @@ main() {
     # BUG#1 FIX: R4S 在 zram 之后才检查 swap（避免与 zram 冲突）
     configure_swap
     configure_sysctl_r4s
+    configure_conntrack_hashsize
     configure_limits
     configure_fstab
     configure_journald
