@@ -1149,7 +1149,7 @@ EOF
         fi
     fi
 
-    echo -e "  ${CYAN}上次登录记录:${RESET}"
+    echo -e "  ${CYAN}上次登录记录:${NC}"
     last -n 3 2>/dev/null | grep -v "^$" | head -3 | sed "s/^/    /" || true
 }
 

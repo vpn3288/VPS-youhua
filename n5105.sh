@@ -560,18 +560,18 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#6 FIX: optimize_memory_n5105 先运行（决定是否需要 swap），configure_swap 后判断
+    detect_system
+    detect_storage_type
+    check_network
+    preflight_check
+    # BUG#6 FIX: 必须先检测内存profile，才能正确配置zram/swap
+    _detect_n5105_memory_profile
     optimize_memory_n5105
     configure_swap
     # BUG#5: IPv6 黑洞检测
     configure_ipv6_health
     # BUG#7: DNS 锁定防篡改
     configure_dns_lock
-    detect_system
-    detect_storage_type
-    check_network
-    preflight_check
-    _detect_n5105_memory_profile
 
     show_platform_summary
 
