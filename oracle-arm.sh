@@ -511,8 +511,12 @@ uninstall_all() {
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
     echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r confirm
-    [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    read -r -t 30 confirm || { echo "已取消。"; exit 0; }
+    confirm="${confirm,,}"  # Convert to lowercase
+    if [[ -z "$confirm" || "$confirm" != "yes" ]]; then
+        echo "已取消。"
+        exit 0
+    fi
 
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
@@ -646,7 +650,7 @@ main() {
 
     if [[ -t 0 ]]; then
         echo -n "继续执行？(y/n，默认 y): "
-        read -r confirm
+        read -r -t 30 confirm || confirm="y"
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && exit 0
     fi
 
