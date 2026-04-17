@@ -121,12 +121,15 @@ net.core.somaxconn = ${SOMAXCONN}
 net.ipv4.tcp_max_syn_backlog = 1024  # 1C1G 低资源
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_ecn = 1  # BBR需要ECN支持
 net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fastopen = 3  # TFO降低延迟
 # SYN cookies for DDoS protection on proxy servers
 net.ipv4.tcp_syncookies = 1
 
 # ── conntrack（1C1G 极小）─────────────────────────────────────────────────────
-net.netfilter.nf_conntrack_max = ${CT_MAX}
+net.netfilter.nf_conntrack_max = 32768
+net.netfilter.nf_conntrack_buckets = 8192
 net.netfilter.nf_conntrack_tcp_timeout_established = 1200
 
 # ── TCP 缓冲（内存 3%，极小）──────────────────────────────────────────────────
