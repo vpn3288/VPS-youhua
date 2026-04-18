@@ -219,7 +219,7 @@ net.core.rmem_max = ${TCP_BUF_MAX}
 net.core.wmem_max = ${TCP_BUF_MAX}
 net.ipv4.tcp_rmem = 4096 262144 ${TCP_BUF_MAX}
 net.ipv4.tcp_wmem = 4096 262144 ${TCP_BUF_MAX}
-net.ipv4.tcp_mem = 4096 87380 262144
+# tcp_mem auto-tuned by kernel based on total RAM
 
 # ── 本地端口范围 ─────────────────────────────────────────────────────────────
 net.ipv4.ip_local_port_range = 10240 65535

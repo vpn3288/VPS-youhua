@@ -695,7 +695,7 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    did_install=false
+    local did_install=false
     if [[ "$SKIP_SOFTWARE_SCRIPT" != "true" ]]; then
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs

@@ -621,9 +621,11 @@ main() {
     optimize_network_gcp
     configure_cleanup_cron
     configure_logrotate
+    local did_install=false
     # e2-micro 1GB 内存：跳过 unattended-upgrades（后台进程太重）
     # e2-micro 1GB 内存：跳过 fail2ban（Python 占用内存太多）
-    optimize_ssh  # 仅 SSH 硬化，不装 fail2ban
+    optimize_ssh  # SSH 硬化（来自 common-optimize.sh），不装 fail2ban
+    # Proxy-only 平台：Docker/Node.js 由上级平台管理，本脚本只做网络优化
 
     # BUG#46 Fix: install_build_deps 独立于 SKIP_SOFTWARE_SCRIPT
     # INSTALL_DEPS 由用户选择决定（Option 2 = true），与 Docker/NodeJS 分开
