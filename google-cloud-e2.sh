@@ -182,12 +182,12 @@ optimize_memory_gcp() {
     else
         local mem_kb
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-        local zram_size=$((mem_kb / 2))
+        local zram_size=$((mem_kb * 1024 / 2))
         if [[ -f /sys/block/zram0/disksize ]]; then
             echo "${zram_size}" > /sys/block/zram0/disksize 2>/dev/null || true
             mkswap /dev/zram0 >/dev/null 2>&1 || true
             swapon /dev/zram0 -p 32767 2>/dev/null || true
-            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))MB 可用内存"
+            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024 / 1024))MB 可用内存"
         fi
     fi
 
@@ -558,7 +558,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Google Cloud e2-micro 共享 CPU 优化脚本 v${SCRIPT_VERSION} R64${NC}"
+    echo -e "${GREEN}  Google Cloud e2-micro 共享 CPU 优化脚本 v${SCRIPT_VERSION} R65${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${YELLOW}  ⚠️  GCP Always Free 永久免费机型${NC}"
@@ -638,7 +638,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ GCP e2-micro v${SCRIPT_VERSION} R64 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ GCP e2-micro v${SCRIPT_VERSION} R65 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

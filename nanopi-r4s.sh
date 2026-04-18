@@ -229,7 +229,6 @@ optimize_memory_r4s() {
 
     # ── Armbian ramlog：/var/log tmpfs（Armbian 官方推荐，减少 TF 卡写入）─
     if ! mount | grep -q "tmpfs on /var/log"; then
-        mkdir -p /etc/systemd/systemdisable
         if [ ! -d /var/log/journal ]; then mkdir -p /var/log/journal; fi
         systemctl mask rsyslog 2>/dev/null || true
         # 将 /var/log 改为 tmpfs（重启后生效）

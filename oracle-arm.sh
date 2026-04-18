@@ -46,8 +46,8 @@ readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="512M"
 
-# Oracle Cloud TCP 缓冲（动态自适应：内存的 5%，上限 64MB，下限 16MB）
-# AUDIT-10 FIX: 使用纯整数运算代替浮点计算
+# Oracle Cloud TCP 缓冲（内存的 5%，上限 64MB，下限 16MB）
+# 使用纯整数运算代替浮点计算
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*5/100; if(buf>67108864) buf=67108864; if(buf<16777216) buf=16777216; printf "%d", buf}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=131072
