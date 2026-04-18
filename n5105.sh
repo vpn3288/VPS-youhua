@@ -160,6 +160,9 @@ EOF
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
     sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
+    sysctl -w net.ipv4.tcp_keepalive_time=300 2>/dev/null || true
+    sysctl -w net.ipv4.tcp_keepalive_intvl=10 2>/dev/null || true
+    sysctl -w net.ipv4.tcp_keepalive_probes=3 2>/dev/null || true
     log_info "内存优化完成（${PROFILE_DESC}）"
 }
 
