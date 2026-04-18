@@ -482,14 +482,20 @@ install_docker() {
     fi
 
     # Docker 官方安装脚本
-    # H9 FIX: 使用 bash -c 封装，避免 curl|bash 直接 pipe 执行
-    bash -c "$(curl -fsSL https://get.docker.com)" >> "$APT_LOG" 2>&1 || {
+    # H9 FIX: 先下载到临时文件，校验后执行
+    local docker_install_script="/tmp/get-docker.sh"
+    if curl -fsSL https://get.docker.com -o "$docker_install_script" && \
+       chmod +x "$docker_install_script" && \
+       "$docker_install_script" >> "$APT_LOG" 2>&1; then
+        log_info "Docker 安装成功"
+    else
+        rm -f "$docker_install_script"
         log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
             log_error "Docker 安装失败，请查看 $APT_LOG"
             return 1
         }
-    }
+    fi
 
     if ! command -v docker &>/dev/null; then
         log_error "Docker 安装后仍未找到 docker 命令"
