@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPS-youhua 通用函数库 v3.1 R56
+# VPS-youhua 通用函数库 v3.2 R57
 # 所有平台共享的函数和变量（各平台脚本 source 此文件）
 # =============================================================================
 
@@ -26,7 +26,7 @@ log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局常量（可被调用者 override）
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="3.1"
+readonly SCRIPT_VERSION="3.2"
 readonly APT_LOG="/var/log/vps-youhua.log"         # 统一日志路径（所有平台共用）
 readonly LOCK_FILE="/var/lock/vps-youhua.lock"      # 统一锁文件
 
@@ -661,7 +661,7 @@ configure_locale() {
         sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen 2>/dev/null || true
         locale-gen >> "$APT_LOG" 2>&1 || true
     fi
-    update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF_8 2>/dev/null || true
+    update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 2>/dev/null || true
     export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
     log_info "Locale 配置完成"
 }
@@ -991,7 +991,7 @@ write_common_sysctl() {
     # 写入通用 sysctl 配置（使用已确定的 BBR_CC 值）
     cat > "$file" <<EOF
 # =============================================================================
-# VPS-youhua 通用内核加固参数 v3.1 R56
+# VPS-youhua 通用内核加固参数 v3.2 R57
 # 所有平台共享
 # =============================================================================
 
@@ -1255,15 +1255,15 @@ show_platform_summary() {
     echo -e "  ${BLUE}系统:${NC}      ${SYS_OS_ID} ${SYS_OS_VERSION}"
     echo -e "  ${BLUE}架构:${NC}      ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
     echo -e "  ${BLUE}Armbian:${NC}   ${SYS_IS_ARMBIAN}"
-    echo -e "  ${BLUE}Oracle:${NC}    ${SYS_IS_ORACLE_CLOUD}"
+    echo -e "  ${BLUE}Oracle:${NC}   ${SYS_IS_ORACLE_CLOUD}"
     echo -e "  ${BLUE}TF卡:${NC}      ${SYS_IS_TF_CARD}"
     echo ""
     echo "------------------------------------------------------------------------"
     echo -e "  ${BLUE}模式:${NC}      ${SKIP_SOFTWARE_SCRIPT:+纯优化（不安装软件）}${SKIP_SOFTWARE_SCRIPT:-安装 Docker/Node.js}"
 
     if [[ "$SKIP_SOFTWARE_SCRIPT" != "true" ]]; then
-        echo -e "  ${BLUE}Docker:${NC}     ${INSTALL_DOCKER}"
-        echo -e "  ${BLUE}Node.js:${NC}    ${INSTALL_NODEJS}"
+        echo -e "  ${BLUE}Docker:${NC}    ${INSTALL_DOCKER}"
+        echo -e "  ${BLUE}Node.js:${NC}   ${INSTALL_NODEJS}"
     fi
     echo ""
 }

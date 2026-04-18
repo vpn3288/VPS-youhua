@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.2 R64
+# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.3 R65
 # 硬件: Google Cloud e2-micro, 1vCPU(共享) 1GB RAM, 30GB SSD
 # 特点: GCP 共享 CPU 特化优化（burstable CPU + Intel + VPC 网络）
 #       GCP Always Free 机型永久免费（1vCPU 1GB，非 ARM）
@@ -184,7 +184,7 @@ optimize_memory_gcp() {
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
         local zram_size=$((mem_kb / 2))
         if [[ -f /sys/block/zram0/disksize ]]; then
-            echo "${zram_size}K" > /sys/block/zram0/disksize 2>/dev/null || true
+            echo "${zram_size}" > /sys/block/zram0/disksize 2>/dev/null || true
             mkswap /dev/zram0 >/dev/null 2>&1 || true
             swapon /dev/zram0 -p 32767 2>/dev/null || true
             log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))MB 可用内存"

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AIagent 环境优化脚本（统一入口） v3.2
+# AIagent 环境优化脚本（统一入口） v3.3
 # 支持平台: NanoPi R4S, NanoPC T6, Oracle ARM, N5105, 通用 x86 VPS
 # =============================================================================
 
 set -euo pipefail
 IFS=$'\n\t'
 
-readonly VERSION="3.2"
+readonly VERSION="3.3"
 readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ declare -A EXPECTED_SHA256=(
     ["generic-x86"]="4381868c945d48a9b6ac9d43bdb33a9e34e1d65373bfb3c7012351fb23c0a58b"
     ["generic-1c1g"]="688167a0defa2e06923da00648a306721b7f80dfd23b6d4c2cb3558007df3898"
     ["google-cloud-e2"]="81469db7d63732fd753c6ed64efd27c519fedf9b3cc418b8a90a66ec454fa383"
-    ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
+    ["verify-v3.3"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -109,15 +109,16 @@ log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
 
 run_verify_status() {
     echo -e "${BOLD}正在下载并运行环境健康检查...${NC}"
-    local verify_url="${RAW_BASE}/verify-v3.1.sh"
+    local verify_url="${RAW_BASE}/verify-v3.3.sh"
     local verify_file="/tmp/vps-youhua-verify-$(date +%s).sh"
 
     if ! curl -fsSL "$verify_url" -o "$verify_file"; then
-        log_error "无法下载 verify-v3.1.sh，请检查网络连接"
+        log_error "无法下载 verify-v3.3.sh，请检查网络连接"
         return 1
     fi
 
-    bash "$verify_file"; local rv=$?
+    bash "$verify_file"
+    local rv=$?
 
     # 清理临时文件
     rm -f "$verify_file"
@@ -230,11 +231,11 @@ detect_platform() {
     fi
 
     local arch
-    arch=$(uname -m)
+    arch="$(uname -m)"
     local cpu_model
-    cpu_model=$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^ //' 2>/dev/null || echo "")
+    cpu_model="$(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | sed 's/^ //' 2>/dev/null || echo "")"
     local model
-    model=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\0' | xargs 2>/dev/null || echo "")
+    model="$(cat /proc/device-tree/model 2>/dev/null | tr -d '\0' | xargs 2>/dev/null || echo "")"
 
     if [[ "$arch" == "armv7l" ]] || [[ "$arch" == "armv6l" ]]; then
         log_error "不支持 32位 ARM (${arch})，请使用 ARM64 设备"
@@ -270,8 +271,8 @@ detect_platform() {
         x86_64)
             # ── Google Cloud 检测（优先于内存路由）─────────────────────────────
             local gcp_meta
-            gcp_meta=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
-                "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null || echo "")
+            gcp_meta="$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
+                "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null || echo "")"
             if echo "$gcp_meta" | grep -q "e2-micro\|e2-small\|e2-medium\|f1-micro\|g1-small"; then
                 log_info "Google Cloud 检测通过（${gcp_meta}），使用 GCP e2 优化"
                 echo "google-cloud-e2"
@@ -299,8 +300,8 @@ detect_platform() {
 check_network() {
     log_step "检测网络连通性..."
 
-    if ! host -W 3 cloudflare.com >/dev/null 2>&1 && \
-       ! getent hosts github.com >/dev/null 2>&1; then
+    if ! host -W 3 "cloudflare.com" >/dev/null 2>&1 && \
+       ! getent hosts "github.com" >/dev/null 2>&1; then
         log_error "DNS 解析失败，请检查 /etc/resolv.conf 和 nameserver 配置"
         exit 1
     fi
@@ -1024,7 +1025,7 @@ fi
     if [[ "${MODE}" == "status" ]]; then
         log_info "运行状态验证..."
         local verify_script
-        verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.1.sh"
+        verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.3.sh"
         if [[ -f "$verify_script" ]]; then
             bash "$verify_script"; local ret=$?; exit $ret
         else
@@ -1137,7 +1138,7 @@ fi
         echo "========================================================================"
         echo ""
         echo -e "  ${CYAN}重启前可运行验证脚本检查优化效果:${NC}"
-        echo -e "  ${GREEN}curl -fsSL ${RAW_BASE}/verify-v3.1.sh -o /tmp/verify-v3.1.sh && bash /tmp/verify-v3.1.sh${NC}"
+        echo -e "  ${GREEN}curl -fsSL ${RAW_BASE}/verify-v3.3.sh -o /tmp/verify-v3.3.sh && bash /tmp/verify-v3.3.sh${NC}"
         echo ""
         
         # 非交互模式跳过重启询问

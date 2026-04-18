@@ -19,7 +19,7 @@
 : "${TERM:=xterm}"
 set -euo pipefail
 # =============================================================================
-# 通用 1核 1G VPS 极简优化安装脚本 v3.2 R64
+# 通用 1核 1G VPS 极简优化安装脚本 v3.3 R65
 # 硬件: 任意 1核 1GB x86_64 VPS（最低配套餐）
 # 特点: 极简资源占用优化（适用于 1GB 及以下超小内存 VPS）
 #       去除所有重资源功能（fail2ban / unattended-upgrades / zram 替代 swap）
@@ -129,7 +129,8 @@ net.ipv4.tcp_syncookies = 1
 
 # ── conntrack（1C1G 极小）─────────────────────────────────────────────────────
 net.netfilter.nf_conntrack_max = 32768
-net.netfilter.nf_conntrack_buckets = 8192
+# AUDIT-FIX: nf_conntrack_buckets 是只读参数，不能通过 sysctl 设置
+# hashsize 将由 configure_conntrack_hashsize_1c1g() 通过 /sys/module 设置
 net.netfilter.nf_conntrack_tcp_timeout_established = 1200
 
 # ── TCP 缓冲（内存 3%，极小）──────────────────────────────────────────────────
@@ -177,6 +178,31 @@ configure_zram_1c1g() {
         mkswap /dev/zram0 >/dev/null 2>&1 || true
         swapon /dev/zram0 -p 32767 2>/dev/null || true
         log_info "zram 开启，约 +$((zram_size_bytes / 1024 / 1024))MB 等效内存（lz4 压缩）"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# conntrack hashsize 配置（generic-1c1g 专用）
+# AUDIT-FIX: nf_conntrack_buckets 是只读参数，不能通过 sysctl 设置
+# ─────────────────────────────────────────────────────────────────────────────
+configure_conntrack_hashsize() {
+    log_step "配置 nf_conntrack_hashsize（1C1G）..."
+
+    modprobe nf_conntrack 2>/dev/null || true
+
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+    local ct_max="${CT_MAX:-16384}"
+    if [[ -f "$hashsize_file" ]]; then
+        echo "${ct_max}" > "$hashsize_file" 2>/dev/null || {
+            log_warn "nf_conntrack_hashsize 设置失败，尝试 modprobe 配置"
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=${ct_max}" > /etc/modprobe.d/nf_conntrack.conf
+        }
+        local current_hashsize
+        current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
+        log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
+    else
+        log_warn "nf_conntrack 模块未加载或不支持，跳过 hashsize 配置"
     fi
 }
 

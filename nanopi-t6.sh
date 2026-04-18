@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.2 R64
+# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.3 R65
 # 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
 # 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
 # =============================================================================
@@ -553,7 +553,7 @@ uninstall_all() {
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
     echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r confirm
+    read -r -t 30 confirm || confirm=""
     [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
 
     echo ""
@@ -633,7 +633,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION} R61${NC}"
+    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION} R65${NC}"
     echo "========================================================================"
     echo ""
 
@@ -681,7 +681,6 @@ main() {
     optimize_io_scheduler
     optimize_arm
     optimize_network_t6
-    configure_conntrack_hashsize_t6
     optimize_oom
     configure_unattended_upgrades
     configure_fail2ban
@@ -712,7 +711,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} R61 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} R65 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

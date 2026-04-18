@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.2 R64
+# NanoPi R4S 专用优化安装脚本 v3.3 R65
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -765,7 +765,7 @@ for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
     [ -f "$cpu" ] && echo "schedutil" > "$cpu" 2>/dev/null || true
 done
 # 优化网络参数
-sysctl -p /etc/sysctl.d/99-vps-youhua.conf >/dev/null 2>&1 || true
+sysctl -p /etc/sysctl.d/99-vps-youhua-r4s.conf >/dev/null 2>&1 || true
 exit 0
 EOF
     chmod +x /etc/rc.local
@@ -793,7 +793,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R61${NC}"
+    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R65${NC}"
     echo "========================================================================"
     echo ""
 
@@ -828,7 +828,7 @@ main() {
     # BUG#1 FIX: R4S 在 zram 之后才检查 swap（避免与 zram 冲突）
     configure_swap
     configure_sysctl_r4s
-    configure_conntrack_hashsize
+    configure_conntrack_hashsize_r4s
     configure_limits
     configure_fstab
     configure_journald
@@ -841,7 +841,6 @@ main() {
     optimize_io_scheduler
     optimize_arm
     optimize_network_r4s
-    configure_conntrack_hashsize_r4s
     optimize_oom
     configure_unattended_upgrades
     configure_fail2ban
@@ -873,7 +872,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R61 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R65 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

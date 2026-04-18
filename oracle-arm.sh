@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.2 R64
+# Oracle Cloud ARM 专用优化安装脚本 v3.3 R65
 # 硬件: Ampere Altra, 2核16GB, 100GB 云盘
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
@@ -626,7 +626,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R61${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R65${NC}"
     echo "========================================================================"
     echo ""
 
@@ -692,7 +692,6 @@ main() {
         install_build_deps
     fi
     
-    local did_install=false
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
     else
@@ -710,7 +709,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R61 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R65 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

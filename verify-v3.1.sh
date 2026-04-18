@@ -5,9 +5,9 @@
 # 支持：nanopi-r4s / nanopi-t6 / oracle-arm / n5105 / generic-x86
 # 输出：所有优化参数的当前值 + 与目标值对比
 #===============================================================================
-set -uo pipefail
+set -euo pipefail
 
-readonly VERSION="3.1"
+ readonly VERSION="3.2"
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
