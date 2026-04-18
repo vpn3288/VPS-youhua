@@ -453,12 +453,27 @@ uninstall_all() {
 
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
-    echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r -t 30 confirm || confirm=""
-    confirm="${confirm,,}"
-    if [[ -z "$confirm" || "$confirm" != "yes" ]]; then
-        echo "已取消卸载。"
-        exit 0
+    # M6 FIX: 非交互卸载confirm兜底（SSH远程/cron场景）
+    if [[ -t 0 ]]; then
+        echo -n "确认卸载？(输入 'yes' 继续): "
+        read -r -t 30 confirm || confirm=""
+        confirm="${confirm,,}"
+        if [[ -z "$confirm" ]]; then
+            if [[ "${FORCE_UNINSTALL:-false}" == "true" ]]; then
+                confirm="yes"
+            else
+                echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+                exit 0
+            fi
+        fi
+        [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    else
+        # 非交互环境（SSH远程执行/cron）：检查 FORCE_UNINSTALL 变量
+        if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
+            echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+            exit 0
+        fi
+        log_info "非交互模式 + FORCE_UNINSTALL=true，自动确认卸载"
     fi
 
     echo ""
@@ -471,7 +486,6 @@ uninstall_all() {
     rm -f /etc/systemd/system.conf.d/99-memory-accounting.conf
     rm -f /etc/systemd/system.conf.d/99-resource-limits.conf
     rm -f /etc/systemd/system.conf.d/99-oom-policy.conf
-    rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
     rm -f /etc/cron.daily/vps-youhua-clean
     rm -f /etc/logrotate.d/vps-youhua
     rm -f /etc/apt/apt.conf.d/99-noninteractive
@@ -482,6 +496,13 @@ uninstall_all() {
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
     rm -f /etc/default/zramswap 2>/dev/null || true
     rm -f /etc/modprobe.d/nf_conntrack.conf
+
+    # 停止并卸载 Docker（如果安装了的话）
+    if command -v docker &>/dev/null; then
+        systemctl stop docker 2>/dev/null || true
+        systemctl disable docker 2>/dev/null || true
+        log_info "Docker 服务已停止并禁用"
+    fi
 
     # 停止并卸载 unattended-upgrades
     if command -v unattended-upgrades &>/dev/null; then
@@ -602,7 +623,23 @@ main() {
     # BUG#1+22 FIX: Oracle 1C4G 在 zram 就位后才判断 swap（避免浪费磁盘 swap）
     configure_swap
     configure_sysctl_oracle
+    # AUDIT-2 FIX: configure_conntrack_hashsize 函数
     configure_conntrack_hashsize
+
+configure_conntrack_hashsize() {
+    log_step "配置 nf_conntrack_hashsize..."
+    modprobe nf_conntrack 2>/dev/null || true
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+    if [[ -f "$hashsize_file" ]]; then
+        echo "${CT_MAX}" > "$hashsize_file" 2>/dev/null || {
+            log_warn "hashsize 写入失败，尝试写入 modprobe 配置"
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=${CT_MAX}" > /etc/modprobe.d/nf_conntrack.conf
+        }
+    else
+        log_warn "nf_conntrack 模块未加载，跳过 hashsize 配置"
+    fi
+}
     configure_limits
 
     # BUG#8: 低内存极限清理
