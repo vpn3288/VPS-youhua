@@ -634,7 +634,9 @@ main() {
         install_build_deps
     fi
     # Proxy-only 平台不安装 Docker / Node.js
-    log_info "代理节点专用模式，跳过 Docker / Node.js 安装"
+    if [[ "${SKIP_SOFTWARE_SCRIPT}" == "true" ]]; then
+        log_info "纯优化模式，跳过 Docker / Node.js 安装"
+    fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 

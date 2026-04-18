@@ -220,10 +220,10 @@ optimize_memory_r4s() {
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
         local zram_size=$((mem_kb * 50 / 100))
         if [[ -f /sys/block/zram0/disksize ]]; then
-            echo "${zram_size}K" > /sys/block/zram0/disksize 2>/dev/null || true
+            echo "$((zram_size * 1024))" > /sys/block/zram0/disksize 2>/dev/null || true
             mkswap /dev/zram0 >/dev/null 2>&1 || true
             swapon /dev/zram0 -p 32767 2>/dev/null || true
-            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))MB（Armbian 24.04 推荐）"
+            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))GB（Armbian 24.04 推荐）"
         fi
     fi
 

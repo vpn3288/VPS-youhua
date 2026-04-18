@@ -560,6 +560,7 @@ uninstall_all() {
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
     systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
+    systemctl disable vps-youhua-cleanup.timer 2>/dev/null || true
     # 清理所有配置文件
     rm -f /etc/sysctl.d/99-vps-youhua-t6.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf

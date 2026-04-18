@@ -487,6 +487,7 @@ uninstall_all() {
 
     systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
     systemctl disable vps-youhua-cleanup.timer 2>/dev/null || true
+    rm -f /etc/cron.d/vps-youhua-cleanup
     # 清理所有配置文件
     rm -f /etc/sysctl.d/99-vps-youhua-n5105.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
