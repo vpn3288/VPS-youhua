@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.3 R65
+# NanoPi R4S 专用优化安装脚本 v3.3 R71
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -90,18 +90,11 @@ load_common_optimize
 
 # HIGH FIX: 在 configure_tmp_tmpfs 之前强制清理遗留的 tmpfs /tmp 挂载
 # 确保后续 configure_tmp_tmpfs 能正确执行（remount 不会因已有挂载而失败或丢失数据）
+# 合并两种清理场景：残留挂载 + PID文件标记
 if mount | grep -q "tmpfs on /tmp"; then
     log_warn "检测到残留 tmpfs /tmp 挂载，强制卸载..."
     umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
         log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
-    }
-fi
-
-# FIX: 脚本开头检查并清理上次遗留的 tmpfs /tmp 挂载
-if [[ -f /var/run/vps-youhua-tmpfs-mount ]] && mount | grep -q "tmpfs on /tmp"; then
-    log_warn "检测到上次遗留的 tmpfs /tmp 挂载，尝试卸载..."
-    umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
-        log_error "清理遗留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
     }
 fi
 
@@ -859,12 +852,13 @@ main() {
     # 环境变量默认值
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
+    FORCE_UNINSTALL="${FORCE_UNINSTALL:-false}"
 
     uninstall_all "$@" || exit 1
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R65${NC}"
+    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R71${NC}"
     echo "========================================================================"
     echo ""
 
@@ -943,7 +937,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R65 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R71 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

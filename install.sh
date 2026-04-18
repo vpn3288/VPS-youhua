@@ -17,6 +17,7 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
+    ["common"]="239c7fd2cc718c46b280501eb759154326e10b3ec59bb6efd9bd29397cd4b762"
     ["nanopi-r4s"]="ef271da01e9cb9e82ce44e74ccb327d4e9c6600342b1a2e40cd429b6b1ff1384"
     ["nanopi-t6"]="143d551f92c78ac85eb91eee9e310288ff187b96294250af51789ccfb54a5078"
     ["oracle-arm"]="cc2817bd50bac11b70b469310934e701e54a8605a3c3eed9762f79acfc7d4a26"
@@ -969,7 +970,7 @@ uninstall_all() {
         echo -e "${RED}警告：此操作将清理本脚本安装的所有环境优化配置！${NC}"
         echo ""
         echo -n "确认卸载？(输入 'yes' 继续): "
-        read -r confirm
+        read -r -t 30 confirm
         [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
     fi
 

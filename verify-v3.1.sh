@@ -922,7 +922,7 @@ export VERSION=$(cat /proc/cpuinfo 2>/dev/null | grep -m1 "model name" | cut -d:
 
         echo ''
         echo '=== journald ==='
-        grep -v '^#' /etc/systemd/journald.conf 2>/dev/null | grep -v '^$' | grep -v '^\['
+        grep -v '^#' /etc/systemd/journald.conf 2>/dev/null | grep -v '^$' | grep -vE "^\\["
 
         echo ''
         echo '=== SSH ==='
