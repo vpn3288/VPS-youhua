@@ -673,8 +673,9 @@ check_vs_targets() {
     echo -e "  ${DIM}检测平台: ${platform}${RESET}"
     echo ""
 
-    local passed=0
-    local failed=0
+    # 跨函数追踪（由 check_vs_targets 更新）
+    passed=0
+    failed=0
 
     check_ok() {
         local p="$1"; local v="$2"; local d="$3"
@@ -847,8 +848,7 @@ main() {
     echo -e "${SEP}"
     echo -e "${BOLD}  🎯 环境就绪状态${RESET}"
     echo -e "${SEP}"
-    failed=0
-    if [[ $failed -eq 0 ]]; then
+    if [[ $failed -eq 0 ]] && [[ $passed -gt 0 ]]; then
         echo -e "  ${GREEN}✓ 底层环境优化完成，系统处于最佳状态${RESET}"
         echo -e "  ${GREEN}✓ 可以安全安装任意官方 agent 脚本（参考对应项目文档）${RESET}"
         echo ""
