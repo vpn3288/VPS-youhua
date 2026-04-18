@@ -119,9 +119,6 @@ vm.dirty_expire_centisecs = 30000
 net.core.netdev_max_backlog = ${NETDEV_BACKLOG}
 net.core.somaxconn = ${SOMAXCONN}
 net.ipv4.tcp_max_syn_backlog = 1024  # 1C1G 低资源
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-net.ipv4.tcp_ecn = 1  # BBR需要ECN支持
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fastopen = 3  # TFO降低延迟
 net.ipv4.tcp_keepalive_time = 300
@@ -178,6 +175,13 @@ configure_zram_1c1g() {
 
     local zram_dev="/dev/zram0"
     if [[ -f /sys/block/zram0/disksize ]]; then
+        # 幂等性检查：如果 zram0 已激活且 disksize 匹配则跳过
+        local current_disksize
+        current_disksize=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
+        if [[ "$current_disksize" == "$zram_size_bytes" ]] && swapon --show 2>/dev/null | grep -q "^/dev/zram0"; then
+            log_info "zram0 已配置且 disksize 匹配，跳过（幂等性）"
+            return 0
+        fi
         # 重置 zram（如果已配置则先清理）
         if swapon --show 2>/dev/null | grep -q "^/dev/zram0"; then
             swapoff "${zram_dev}" 2>/dev/null || true

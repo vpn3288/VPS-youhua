@@ -322,7 +322,7 @@ optimize_oom() {
     cat > /etc/systemd/system.conf.d/99-oom-policy.conf <<'EOF'
 [Manager]
 OOMPolicy=continue
-OOMScoreAdjust=-900
+OOMScoreAdjust=-300
 EOF
     systemctl daemon-reload 2>/dev/null || true
     log_info "OOM Killer 配置完成"

@@ -88,6 +88,15 @@ load_common_optimize() {
 
 load_common_optimize
 
+# HIGH FIX: 在 configure_tmp_tmpfs 之前强制清理遗留的 tmpfs /tmp 挂载
+# 确保后续 configure_tmp_tmpfs 能正确执行（remount 不会因已有挂载而失败或丢失数据）
+if mount | grep -q "tmpfs on /tmp"; then
+    log_warn "检测到残留 tmpfs /tmp 挂载，强制卸载..."
+    umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
+        log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
+    }
+fi
+
 # FIX: 脚本开头检查并清理上次遗留的 tmpfs /tmp 挂载
 if [[ -f /var/run/vps-youhua-tmpfs-mount ]] && mount | grep -q "tmpfs on /tmp"; then
     log_warn "检测到上次遗留的 tmpfs /tmp 挂载，尝试卸载..."
@@ -374,6 +383,8 @@ optimize_network_r4s() {
 # AUDIT-15 FIX: 添加缺失的 conntrack hashsize 配置函数
 # ─────────────────────────────────────────────────────────────────────────────
 configure_conntrack_hashsize_r4s() {
+    # HIGH FIX: 参数语义澄清 — 传入的是 nf_conntrack_max，函数内计算 hashsize = conntrack_max/4
+    # 注意：nf_conntrack_max 是 conntrack 表最大条目数，hashsize 是内核内部哈希表桶数（通常为 1/4）
     local conntrack_max=$1
     log_step "配置 conntrack hashsize（R4S）..."
 
@@ -699,23 +710,21 @@ uninstall_all() {
         return 0
     fi
 
-    echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
-    echo ""
-    echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r -t 30 confirm || confirm=""
-    confirm="${confirm,,}"
-    # M6 FIX: 非交互模式下 confirm 为空时检查 FORCE_UNINSTALL 变量
-    if [[ -z "$confirm" ]]; then
-        if [[ "${FORCE_UNINSTALL:-false}" == "true" ]]; then
-            confirm="yes"
-        else
+    # HIGH FIX: 非交互卸载时跳过确认提示（FORCE_UNINSTALL 提前检查）
+    if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
+        echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
+        echo ""
+        echo -n "确认卸载？(输入 'yes' 继续): "
+        read -r -t 30 confirm || confirm=""
+        confirm="${confirm,,}"
+        if [[ -z "$confirm" ]]; then
             echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
             exit 0
         fi
-    fi
-    if [[ "$confirm" != "yes" ]]; then
-        echo "已取消卸载。"
-        exit 0
+        if [[ "$confirm" != "yes" ]]; then
+            echo "已取消卸载。"
+            exit 0
+        fi
     fi
 
     echo ""

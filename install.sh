@@ -872,7 +872,7 @@ download_and_run() {
         exit 1
     fi
 
-    # SHA256 校验（仅平台脚本）
+    # SHA256 校验（平台脚本 + common-optimize.sh）
     local expected="${EXPECTED_SHA256[$platform]:-}"
     if [[ -n "$expected" ]]; then
         local actual; actual=$(sha256sum "$platform_file" | awk '{print $1}')
@@ -886,6 +886,24 @@ download_and_run() {
         log_info "SHA256 校验通过"
     else
         log_error "平台 ${platform} 缺少 SHA256 校验值，请检查配置"
+        rm -rf "$tmpdir"
+        exit 1
+    fi
+
+    # [C5] FIX: 校验 common-optimize.sh，防止供应链污染
+    local common_expected="${EXPECTED_SHA256[common]:-}"
+    if [[ -n "$common_expected" ]]; then
+        local common_actual; common_actual=$(sha256sum "$common_file" | awk '{print $1}')
+        if [[ "$common_actual" != "$common_expected" ]]; then
+            log_error "common-optimize.sh SHA256 校验失败！疑似供应链污染。"
+            log_error "期望: $common_expected"
+            log_error "实际: $common_actual"
+            rm -rf "$tmpdir"
+            exit 1
+        fi
+        log_info "common-optimize.sh SHA256 校验通过"
+    else
+        log_error "common-optimize.sh 缺少 SHA256 校验值，请检查配置"
         rm -rf "$tmpdir"
         exit 1
     fi

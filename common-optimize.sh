@@ -308,6 +308,9 @@ EOF
 
     if [[ "$mirror_mode" == "preserve" ]]; then
         log_info "保留原始 sources.list，不做任何更改"
+        if ! apt-get update -qq >> "$APT_LOG" 2>&1; then
+            log_warn "APT 更新失败"
+        fi
         return 0
     fi
 
@@ -850,13 +853,13 @@ configure_dns_lock() {
         return 0
     fi
 
-    # 检查 systemd-resolved（不能对由systemd管理的文件加immutable）
+    # 检查 systemd-resolved（不能对由systemd管理的文件加immutable，也不能覆盖其管理的resolv.conf）
     local resolved_active=false
     if systemctl is-active systemd-resolved > /dev/null 2>&1; then
         resolved_active=true
     fi
     if [[ "$resolved_active" == "true" ]]; then
-        log_info "DNS 由 systemd-resolved 管理，跳过 chattr +i"
+        log_info "DNS 由 systemd-resolved 管理，跳过 chattr +i 和 resolv.conf 覆盖"
         return 0
     fi
 
@@ -1112,7 +1115,7 @@ EOF
 configure_logrotate() {
     log_step "配置 logrotate..."
     cat > /etc/logrotate.d/vps-youhua <<'EOF'
-/var/log/vps-youhua-install.log {
+/var/log/vps-youhua.log {
     daily
     rotate 7
     compress

@@ -231,8 +231,6 @@ vm.dirty_expire_centisecs = 30000
 # ── 网络（GCP VPC 优化，比普通 VPS 更高吞吐）─────────────────────────────────
 net.core.netdev_max_backlog = ${NETDEV_BACKLOG}
 net.core.somaxconn = ${SOMAXCONN}
-net.core.default_qdisc = fq_codel  # GCP 共享 CPU 队列优化
-net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15  # GCP 共享 CPU 快速回收
 net.ipv4.tcp_keepalive_time = 300

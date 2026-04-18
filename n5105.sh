@@ -497,19 +497,27 @@ uninstall_all() {
 
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
-    if [[ ! -t 0 ]]; then
-        # 非交互环境：检查 FORCE_UNINSTALL 标志
-        if [[ "$FORCE_UNINSTALL" != "true" ]]; then
-            echo "错误：非交互环境需设置 FORCE_UNINSTALL=true" >&2
-            echo "示例: FORCE_UNINSTALL=true $0 --uninstall" >&2
-            exit 1
-        fi
-        confirm="yes"
-    else
+    # M6 FIX: 非交互卸载confirm兜底（SSH远程/cron场景）
+    if [[ -t 0 ]]; then
         echo -n "确认卸载？(输入 'yes' 继续): "
         read -r -t 30 confirm || confirm=""
         confirm="${confirm,,}"
-        [[ -z "$confirm" || "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+        if [[ -z "$confirm" ]]; then
+            if [[ "${FORCE_UNINSTALL:-false}" == "true" ]]; then
+                confirm="yes"
+            else
+                echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+                exit 0
+            fi
+        fi
+        [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    else
+        # 非交互环境（SSH远程执行/cron）：检查 FORCE_UNINSTALL 变量
+        if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
+            echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+            exit 0
+        fi
+        log_info "非交互模式 + FORCE_UNINSTALL=true，自动确认卸载"
     fi
 
     echo ""

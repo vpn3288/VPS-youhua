@@ -540,7 +540,7 @@ check_swap() {
 
     log_pair "SWAP 总计" "$(free -h 2>/dev/null | grep Swap | awk '{print $2}' || echo N/A)"
 
-    if swapon --show 2>/dev/null | grep -q "/"; then
+    if swapon --show 2>/dev/null | grep -vE "^/dev/(zram|ram)" | grep -q "^/dev/"; then
         echo -e "  ${RED}⚠ SWAP 已启用 (R4S TF卡模式应禁用!)${RESET}"
         swapon --show 2>/dev/null | tail -n +2 | while read -r line; do
             echo -e "    $line"
@@ -885,11 +885,12 @@ remote_check() {
     local user="${2:-root}"
     echo -e "${BOLD}${CYAN}▶ 远程验证: ${user}@${host}${RESET}"
 
-    ssh -o StrictHostKeyChecking=no        -o ConnectTimeout=5        -o BatchMode=yes        "${user}@${host}"         "export VERSION=\$(cat /proc/cpuinfo 2>/dev/null | grep -m1 'model name' | cut -d: -f2 | xargs)
+    ssh -o StrictHostKeyChecking=no        -o ConnectTimeout=5        -o BatchMode=yes        "${user}@${host}" << 'REMOTE'
+export VERSION=$(cat /proc/cpuinfo 2>/dev/null | grep -m1 "model name" | cut -d: -f2 | xargs)
         echo '=== 基础信息 ==='
-        echo CPU: \$VERSION
-        echo 内核: \$(uname -r)
-        echo 主机名: \$(hostname)
+        echo CPU: $VERSION
+        echo 内核: $(uname -r)
+        echo 主机名: $(hostname)
 
         echo ''
         echo '=== TCP 参数 ==='
@@ -934,7 +935,7 @@ remote_check() {
         echo ''
         echo '=== CPU Governor ==='
         cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo N/A
-        " 2>&1
+REMOTE
 
     echo -e "${GREEN}远程验证完成: ${host}${RESET}"
 }
@@ -960,7 +961,14 @@ usage() {
 # 入口
 #------------------------------------------------# -------------------------------
 if [[ "${1:-}" == "--remote" ]]; then
-    remote_check "${2:-}" "${3:-}"
+    # 解析 USER@HOST 格式
+    remote_target="${2:-}"
+    remote_user="root"
+    if [[ "$remote_target" == *"@"* ]]; then
+        remote_user="${remote_target%%@*}"
+        remote_target="${remote_target#*@}"
+    fi
+    remote_check "$remote_target" "$remote_user"
 elif [[ "${1:-}" =~ ^(-h|--help)$ ]]; then
     usage
 else

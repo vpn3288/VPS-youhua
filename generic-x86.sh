@@ -361,10 +361,29 @@ install_docker() {
 
     log_info "添加 Docker GPG 密钥..."
     mkdir -p /etc/apt/keyrings
-    if ! curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>> "$APT_LOG"; then
+    local gpg_output; gpg_output=$(mktemp)
+    if ! curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>"$gpg_output"; then
         log_error "Docker GPG 密钥获取失败"
+        cat "$gpg_output" >> "$APT_LOG" 2>/dev/null
+        rm -f "$gpg_output"
         return 1
     fi
+    rm -f "$gpg_output"
+
+    # [H12] FIX: 验证 GPG 密钥指纹，防止供应链污染
+    local key_fingerprint; key_fingerprint=$(gpg --show-keys --with-colons /etc/apt/keyrings/docker.gpg 2>/dev/null | awk -F: '/^fpr:/ {print $10; exit}')
+    local expected_fingerprint="0EBFCD88"
+    if [[ -z "$key_fingerprint" ]]; then
+        log_error "无法读取 GPG 密钥指纹"
+        return 1
+    fi
+    if [[ "$key_fingerprint" != "$expected_fingerprint" ]]; then
+        log_error "GPG 密钥指纹校验失败！疑似供应链污染。"
+        log_error "预期: $expected_fingerprint"
+        log_error "实际: $key_fingerprint"
+        return 1
+    fi
+    log_info "Docker GPG 密钥指纹校验通过 ($key_fingerprint)"
 
     log_info "添加 Docker APT 仓库..."
     local codename; codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
@@ -633,7 +652,7 @@ main() {
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
-    uninstall_all "$@" || exit 1
+    uninstall_all "$@"
 
     clear
     echo "========================================================================"
