@@ -25,7 +25,7 @@ declare -A EXPECTED_SHA256=(
     ["generic-x86"]="4381868c945d48a9b6ac9d43bdb33a9e34e1d65373bfb3c7012351fb23c0a58b"
     ["generic-1c1g"]="688167a0defa2e06923da00648a306721b7f80dfd23b6d4c2cb3558007df3898"
     ["google-cloud-e2"]="81469db7d63732fd753c6ed64efd27c519fedf9b3cc418b8a90a66ec454fa383"
-    ["verify-v3.3"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
+    ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -109,11 +109,24 @@ log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
 
 run_verify_status() {
     echo -e "${BOLD}正在下载并运行环境健康检查...${NC}"
-    local verify_url="${RAW_BASE}/verify-v3.3.sh"
-    local verify_file="/tmp/vps-youhua-verify-$(date +%s).sh"
+    local verify_url="${RAW_BASE}/verify-v3.1.sh"
+    local verify_file
+    verify_file=$(mktemp /tmp/vps-youhua-verify-XXXXXX.sh)
 
     if ! curl -fsSL "$verify_url" -o "$verify_file"; then
-        log_error "无法下载 verify-v3.3.sh，请检查网络连接"
+        log_error "无法下载 verify-v3.1.sh，请检查网络连接"
+        rm -f "$verify_file"
+        return 1
+    fi
+
+    # [C5] SHA256 校验
+    local actual_sha256
+    actual_sha256=$(sha256sum "$verify_file" | awk '{print $1}')
+    if [[ "$actual_sha256" != "${EXPECTED_SHA256[verify-v3.1]}" ]]; then
+        log_error "verify-v3.1.sh SHA256 校验失败！疑似供应链污染。"
+        log_error "预期: ${EXPECTED_SHA256[verify-v3.1]}"
+        log_error "实际: $actual_sha256"
+        rm -f "$verify_file"
         return 1
     fi
 
@@ -976,7 +989,8 @@ uninstall_all() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 main() {
-    local APT_LOG="/tmp/vps-youhua-apt-$(date +%s).log"
+    local APT_LOG
+    APT_LOG=$(mktemp /tmp/vps-youhua-apt-XXXXXX.log)
     
     if [[ "${MODE:-}" == "uninstall" ]]; then
         uninstall_all
@@ -1025,7 +1039,7 @@ fi
     if [[ "${MODE}" == "status" ]]; then
         log_info "运行状态验证..."
         local verify_script
-        verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.3.sh"
+        verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.1.sh"
         if [[ -f "$verify_script" ]]; then
             bash "$verify_script"; local ret=$?; exit $ret
         else
@@ -1138,7 +1152,7 @@ fi
         echo "========================================================================"
         echo ""
         echo -e "  ${CYAN}重启前可运行验证脚本检查优化效果:${NC}"
-        echo -e "  ${GREEN}curl -fsSL ${RAW_BASE}/verify-v3.3.sh -o /tmp/verify-v3.3.sh && bash /tmp/verify-v3.3.sh${NC}"
+        echo -e "  ${GREEN}curl -fsSL ${RAW_BASE}/verify-v3.1.sh -o /tmp/verify-v3.1.sh && bash /tmp/verify-v3.1.sh${NC}"
         echo ""
         
         # 非交互模式跳过重启询问

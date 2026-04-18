@@ -176,10 +176,11 @@ configure_zram_1c1g() {
     mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
     local zram_size_bytes=$((mem_kb * 1024 / 2))
 
+    local zram_dev="/dev/zram0"
     if [[ -f /sys/block/zram0/disksize ]]; then
         echo "${zram_size_bytes}" > /sys/block/zram0/disksize 2>/dev/null || true
-        mkswap /dev/zram0 >/dev/null 2>&1 || true
-        swapon /dev/zram0 -p 32767 2>/dev/null || true
+        mkswap "${zram_dev}" >/dev/null 2>&1 || true
+        swapon "${zram_dev}" -p 32767 2>/dev/null || true
         log_info "zram 开启，约 +$((zram_size_bytes / 1024 / 1024))MB 等效内存（lz4 压缩）"
     fi
 }
@@ -257,7 +258,7 @@ journalctl --vacuum-time=2d 2>/dev/null || true
 apt-get clean 2>/dev/null || true
 rm -rf /tmp/pear 2>/dev/null || true
 rm -rf /var/cache/apt/archives/*.deb 2>/dev/null || true
-rm -rf /var/tmp 2>/dev/null || true
+rm -rf /var/tmp/* 2>/dev/null || true
 EOF
     chmod +x /etc/cron.daily/vps-youhua-clean
     log_info "每日清理任务已配置"
@@ -371,11 +372,11 @@ uninstall_all() {
     fi
 
     # 清理 fstab tmpfs 条目
-    sed -i '/tmpfs.*\\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
+    sed -i '/tmpfs.*\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
     log_info "fstab tmpfs 条目已清理"
 
     # BUG#FIX: 清理 zram swap（generic-1c1g 开启了 zram）
-    if swapon --show 2>/dev/null | grep -q "/dev/zram0"; then
+    if [[ -b /dev/zram0 ]] && swapon --show 2>/dev/null | grep -q "/dev/zram0"; then
         swapoff /dev/zram0 2>/dev/null || true
         log_info "zram0 swapoff 完成"
     fi

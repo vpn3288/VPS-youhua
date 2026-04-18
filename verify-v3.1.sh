@@ -40,7 +40,7 @@ detect_platform() {
         echo "nanopi-t6"
     elif [[ "$cpu_info" == *"Ampere"* ]]; then
         # Oracle Cloud 检测（通过元数据端点）
-        if curl -s --connect-timeout 3 -o /dev/null http://169.254.0.23/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+        if curl -s --connect-timeout 3 -o /dev/null http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
             # Oracle 1C4G vs 2C16G：通过内存判断
             local mem_kb
             mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
@@ -72,8 +72,8 @@ detect_platform() {
 }
 
 detect_cloud() {
-    # BUG#7 FIX: Oracle Cloud 使用 169.254.0.23（不是 169.254.169.254，那是 GCP 的）
-    if curl -s --connect-timeout 2 -o /dev/null -w "%{http_code}" http://169.254.0.23/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+    # BUG#7 FIX: Oracle Cloud 使用 169.254.169.254（不是 169.254.0.23，那是错误的IP）
+    if curl -s --connect-timeout 2 -o /dev/null -w "%{http_code}" http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
         echo "oracle-cloud"
     elif [[ -d /sys/block/vda/device ]] || lsblk -d -n -o NAME 2>/dev/null | grep -q "^vda"; then
         echo "cloud-virtio"
@@ -380,7 +380,7 @@ check_sysctl_conntrack() {
 
     local ct_max ct_count
     ct_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "N/A")
-    ct_count=$(cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null || echo "N/A")
+    ct_count=$(wc -l < /proc/net/nf_conntrack 2>/dev/null || echo "N/A")
     log_pair "net.netfilter.nf_conntrack_max"      "$ct_max"
     log_pair "当前连接数"                            "$ct_count"
     if [[ "$ct_count" != "N/A" ]] && [[ "$ct_max" != "N/A" ]]; then

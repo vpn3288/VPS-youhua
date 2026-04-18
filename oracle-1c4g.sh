@@ -262,10 +262,18 @@ optimize_network_oracle() {
         ip link set "$name" txqueuelen 10000 2>/dev/null || true
 
         # RPS（多核时启用，单核跳过）
+        # M2 FIX: 限制为 63 核防止 bitmask 溢出（bash 算术溢出）
         if [[ $SYS_CPU_CORES -gt 1 ]]; then
-            local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
+            local cores=$SYS_CPU_CORES
+            [[ $cores -gt 63 ]] && cores=63
             if [[ $cores -gt 0 ]]; then
-                local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
+                local mask
+                if [[ $cores -eq 63 ]]; then
+                    # 63 核: 0x7fffffffffffffff（避免 1<<63 溢出）
+                    mask="7fffffffffffffff"
+                else
+                    mask=$(printf '%x' $(( (1 << cores) - 1 )))
+                fi
                 for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                     [[ -f "$rps_file" ]] || continue
                     printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
@@ -330,6 +338,17 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 编译依赖
+# ─────────────────────────────────────────────────────────────────────────────
+install_build_deps() {
+    log_step "安装编译依赖..."
+    install_if_missing build-essential cmake pkg-config libssl-dev \
+        python3-venv python3-dev python3-pip \
+        libffi-dev libxml2-dev libxslt1-dev zlib1g-dev
+    log_info "编译依赖安装完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # /tmp tmpfs
 # ─────────────────────────────────────────────────────────────────────────────
 configure_tmp_tmpfs() {
@@ -339,12 +358,15 @@ configure_tmp_tmpfs() {
         return 0
     fi
     mkdir -p /tmp
-    mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null || true
-    # 写入 fstab
-    if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
-        echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
+    # H5 FIX: 仅在 mount 成功时才写入 fstab
+    if mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null; then
+        if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
+            echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
+        fi
+        log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"
+    else
+        log_warn "mount tmpfs 失败，跳过 fstab 写入"
     fi
-    log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -492,7 +514,8 @@ uninstall_all() {
     fi
 
     # 清理 fstab tmpfs 条目
-    sed -i '/tmpfs.*\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
+    # M15 FIX: 使用非贪婪匹配避免过度删除
+    sed -i '/tmpfs.*?\/tmp.*?tmpfs/d' /etc/fstab 2>/dev/null || true
     log_info "fstab tmpfs 条目已清理"
 
     # 清理 iptables 规则
@@ -560,7 +583,9 @@ main() {
 
     show_platform_summary
 
-    if [[ -t 0 ]]; then
+    # M16 FIX: 远程执行时 stdin 可能非 TTY（ssh host 'sudo bash script'）
+    # 只有在真正可交互时才显示确认提示
+    if [[ -t 0 ]] && ! read -t 0; then
         echo -n "继续执行？(y/n，默认 y): "
         read -r -t 30 confirm || confirm="y"
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && exit 0

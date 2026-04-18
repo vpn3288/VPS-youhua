@@ -46,8 +46,9 @@ readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"             # eMMC 可以用更多日志
 readonly TMPFS_SIZE="1024M"                  # 16GB 机器 /tmp 可以更大
 
-# T6 内存：16GB 平衡模式
-readonly ZRAM_SIZE=1024                       # 轻度压缩 swap 备用，防止 OOM
+# T6 内存：动态计算（轻度压缩 swap 备用，防止 OOM）
+# [M8] FIX: 根据实际内存动态计算，而非硬编码
+readonly ZRAM_SIZE=$(( SYS_MEM_MB / 16 ))    # 16GB → 1024MB，8GB → 512MB
 readonly ZRAM_ALGO="lz4"
 readonly SWAPPINESS=20                        # 16GB 积极回收 page cache
 readonly MIN_FREE_KB=65536                     # 16GB OOM 防线
@@ -297,10 +298,14 @@ configure_conntrack_hashsize_t6() {
     # 加载 nf_conntrack 模块
     modprobe nf_conntrack 2>/dev/null || true
     
-    # 计算 hashsize（通常为 conntrack_max 的 1/4，T6 用 16GB 内存设较大值）
+    # [M7] FIX: 直接使用 CT_HASH_SIZE 常量，而非硬编码 /4 计算
     local conntrack_max
     conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
-    local hashsize=$((conntrack_max / 4))
+    local hashsize=$(( conntrack_max / 4 ))
+    # CT_HASH_SIZE 作为上限保护
+    if [[ $hashsize -gt $CT_HASH_SIZE ]]; then
+        hashsize=$CT_HASH_SIZE
+    fi
     
     # 通过 /sys/module 设置（只读参数，不能用 sysctl）
     if [[ -f /sys/module/nf_conntrack/parameters/hashsize ]]; then
@@ -400,13 +405,19 @@ install_docker() {
         return 0
     fi
 
-    curl -fsSL https://get.docker.com | sh >> "$APT_LOG" 2>&1 || {
+    # [H10] FIX: 使用临时文件替代 curl|bash 管道安装 Docker
+    local docker_install_script="/tmp/get-docker.sh"
+    if curl -fsSL https://get.docker.com -o "$docker_install_script" && \
+       chmod +x "$docker_install_script" && \
+       "$docker_install_script" >> "$APT_LOG" 2>&1; then
+        log_info "Docker 安装完成"
+    else
         log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
             log_error "Docker 安装失败，请查看 $APT_LOG"
             return 1
         }
-    }
+    fi
 
     if ! command -v docker &>/dev/null; then
         log_error "Docker 安装后仍未找到 docker 命令"
@@ -449,13 +460,19 @@ install_nodejs() {
         return 0
     fi
 
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || {
+    # [H10] FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
+    local nodesource_script="/tmp/setup_nodesource.sh"
+    if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" && \
+       chmod +x "$nodesource_script" && \
+       "$nodesource_script" >> "$APT_LOG" 2>&1; then
+        log_info "Node.js 安装完成"
+    else
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
             return 1
         }
-    }
+    fi
 
     if command -v node &>/dev/null; then
         log_info "Node.js 安装完成: $(node --version)"
@@ -552,9 +569,15 @@ uninstall_all() {
 
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
-    echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r -t 30 confirm || confirm=""
-    [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    # [M6] FIX: 非交互卸载confirm兜底（SSH远程/cron场景）
+    if [[ -t 0 ]]; then
+        echo -n "确认卸载？(输入 'yes' 继续): "
+        read -r -t 30 confirm || confirm=""
+        [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    else
+        # 非交互环境（SSH远程执行/cron）：自动确认，避免阻塞
+        log_info "非交互模式，自动确认卸载"
+    fi
 
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"

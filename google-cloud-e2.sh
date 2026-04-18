@@ -180,6 +180,10 @@ optimize_memory_gcp() {
     if ! modprobe zram 2>/dev/null; then
         log_warn "zram 模块不可用，跳过"
     else
+        # [C2][M13] zram reset: 确保设备处于干净状态，避免二次运行失败
+        if [[ -f /sys/block/zram0/reset ]]; then
+            echo 1 > /sys/block/zram0/reset 2>/dev/null || true
+        fi
         local mem_kb
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
         local zram_size=$((mem_kb * 1024 / 2))
@@ -531,7 +535,7 @@ uninstall_all() {
     fi
 
     # 清理 fstab tmpfs 条目
-    sed -i '/tmpfs.*\\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
+    sed -i '/tmpfs.*\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
     log_info "fstab tmpfs 条目已清理"
 
     # BUG#FIX: 清理 zram swap（google-cloud-e2 和 generic-1c1g 都开启了 zram）

@@ -106,7 +106,7 @@ init_script() {
     export DEBIAN_FRONTEND=noninteractive
     mkdir -p "$(dirname "$APT_LOG")"
     mkdir -p /var/lock /var/log
-    : > "$APT_LOG"
+    truncate -s 0 "$APT_LOG" 2>/dev/null || : > "$APT_LOG"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ backup_all() {
     [[ -f /etc/docker/daemon.json ]] && cp -a /etc/docker/daemon.json "$backup_dir/daemon.json_${ts}" 2>/dev/null || true
 
     # 清理超过5份的旧备份
-    find "$backup_dir" -maxdepth 1 -type d -name "*_[0-9]*" | sort -r | tail -n +6 | xargs rm -rf 2>/dev/null || true
+    find "$backup_dir" -maxdepth 1 -type d -name "*_[0-9]*" | sort -r | tail -n +6 | xargs -r rm -rf 2>/dev/null || true
     log_info "备份已保存至 $backup_dir（最近5份）"
 }
 
@@ -683,7 +683,7 @@ configure_limits() {
     IS_LOW_MEMORY=false
     [[ "${SYS_MEM_MB:-0}" -gt 0 ]] && [[ "${SYS_MEM_MB}" -lt 2048 ]] && IS_LOW_MEMORY=true
 
-    # ── 句柄数动态配置（BUG#2: RAM<=1024MB → 限制在 65535 防止内核崩溃）────────
+    # ── 句柄数动态配置（BUG#2: RAM<2048MB → 限制在 65535 防止内核崩溃）────────
     local NOFILE_VAL NPROC_VAL
     if [[ "${IS_LOW_MEMORY}" == "true" ]]; then
         NOFILE_VAL=65535
@@ -1026,6 +1026,7 @@ net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
 net.ipv6.conf.all.accept_source_route = 0
 net.ipv6.conf.default.accept_source_route = 0
+# 禁用 IPv6 RA（路由公告），防止被恶意路由劫持；本地网络无 IPv6 路由时不影响
 net.ipv6.conf.all.accept_ra = 0
 net.ipv6.conf.default.accept_ra = 0
 

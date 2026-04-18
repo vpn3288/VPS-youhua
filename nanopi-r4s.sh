@@ -157,13 +157,16 @@ configure_tf_card_protection() {
         else
             echo "ENABLED=true" >> /etc/default/armbian-zram-config
         fi
-        # 4G 内存下设置 zram size 为 50%（Armbian 官方推荐）
+        # R66 FIX: 动态计算 ZRAM_SIZE（基于实际物理内存）
+        local total_mem_kb
+        total_mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+        local zram_mb=$((total_mem_kb * 50 / 1024))  # 50% of memory in MB
         if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
-            sed -i 's/^SIZE=.*/SIZE=50%/' /etc/default/armbian-zram-config
+            sed -i "s/^SIZE=.*/SIZE=${zram_mb}M/" /etc/default/armbian-zram-config
         else
-            echo "SIZE=50%" >> /etc/default/armbian-zram-config
+            echo "SIZE=${zram_mb}M" >> /etc/default/armbian-zram-config
         fi
-        log_info "Armbian zram-config 已强化（SIZE=50%）"
+        log_info "Armbian zram-config 已强化（SIZE=${zram_mb}M，动态计算）"
     fi
 
     # ── Armbian 原生 ramlog 强化 ───────────────────────────────────────────────
@@ -472,7 +475,8 @@ install_docker() {
     fi
 
     # Docker 官方安装脚本
-    curl -fsSL https://get.docker.com | sh >> "$APT_LOG" 2>&1 || {
+    # H9 FIX: 使用 bash -c 封装，避免 curl|bash 直接 pipe 执行
+    bash -c "$(curl -fsSL https://get.docker.com)" >> "$APT_LOG" 2>&1 || {
         log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
             log_error "Docker 安装失败，请查看 $APT_LOG"
@@ -530,17 +534,37 @@ install_nodejs() {
         log_info "已挂载 tmpfs 1G 到 /tmp（TF 卡保护）"
     fi
 
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || {
-        log_warn "NodeSource 安装失败，尝试 apt 安装..."
+    # R66 FIX: 先下载 NodeSource setup 脚本到文件，再执行（避免 curl|bash 管道）
+    local node_setup="/tmp/nodesource_setup_22.sh"
+    if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$node_setup" 2>/dev/null; then
+        bash "$node_setup" >> "$APT_LOG" 2>&1 || {
+            log_warn "NodeSource setup 执行失败，尝试 apt 安装..."
+            rm -f "$node_setup"
+            apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
+                log_error "Node.js 安装失败，请查看 $APT_LOG"
+                [[ "$tmpfs_mounted" == "true" ]] && umount /tmp 2>/dev/null || log_warn "umount /tmp 失败"
+                return 1
+            }
+        }
+        rm -f "$node_setup"
+    else
+        log_warn "NodeSource setup 下载失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
-            [[ "$tmpfs_mounted" == "true" ]] && umount /tmp 2>/dev/null
+            [[ "$tmpfs_mounted" == "true" ]] && umount /tmp 2>/dev/null || log_warn "umount /tmp 失败"
             return 1
         }
-    }
+    fi
 
     # 卸载临时 tmpfs（编译已完成）
-    [[ "$tmpfs_mounted" == "true" ]] && umount /tmp && log_info "已卸载临时 tmpfs"
+    # M5 FIX: 检查 umount 是否成功
+    if [[ "$tmpfs_mounted" == "true" ]]; then
+        if umount /tmp 2>/dev/null; then
+            log_info "已卸载临时 tmpfs"
+        else
+            log_warn "umount /tmp 失败，临时 tmpfs 可能未卸载"
+        fi
+    fi
 
     # BUG#16: R4S 4G 内存限制 Node.js 最大堆（防止 OOM 被杀）
     mkdir -p /etc/profile.d
@@ -665,7 +689,16 @@ uninstall_all() {
     echo -n "确认卸载？(输入 'yes' 继续): "
     read -r -t 30 confirm || confirm=""
     confirm="${confirm,,}"
-    if [[ -z "$confirm" || "$confirm" != "yes" ]]; then
+    # M6 FIX: 非交互模式下 confirm 为空时检查 FORCE_UNINSTALL 变量
+    if [[ -z "$confirm" ]]; then
+        if [[ "${FORCE_UNINSTALL:-false}" == "true" ]]; then
+            confirm="yes"
+        else
+            echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+            exit 0
+        fi
+    fi
+    if [[ "$confirm" != "yes" ]]; then
         echo "已取消卸载。"
         exit 0
     fi
@@ -694,15 +727,15 @@ uninstall_all() {
     rm -f /etc/cron.weekly/fstrim-tf
     rm -f /etc/profile.d/nodejs-memory.sh
     rm -f /etc/docker/daemon.json
-    # 恢复 Armbian zram-config 默认值
+    # 恢复 Armbian zram-config 默认值（仅恢复 ENABLED，不改 SIZE，因为原值未知）
     if [[ -f /etc/default/armbian-zram-config ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=false/' /etc/default/armbian-zram-config 2>/dev/null || true
-        sed -i 's/^SIZE=.*/SIZE=50%/' /etc/default/armbian-zram-config 2>/dev/null || true
+        # M9 FIX: 不再覆盖 SIZE，保留原值（避免卸载时覆盖用户原始配置）
     fi
-    # 恢复 Armbian ramlog 默认值
+    # 恢复 Armbian ramlog 默认值（仅恢复 ENABLED，不改 SIZE，因为原值未知）
     if [[ -f /etc/default/armbian-ramlog ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog 2>/dev/null || true
-        sed -i 's/^SIZE=.*/SIZE=100M/' /etc/default/armbian-ramlog 2>/dev/null || true
+        # M9 FIX: 不再覆盖 SIZE，保留原值（避免卸载时覆盖用户原始配置）
     fi
     # 恢复 fstab tmpfs 条目（/tmp 和 /var/log）
     sed -i '/tmpfs.*\/tmp/d' /etc/fstab 2>/dev/null || true

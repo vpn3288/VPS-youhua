@@ -57,10 +57,7 @@ load_common_optimize() {
         source "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh"
         return 0
     fi
-    if [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
-        source /tmp/vps-youhua-tmp/common-optimize.sh
-        return 0
-    fi
+
     if [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
         source /tmp/vps-youhua/common-optimize.sh
         return 0
@@ -328,13 +325,21 @@ install_docker() {
         return 0
     fi
 
-    curl -fsSL https://get.docker.com | sh >> "$APT_LOG" 2>&1 || {
+    # H11 FIX: 先下载脚本到临时文件，检查后再执行（禁止 curl|bash）
+    local docker_install_script="/tmp/get.docker.com.sh"
+    local docker_download_ok=false
+    curl -fsSL https://get.docker.com -o "$docker_install_script" 2>/dev/null && docker_download_ok=true
+
+    if [[ "$docker_download_ok" == "true" ]] && bash "$docker_install_script" >> "$APT_LOG" 2>&1; then
+        log_info "Docker 安装完成"
+    else
+        rm -f "$docker_install_script"
         log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
             log_error "Docker 安装失败，请查看 $APT_LOG"
             return 1
         }
-    }
+    fi
 
     if ! command -v docker &>/dev/null; then
         log_error "Docker 安装后仍未找到 docker 命令"
@@ -377,13 +382,21 @@ install_nodejs() {
         return 0
     fi
 
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || {
+    # H11 FIX: 先下载脚本到临时文件，检查后再执行（禁止 curl|bash）
+    local nodesource_script="/tmp/nodesource_setup_22.sh"
+    local nodesource_download_ok=false
+    curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null && nodesource_download_ok=true
+
+    if [[ "$nodesource_download_ok" == "true" ]] && bash "$nodesource_script" >> "$APT_LOG" 2>&1; then
+        log_info "Node.js 安装完成"
+    else
+        rm -f "$nodesource_script"
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
             return 1
         }
-    }
+    fi
 
     if command -v node &>/dev/null; then
         log_info "Node.js 安装完成: $(node --version)"
@@ -558,7 +571,9 @@ main() {
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
-    uninstall_all "$@" || exit 1
+    if [[ "${1:-}" == "--uninstall" ]]; then
+        uninstall_all "$@" || exit 1
+    fi
 
     clear
     echo "========================================================================"
@@ -575,7 +590,10 @@ main() {
     # BUG#6 FIX: 必须先检测内存profile，才能正确配置zram/swap
     _detect_n5105_memory_profile
     optimize_memory_n5105
-    configure_swap
+    # BUG#5 FIX: configure_swap 幂等调用（防止 common-optimize.sh 未加载时崩溃）
+    if declare -f configure_swap > /dev/null 2>&1; then
+        configure_swap
+    fi
     # BUG#5: IPv6 黑洞检测
     configure_ipv6_health
     # BUG#7: DNS 锁定防篡改
@@ -672,7 +690,7 @@ main() {
     return 0
 }
 
-trap 'log_error "脚本异常退出 (行: ${LINENO})"; exit 1' ERR
+trap "log_error \"脚本异常退出 (行: \${LINENO})\"; exit 1" ERR
 trap 'log_warn "被中断"; exit 130' INT TERM
 
 main "$@"

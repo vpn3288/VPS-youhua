@@ -143,7 +143,9 @@ optimize_memory_generic() {
 
     if [[ $ZRAM_SIZE -gt 0 ]]; then
         if modprobe zram 2>/dev/null || [[ -d /sys/block/zram0 ]]; then
-            apt-get remove --purge -y zram-config >> "$APT_LOG" 2>&1 || true
+            # [M11] FIX: 不卸载 zram-config 包（可能包含用户自定义配置），仅停止服务
+            systemctl stop zram-config 2>/dev/null || true
+            systemctl disable zram-config 2>/dev/null || true
             apt-get install -y --no-install-recommends zram-tools >> "$APT_LOG" 2>&1 || true
 
             cat > /etc/default/zramswap <<EOF
@@ -351,12 +353,30 @@ install_docker() {
         return 0
     fi
 
-    curl -fsSL https://get.docker.com | sh >> "$APT_LOG" 2>&1 || {
-        log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
-        apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
-            log_error "Docker 安装失败，请查看 $APT_LOG"
-            return 1
-        }
+    # [H12] FIX: 使用官方 APT 仓库安装 Docker，避免 curl|bash 安全风险
+    log_info "安装 Docker 依赖..."
+    apt-get install -y ca-certificates curl gnupg lsb-release >> "$APT_LOG" 2>&1 || {
+        log_error "Docker 依赖安装失败"
+        return 1
+    }
+
+    log_info "添加 Docker GPG 密钥..."
+    mkdir -p /etc/apt/keyrings
+    if ! curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>> "$APT_LOG"; then
+        log_warn "GPG 密钥获取失败，尝试备用方法..."
+        apt-key adv --keyserver hkps://keyserver.ubuntu.com --recv-keys 0EBFCD88 2>> "$APT_LOG" || true
+    fi
+
+    log_info "添加 Docker APT 仓库..."
+    local codename; codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian ${codename} stable" > /etc/apt/sources.list.d/docker.list 2>/dev/null || \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${codename} stable" > /etc/apt/sources.list.d/docker.list 2>/dev/null || true
+
+    log_info "安装 Docker..."
+    apt-get update -qq >> "$APT_LOG" 2>&1
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >> "$APT_LOG" 2>&1 || {
+        log_error "Docker 安装失败，请查看 $APT_LOG"
+        return 1
     }
 
     if ! command -v docker &>/dev/null; then
@@ -368,7 +388,15 @@ install_docker() {
     systemctl start docker 2>/dev/null || true
 
     mkdir -p /etc/docker
-    cat > /etc/docker/daemon.json <<'EOF'
+    # [M12] FIX: 合并 daemon.json 而非全量覆盖，保留用户原有配置
+    local daemon_json="/etc/docker/daemon.json"
+    local daemon_backup=""
+    if [[ -f "$daemon_json" ]]; then
+        daemon_backup=$(cat "$daemon_json")
+    fi
+
+    # 构建新的配置（合并 registry-mirrors 和日志配置）
+    cat > "$daemon_json" <<'EOF'
 {
   "registry-mirrors": [
     "https://docker.1ms.run",
@@ -378,6 +406,18 @@ install_docker() {
   "log-opts": {"max-size": "10m", "max-file": "3"}
 }
 EOF
+
+    # 尝试合并用户原有的顶层配置（如 storage-driver, live-restore 等）
+    if [[ -n "$daemon_backup" ]]; then
+        local merged_json
+        merged_json=$(jq -s '.[0] * .[1]' "$daemon_json" <(echo "$daemon_backup") 2>/dev/null) || true
+        if [[ -n "$merged_json" && "$merged_json" != "null" ]]; then
+            echo "$merged_json" > "$daemon_json"
+            log_info "Docker daemon.json 已合并（保留原有配置）"
+        else
+            log_info "Docker daemon.json 已创建（用户原有配置已备份）"
+        fi
+    fi
     systemctl restart docker 2>/dev/null || true
     # Docker 健康检查
     if docker ps >/dev/null 2>&1; then

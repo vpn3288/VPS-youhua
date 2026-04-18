@@ -345,7 +345,11 @@ install_docker() {
         return 0
     fi
 
-    curl -fsSL https://get.docker.com | sh >> "$APT_LOG" 2>&1 || {
+    # H8 FIX: 使用临时文件替代 curl|bash 管道安装 Docker
+    local docker_install_script="/tmp/get-docker.sh"
+    if curl -fsSL https://get.docker.com -o "$docker_install_script" && \
+       chmod +x "$docker_install_script" && \
+       "$docker_install_script" >> "$APT_LOG" 2>&1; then
         log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
             log_error "Docker 安装失败，请查看 $APT_LOG"
@@ -366,7 +370,8 @@ install_docker() {
 {
   "registry-mirrors": [
     "https://docker.1ms.run",
-    "https://docker.xuanyuan.me"
+    "https://docker.xuanyuan.me",
+    "https://docker.m.daocloud.io"
   ],
   "log-driver": "json-file",
   "log-opts": {"max-size": "10m", "max-file": "3"}
@@ -382,7 +387,9 @@ EOF
             break
         fi
         sleep 1
-        ((wait_count++))
+        # M1 FIX: wait_count++ 在 (( )) 中返回 1（当值为0时），导致 set -e 退出
+        # 使用 += 替代 ++ 确保始终返回成功
+        ((wait_count += 1)) || true
     done
     
     # Docker 健康检查
@@ -406,7 +413,11 @@ install_nodejs() {
         return 0
     fi
 
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >> "$APT_LOG" 2>&1 || {
+    # H8 FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
+    local nodesource_setup="/tmp/nodesource_setup.sh"
+    if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_setup" && \
+       chmod +x "$nodesource_setup" && \
+       "$nodesource_setup" >> "$APT_LOG" 2>&1; then
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
@@ -706,7 +717,6 @@ main() {
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
-    apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
     apt-get autoclean >> "$APT_LOG" 2>&1 || true
 
     echo ""
