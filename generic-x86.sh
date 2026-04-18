@@ -580,7 +580,6 @@ main() {
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
-    local did_install=false
 
     uninstall_all "$@" || exit 1
 
@@ -592,7 +591,8 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#6 FIX: optimize_memory_generic 先运行（决定是否需要 swap），configure_swap 后判断
+    detect_memory_profile
+    # BUG#6 FIX: optimize_memory_generic 需要 detect_memory_profile 先运行（决定是否需要 swap），configure_swap 后判断
     optimize_memory_generic
     configure_swap
     # BUG#5: IPv6 黑洞检测
@@ -603,7 +603,6 @@ main() {
     detect_storage_type
     check_network
     preflight_check
-    detect_memory_profile
 
     show_platform_summary
 

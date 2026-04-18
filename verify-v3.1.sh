@@ -7,7 +7,7 @@
 #===============================================================================
 set -euo pipefail
 
- readonly VERSION="3.2"
+ readonly VERSION="3.3"
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
@@ -348,11 +348,8 @@ check_sysctl_network() {
     else
         log_fail_param "net.ipv4.tcp_congestion_control" "$cc" "bbr"
     fi
-    if lsmod | grep -q bbr; then
-        echo -e "    ${GREEN}✓${RESET} BBR 模块已加载"
-    else
-        echo -e "    ${RED}✗${RESET} BBR 模块未加载 (modprobe tcp_bbr)"
-    fi
+    # BBR module check via tcp_congestion_control above (authoritative)
+    # lsmod check removed — module can be loaded but not active
 
     echo ""
     echo -e "  ${BOLD}[网关转发]${RESET}"
@@ -389,7 +386,8 @@ check_sysctl_conntrack() {
         pct=$(awk -v c="$ct_count" -v m="$ct_max" 'BEGIN {printf "%.1f", c/m*100}')
         echo -e "    ${CYAN}使用率${RESET} = ${YELLOW}${pct}%${RESET}"
     fi
-    log_pair "net.netfilter.nf_conntrack_hashsize"  "$(sysctl -n net.netfilter.nf_conntrack_hashsize 2>/dev/null || echo N/A)"
+    # nf_conntrack_hashsize is a read-only kernel module param, not a sysctl
+    log_pair "nf_conntrack_hashsize (ro)"  "$(cat /sys/module/nf_conntrack/parameters/hashsize 2>/dev/null || echo N/A)"
 
     echo ""
     echo -e "  ${BOLD}[TCP 超时设置]${RESET}"
@@ -709,7 +707,8 @@ check_vs_targets() {
     check_eq "net.ipv4.conf.default.accept_redirects" "0" "IPv4接受重定向默认"
     check_eq "net.ipv4.conf.all.rp_filter"             "1"  "反向路径过滤"
     check_eq "net.ipv4.conf.default.rp_filter"         "1" "反向路径过滤默认"
-    check_eq "net.core.default_qdisc"                 "fq" "默认队列算法"
+    # qdisc is platform-tiered: generic-1c1g=fq_codel, google-cloud=fq_codel, others=fq — skip auto-check
+    echo -e "    ${YELLOW}→${RESET} net.core.default_qdisc  ${YELLOW}平台差异化（通用=fq，1c1g/google-cloud=fq_codel）${RESET}"
     check_eq "net.ipv4.tcp_congestion_control"        "bbr" "BBR拥塞控制"
     check_eq "net.ipv4.tcp_timestamps"                "1"  "TCP时间戳"
     check_eq "net.ipv4.tcp_sack"                      "1"  "SACK选择确认"
@@ -733,7 +732,8 @@ check_vs_targets() {
 
     echo ""
     echo -e "  ${BOLD}[全平台 网络基础]${RESET}"
-    check_eq "net.core.somaxconn"                      "65535" "监听队列上限"
+    # somaxconn is platform-tiered: generic-1c1g=512, others=65535 — skip auto-check
+    echo -e "    ${YELLOW}→${RESET} net.core.somaxconn  ${YELLOW}平台差异化（通用=65535，1c1g=512）${RESET}"
     check_eq "net.core.netdev_max_backlog"             "65535" "网卡最大积压"
 
     echo ""
@@ -782,12 +782,24 @@ check_vs_targets() {
         check_eq "vm.dirty_background_ratio"                                    "5"     "dirty后台比例"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "15"    "TW超时"
+    elif [[ "$platform" == "generic-1c1g" ]]; then
+        echo -e "  ${BOLD}[generic-1c1g 专用]${RESET}"
+        check_eq "vm.dirty_ratio"                                               "10"    "dirty比例"
+        check_eq "vm.dirty_background_ratio"                                    "5"     "dirty后台比例"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "1200"  "ESTABLISHED超时"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "15"    "TW超时"
+    elif [[ "$platform" == "google-cloud-e2" ]]; then
+        echo -e "  ${BOLD}[google-cloud-e2 专用]${RESET}"
+        check_eq "vm.dirty_ratio"                                               "15"    "dirty比例"
+        check_eq "vm.dirty_background_ratio"                                    "10"    "dirty后台比例"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "1200"  "ESTABLISHED超时"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "15"    "TW超时"
     else
         echo -e "  ${BOLD}[generic-x86 / 通用平台]${RESET}"
         check_eq "vm.dirty_ratio"                                               "15"    "dirty比例"
         check_eq "vm.dirty_background_ratio"                                    "5"     "dirty后台比例"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
-        check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "15"    "TW超时"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "15"   "TW超时"
     fi
 
     echo ""
