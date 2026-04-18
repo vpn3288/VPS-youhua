@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Oracle Cloud ARM 1核4G 专用优化安装脚本 v3.3 R65
+# Oracle Cloud ARM 1核4G 专用优化安装脚本 v3.3 R67
 # 硬件: Ampere Altra, 1核 4GB, Oracle Cloud
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，元数据检查）
 #       针对 1C4G 资源精简优化（比 2C16G 更保守）
@@ -154,7 +154,7 @@ optimize_memory_oracle() {
                 echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || true
                 local mem_kb
                 mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-                local zram_size=$((mem_kb * 2 * 1024))  # 转换为字节
+                local zram_size=$((mem_kb * 1024))  # zram 1:1 匹配 RAM（字节）
                 if [[ -f /sys/block/zram0/disksize ]]; then
                     echo "${zram_size}" > /sys/block/zram0/disksize 2>/dev/null || true
                     mkswap /dev/zram0 >/dev/null 2>&1 || true
@@ -447,7 +447,7 @@ uninstall_all() {
         exit 1
     fi
 
-    if [[ "${1:-}" != "--uninstall" ]]; then
+    if [[ "${1:-}" == "--uninstall" ]]; then
         return 0
     fi
 
@@ -514,8 +514,7 @@ uninstall_all() {
     fi
 
     # 清理 fstab tmpfs 条目
-    # M15 FIX: 使用非贪婪匹配避免过度删除
-    sed -i '/tmpfs.*?\/tmp.*?tmpfs/d' /etc/fstab 2>/dev/null || true
+    sed -i '/tmpfs.*\/tmp/d' /etc/fstab 2>/dev/null || true
     log_info "fstab tmpfs 条目已清理"
 
     # 清理 iptables 规则
@@ -565,7 +564,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 1核4G 专用优化安装脚本 v${SCRIPT_VERSION} R65${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 1核4G 专用优化安装脚本 v${SCRIPT_VERSION} R67${NC}"
     echo "========================================================================"
     echo ""
 
@@ -653,6 +652,7 @@ main() {
     # BUG#46 Fix: install_build_deps 独立于 SKIP_SOFTWARE_SCRIPT
     # INSTALL_DEPS 由用户选择决定（Option 2 = true），与 Docker/NodeJS 分开
     # SKIP_SOFTWARE_SCRIPT 只阻止 Docker/NodeJS，不阻止编译依赖
+    : "${INSTALL_DEPS:=false}"
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
@@ -666,7 +666,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM 1核4G v${SCRIPT_VERSION} R65 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM 1核4G v${SCRIPT_VERSION} R67 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

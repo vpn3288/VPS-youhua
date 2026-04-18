@@ -357,7 +357,10 @@ install_docker() {
     "https://docker.xuanyuan.me"
   ],
   "log-driver": "json-file",
-    "log-opts": {"max-size": "10m", "max-file": "3"}
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
 }
 EOF
     systemctl restart docker 2>/dev/null || true

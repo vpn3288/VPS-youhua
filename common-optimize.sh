@@ -175,7 +175,7 @@ check_network() {
     if ! host -W3 debian.org &>/dev/null; then
         # 三级降级：HTTPS HEAD 检查
         if ! curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" \
-            https://deb.debian.org/ 2>/dev/null | grep -q "200\|301\|302"; then
+            https://deb.debian.org/ 2>/dev/null | grep -qE "200|301|302"; then
             log_error "无法连接到网络，请检查网络配置"
             exit 1
         fi

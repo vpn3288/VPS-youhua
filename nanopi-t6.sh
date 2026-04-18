@@ -573,10 +573,23 @@ uninstall_all() {
     if [[ -t 0 ]]; then
         echo -n "确认卸载？(输入 'yes' 继续): "
         read -r -t 30 confirm || confirm=""
+        confirm="${confirm,,}"
+        if [[ -z "$confirm" ]]; then
+            if [[ "${FORCE_UNINSTALL:-false}" == "true" ]]; then
+                confirm="yes"
+            else
+                echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+                exit 0
+            fi
+        fi
         [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
     else
-        # 非交互环境（SSH远程执行/cron）：自动确认，避免阻塞
-        log_info "非交互模式，自动确认卸载"
+        # 非交互环境（SSH远程执行/cron）：检查 FORCE_UNINSTALL 变量
+        if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
+            echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+            exit 0
+        fi
+        log_info "非交互模式 + FORCE_UNINSTALL=true，自动确认卸载"
     fi
 
     echo ""

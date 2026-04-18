@@ -178,6 +178,13 @@ configure_zram_1c1g() {
 
     local zram_dev="/dev/zram0"
     if [[ -f /sys/block/zram0/disksize ]]; then
+        # 重置 zram（如果已配置则先清理）
+        if swapon --show 2>/dev/null | grep -q "^/dev/zram0"; then
+            swapoff "${zram_dev}" 2>/dev/null || true
+        fi
+        # 重置 zram 设备
+        echo 0 > /sys/block/zram0/disksize 2>/dev/null || true
+        # 重新配置
         echo "${zram_size_bytes}" > /sys/block/zram0/disksize 2>/dev/null || true
         mkswap "${zram_dev}" >/dev/null 2>&1 || true
         swapon "${zram_dev}" -p 32767 2>/dev/null || true

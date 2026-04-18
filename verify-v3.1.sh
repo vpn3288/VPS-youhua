@@ -40,7 +40,8 @@ detect_platform() {
         echo "nanopi-t6"
     elif [[ "$cpu_info" == *"Ampere"* ]]; then
         # Oracle Cloud 检测（通过元数据端点）
-        if curl -s --connect-timeout 3 -o /dev/null http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+        # BUG FIX: curl -o /dev/null 成功时无输出，需加 -w "%{http_code}" 才能抓到 HTTP 状态码
+        if curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
             # Oracle 1C4G vs 2C16G：通过内存判断
             local mem_kb
             mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
@@ -771,6 +772,13 @@ check_vs_targets() {
         check_eq "vm.dirty_background_ratio"                                    "10"    "dirty后台比例"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "10"    "TW超时(云)"
+    elif [[ "$platform" == "oracle-1c4g" ]]; then
+        echo -e "  ${BOLD}[oracle-1c4g 专用]${RESET}"
+        check_eq "net.core.netdev_max_backlog"                                 "65535" "网卡队列"
+        check_eq "vm.dirty_ratio"                                               "15"    "dirty比例"
+        check_eq "vm.dirty_background_ratio"                                    "8"     "dirty后台比例"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "1200"  "ESTABLISHED超时"
+        check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "15"    "TW超时"
     elif [[ "$platform" == "nanopi-t6" ]]; then
         echo -e "  ${BOLD}[nanopi-t6 专用]${RESET}"
         check_eq "net.core.netdev_max_backlog"                                 "131072" "网卡队列(2.5GbE)"
