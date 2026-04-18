@@ -352,6 +352,9 @@ uninstall_all() {
     rm -f /etc/systemd/system.conf.d/99-oom-policy.conf
     rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
     rm -f /etc/cron.daily/vps-youhua-clean
+
+    # BUG#6d FIX: 清理 conntrack hashsize 配置
+    rm -f /etc/modprobe.d/nf_conntrack.conf
     rm -f /etc/logrotate.d/vps-youhua
     rm -f /etc/apt/apt.conf.d/99-noninteractive
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
@@ -368,8 +371,16 @@ uninstall_all() {
     fi
 
     # 清理 fstab tmpfs 条目
-    sed -i '/tmpfs.*\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
+    sed -i '/tmpfs.*\\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
     log_info "fstab tmpfs 条目已清理"
+
+    # BUG#FIX: 清理 zram swap（generic-1c1g 开启了 zram）
+    if swapon --show 2>/dev/null | grep -q "/dev/zram0"; then
+        swapoff /dev/zram0 2>/dev/null || true
+        log_info "zram0 swapoff 完成"
+    fi
+    # 清理 zram 模块配置（下次启动不自动加载）
+    rm -f /etc/modprobe.d/zram 2>/dev/null || true
 
     # 清理 iptables 规则
     iptables -D INPUT -i lo -j ACCEPT 2>/dev/null || true

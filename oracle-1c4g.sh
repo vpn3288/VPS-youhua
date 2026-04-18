@@ -442,9 +442,6 @@ uninstall_all() {
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
-    systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
-    systemctl disable vps-youhua-cleanup.timer 2>/dev/null || true
-
     rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
     rm -f /etc/sysctl.d/99-vps-youhua-oracle-1c4g.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
@@ -453,7 +450,6 @@ uninstall_all() {
     rm -f /etc/systemd/system.conf.d/99-resource-limits.conf
     rm -f /etc/systemd/system.conf.d/99-oom-policy.conf
     rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
-    rm -f /etc/cron.d/vps-youhua-cleanup
     rm -f /etc/cron.daily/vps-youhua-clean
     rm -f /etc/logrotate.d/vps-youhua
     rm -f /etc/apt/apt.conf.d/99-noninteractive
@@ -463,6 +459,7 @@ uninstall_all() {
     rm -f /etc/profile.d/99-agent-cache.sh
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
     rm -f /etc/default/zramswap 2>/dev/null || true
+    rm -f /etc/modprobe.d/nf_conntrack.conf
 
     # 停止并卸载 unattended-upgrades
     if command -v unattended-upgrades &>/dev/null; then

@@ -674,7 +674,6 @@ uninstall_all() {
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
     # 停止服务
-    systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
 
     # 清理所有配置文件
     rm -f /etc/sysctl.d/99-vps-youhua-r4s.conf
@@ -692,6 +691,22 @@ uninstall_all() {
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-unattended
     rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
+    rm -f /etc/cron.weekly/fstrim-tf
+    rm -f /etc/profile.d/nodejs-memory.sh
+    rm -f /etc/docker/daemon.json
+    # 恢复 Armbian zram-config 默认值
+    if [[ -f /etc/default/armbian-zram-config ]]; then
+        sed -i 's/^ENABLED=.*/ENABLED=false/' /etc/default/armbian-zram-config 2>/dev/null || true
+        sed -i 's/^SIZE=.*/SIZE=50%/' /etc/default/armbian-zram-config 2>/dev/null || true
+    fi
+    # 恢复 Armbian ramlog 默认值
+    if [[ -f /etc/default/armbian-ramlog ]]; then
+        sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog 2>/dev/null || true
+        sed -i 's/^SIZE=.*/SIZE=100M/' /etc/default/armbian-ramlog 2>/dev/null || true
+    fi
+    # 恢复 fstab tmpfs 条目（/tmp 和 /var/log）
+    sed -i '/tmpfs.*\/tmp/d' /etc/fstab 2>/dev/null || true
+    sed -i '/tmpfs.*\/var\/log/d' /etc/fstab 2>/dev/null || true
 
     # 停止并卸载 unattended-upgrades（如果安装了的话）
     if command -v unattended-upgrades &>/dev/null; then

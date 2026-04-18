@@ -343,6 +343,31 @@ optimize_network_gcp() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# conntrack hashsize 配置（GCP e2-micro 专用）
+# BUG#6e FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# ─────────────────────────────────────────────────────────────────────────────
+configure_conntrack_hashsize() {
+    log_step "配置 nf_conntrack_hashsize（GCP）..."
+
+    modprobe nf_conntrack 2>/dev/null || true
+
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+    local ct_max="${CT_MAX:-16384}"
+    if [[ -f "$hashsize_file" ]]; then
+        echo "${ct_max}" > "$hashsize_file" 2>/dev/null || {
+            log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=${ct_max}" > /etc/modprobe.d/nf_conntrack.conf
+        }
+        local current_hashsize
+        current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
+        log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
+    else
+        log_warn "nf_conntrack 模块未加载或不支持，跳过 hashsize 配置"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # OOM Killer
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_oom() {
@@ -488,6 +513,8 @@ uninstall_all() {
     rm -f /etc/systemd/system.conf.d/99-oom-policy.conf
     rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
     rm -f /etc/cron.daily/vps-youhua-clean
+    # BUG#6e FIX: 清理 conntrack hashsize 配置
+    rm -f /etc/modprobe.d/nf_conntrack.conf
     rm -f /etc/logrotate.d/vps-youhua
     rm -f /etc/apt/apt.conf.d/99-noninteractive
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
@@ -504,8 +531,16 @@ uninstall_all() {
     fi
 
     # 清理 fstab tmpfs 条目
-    sed -i '/tmpfs.*\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
+    sed -i '/tmpfs.*\\/tmp.*tmpfs/d' /etc/fstab 2>/dev/null || true
     log_info "fstab tmpfs 条目已清理"
+
+    # BUG#FIX: 清理 zram swap（google-cloud-e2 和 generic-1c1g 都开启了 zram）
+    if swapon --show 2>/dev/null | grep -q "/dev/zram0"; then
+        swapoff /dev/zram0 2>/dev/null || true
+        log_info "zram0 swapoff 完成"
+    fi
+    # 清理 zram 模块配置（下次启动不自动加载）
+    rm -f /etc/modprobe.d/zram 2>/dev/null || true
 
     # 清理 iptables 规则
     iptables -D INPUT -i lo -j ACCEPT 2>/dev/null || true

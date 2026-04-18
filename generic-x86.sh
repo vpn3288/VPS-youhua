@@ -509,10 +509,6 @@ uninstall_all() {
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
-    systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
-    systemctl disable vps-youhua-cleanup.timer 2>/dev/null || true
-    rm -f /etc/cron.d/vps-youhua-cleanup
-
     # 清理所有配置文件
     rm -f /etc/sysctl.d/99-vps-youhua-generic.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
@@ -522,6 +518,8 @@ uninstall_all() {
     rm -f /etc/systemd/system.conf.d/99-oom-policy.conf
     rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
     rm -f /etc/cron.d/vps-youhua-cleanup
+    # BUG#6c FIX: 清理 conntrack hashsize 配置
+    rm -f /etc/modprobe.d/nf_conntrack.conf
     rm -f /etc/logrotate.d/vps-youhua
     rm -f /etc/apt/apt.conf.d/99-noninteractive
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended

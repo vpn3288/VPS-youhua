@@ -521,8 +521,6 @@ uninstall_all() {
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
-    systemctl stop vps-youhua-cleanup.timer 2>/dev/null || true
-    systemctl disable vps-youhua-cleanup.timer 2>/dev/null || true
     # 清理所有配置文件
     rm -f /etc/sysctl.d/99-vps-youhua-oracle-arm.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
@@ -538,6 +536,9 @@ uninstall_all() {
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-unattended
     rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
+    rm -f /etc/cloud/cloud.cfg.d/99-disable-net.cfg
+    rm -f /etc/modprobe.d/nf_conntrack.conf
+    rm -f /etc/docker/daemon.json
 
     # 停止并卸载 unattended-upgrades（如果安装了的话）
     if command -v unattended-upgrades &>/dev/null; then

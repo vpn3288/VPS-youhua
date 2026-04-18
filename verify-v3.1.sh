@@ -29,9 +29,10 @@ detect_platform() {
     local board_info
     board_info=$(cat /proc/device-tree/model 2>/dev/null | tr -d '\0' | xargs 2>/dev/null || echo "")
 
-    # GCP 检测（优先级高：通过元数据端点）
+    # GCP 检测（优先级高：通过官方元数据服务器）
     if curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" \
-       http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+       -H "Metadata-Flavor: Google" \
+       "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null | grep -q "200"; then
         echo "google-cloud-e2"
     elif [[ "$board_info" == *"NanoPi R4S"* ]] || [[ "$board_info" == *"R4S"* ]]; then
         echo "nanopi-r4s"
@@ -71,7 +72,8 @@ detect_platform() {
 }
 
 detect_cloud() {
-    if curl -s --connect-timeout 2 -o /dev/null -w "%{http_code}" http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+    # BUG#7 FIX: Oracle Cloud 使用 169.254.0.23（不是 169.254.169.254，那是 GCP 的）
+    if curl -s --connect-timeout 2 -o /dev/null -w "%{http_code}" http://169.254.0.23/latest/meta-data/ 2>/dev/null | grep -q "200"; then
         echo "oracle-cloud"
     elif [[ -d /sys/block/vda/device ]] || lsblk -d -n -o NAME 2>/dev/null | grep -q "^vda"; then
         echo "cloud-virtio"
