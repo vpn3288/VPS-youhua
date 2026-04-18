@@ -420,12 +420,14 @@ install_nodejs() {
     if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_setup" && \
        chmod +x "$nodesource_setup" && \
        "$nodesource_setup" >> "$APT_LOG" 2>&1; then
+        log_info "NodeSource 安装完成"
+    else
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
             return 1
         }
-    }
+    fi
 
     if command -v node &>/dev/null; then
         log_info "Node.js 安装完成: $(node --version)"

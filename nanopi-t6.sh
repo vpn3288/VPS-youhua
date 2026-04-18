@@ -172,7 +172,6 @@ EOF
     chmod +x /etc/cron.weekly/fstrim-emmc
     log_info "已创建 eMMC 每周 fstrim 定时任务"
 
-    sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
     sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
     log_info "内存优化完成（zram 保留，swappiness=$SWAPPINESS）"
 }
@@ -183,11 +182,8 @@ EOF
 configure_sysctl_t6() {
     log_step "配置 sysctl (NanoPC T6)..."
 
-    # 在 cat heredoc 之前计算 conntrack_max（上限保护：最大262144）
-    local conntrack_max=$(( SYS_MEM_MB * 32 ))
-    if [[ $conntrack_max -gt 262144 ]]; then
-        conntrack_max=262144
-    fi
+    # 计算 conntrack_max（使用 CT_HASH_SIZE=131072 作为上限）
+    local calc_conntrack_max=$(( CT_HASH_SIZE * 4 ))
 
     backup_file "$SYSCTL_FILE"
 
@@ -299,9 +295,9 @@ configure_conntrack_hashsize_t6() {
     modprobe nf_conntrack 2>/dev/null || true
     
     # [M7] FIX: 直接使用 CT_HASH_SIZE 常量，而非硬编码 /4 计算
-    local conntrack_max
-    conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
-    local hashsize=$(( conntrack_max / 4 ))
+    local calc_conntrack_max
+    calc_conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
+    local hashsize=$(( calc_conntrack_max / 4 ))
     # CT_HASH_SIZE 作为上限保护
     if [[ $hashsize -gt $CT_HASH_SIZE ]]; then
         hashsize=$CT_HASH_SIZE

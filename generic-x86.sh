@@ -146,15 +146,14 @@ optimize_memory_generic() {
             # [M11] FIX: 不卸载 zram-config 包（可能包含用户自定义配置），仅停止服务
             systemctl stop zram-config 2>/dev/null || true
             systemctl disable zram-config 2>/dev/null || true
-            apt-get install -y --no-install-recommends zram-tools >> "$APT_LOG" 2>&1 || true
+            apt-get install -y --no-install-recommends zram-tools >> "$APT_LOG" 2>&1 || log_warn "zram-tools 安装失败，继续使用内核内置 zram"
 
             cat > /etc/default/zramswap <<EOF
 ALGO=lzo
 SIZE=${ZRAM_SIZE}
 PRIORITY=100
 EOF
-            systemctl enable zramswap 2>/dev/null || true
-            systemctl restart zramswap 2>/dev/null || true
+            systemctl enable --now zramswap 2>/dev/null || { log_warn "zramswap 启用失败"; return 1; }
             sleep 2
             lsblk | grep -q zram && log_info "ZRAM ${ZRAM_SIZE}MB 已启用"
         fi
@@ -321,7 +320,7 @@ EOF
     chmod 644 "$dropin_file"
 
     if command -v sshd &>/dev/null; then
-        if ! sshd -t -f "$dropin_file" 2>&1 | grep -qi "error"; then
+        if sshd -t -f "$dropin_file" 2>&1; then
             log_info "SSH 加固已应用 + 语法验证通过"
         else
             log_warn "SSH 配置语法异常，移除并跳过"
@@ -363,8 +362,8 @@ install_docker() {
     log_info "添加 Docker GPG 密钥..."
     mkdir -p /etc/apt/keyrings
     if ! curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>> "$APT_LOG"; then
-        log_warn "GPG 密钥获取失败，尝试备用方法..."
-        apt-key adv --keyserver hkps://keyserver.ubuntu.com --recv-keys 0EBFCD88 2>> "$APT_LOG" || true
+        log_error "Docker GPG 密钥获取失败"
+        return 1
     fi
 
     log_info "添加 Docker APT 仓库..."
@@ -415,8 +414,10 @@ EOF
             echo "$merged_json" > "$daemon_json"
             log_info "Docker daemon.json 已合并（保留原有配置）"
         else
-            log_info "Docker daemon.json 已创建（用户原有配置已备份）"
+            log_warn "daemon.json 合并失败，使用默认配置"
         fi
+    else
+        log_info "Docker daemon.json 已创建（新配置）"
     fi
     systemctl restart docker 2>/dev/null || true
     # Docker 健康检查

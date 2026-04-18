@@ -9,7 +9,7 @@
 #
 # 功能:
 #   - 系统内核参数优化（网络、内存、文件系统）
-#   - 安全加固（SSH、防火墙、fail2ban）
+#   - 安全加固（SSH、防火墙）
 #   - 性能调优（swap、tmpfs、I/O调度）
 #   - 可选软件安装（Docker、Node.js、开发工具）
 #
@@ -246,7 +246,7 @@ configure_tmp_tmpfs() {
     fi
     mkdir -p /tmp
     mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null || true
-    if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
+    if ! awk '$2=="/tmp" && $3=="tmpfs"' /etc/fstab > /dev/null 2>&1; then
         echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
     fi
     log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"

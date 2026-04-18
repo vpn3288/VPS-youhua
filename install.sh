@@ -233,6 +233,15 @@ wait_for_apt_lock() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 取消屏蔽 apt-daily 服务（清理 wait_for_apt_lock 的副作用）
+# ─────────────────────────────────────────────────────────────────────────────
+cleanup_apt_mask() {
+    for svc in apt-daily apt-daily-upgrade unattended-upgrades; do
+        systemctl unmask "$svc" 2>/dev/null || true
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 平台检测
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -733,9 +742,6 @@ step4_choose_features() {
                         ;;
                 esac
             fi
-            echo -e "${YELLOW}   否则如果密码登录失败3次，当前 IP 会被封禁1小时。${NC}"
-            echo -e "${YELLOW}   如需保留密码登录作为备份，请先编辑 /etc/ssh/sshd_config 添加密钥后再继续。${NC}"
-            echo ""
             ;;
         c|C)
             CONFIGURE_UNATTENDED="false"
@@ -878,7 +884,9 @@ download_and_run() {
         fi
         log_info "SHA256 校验通过"
     else
-        log_warn "SHA256 占位符，跳过校验"
+        log_error "平台 ${platform} 缺少 SHA256 校验值，请检查配置"
+        rm -rf "$tmpdir"
+        exit 1
     fi
 
     log_step "执行 ${platform}.sh..."
@@ -931,6 +939,8 @@ uninstall_all() {
     echo ""
 
     check_network
+
+    cleanup_apt_mask
 
     local platform; platform=$(detect_platform)
     log_info "检测到平台: $platform"

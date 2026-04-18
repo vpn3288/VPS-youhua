@@ -88,6 +88,14 @@ load_common_optimize() {
 
 load_common_optimize
 
+# FIX: 脚本开头检查并清理上次遗留的 tmpfs /tmp 挂载
+if [[ -f /var/run/vps-youhua-tmpfs-mount ]] && mount | grep -q "tmpfs on /tmp"; then
+    log_warn "检测到上次遗留的 tmpfs /tmp 挂载，尝试卸载..."
+    umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
+        log_error "清理遗留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
+    }
+fi
+
 # ─────────────────────────────────────────────────────────────────────────────
 # TF 卡检测（R4S 专项，多方法交叉验证）
 # ─────────────────────────────────────────────────────────────────────────────
@@ -366,14 +374,13 @@ optimize_network_r4s() {
 # AUDIT-15 FIX: 添加缺失的 conntrack hashsize 配置函数
 # ─────────────────────────────────────────────────────────────────────────────
 configure_conntrack_hashsize_r4s() {
+    local conntrack_max=$1
     log_step "配置 conntrack hashsize（R4S）..."
-    
+
     # 加载 nf_conntrack 模块
     modprobe nf_conntrack 2>/dev/null || true
-    
+
     # 计算 hashsize（通常为 conntrack_max 的 1/4）
-    local conntrack_max
-    conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "131072")
     local hashsize=$((conntrack_max / 4))
     
     # 通过 /sys/module 设置（只读参数，不能用 sysctl）
@@ -557,12 +564,14 @@ install_nodejs() {
     fi
 
     # 卸载临时 tmpfs（编译已完成）
-    # M5 FIX: 检查 umount 是否成功
+    # FIX: 记录到 PID 文件，失败时告警并留存清理标记
     if [[ "$tmpfs_mounted" == "true" ]]; then
         if umount /tmp 2>/dev/null; then
             log_info "已卸载临时 tmpfs"
+            rm -f /var/run/vps-youhua-tmpfs-mount
         else
-            log_warn "umount /tmp 失败，临时 tmpfs 可能未卸载"
+            log_warn "umount /tmp 失败，临时 tmpfs 可能未卸载，写入清理标记"
+            echo "$$" > /var/run/vps-youhua-tmpfs-mount
         fi
     fi
 
@@ -875,7 +884,7 @@ main() {
     # BUG#1 FIX: R4S 在 zram 之后才检查 swap（避免与 zram 冲突）
     configure_swap
     configure_sysctl_r4s
-    configure_conntrack_hashsize_r4s
+    configure_conntrack_hashsize_r4s "$((${SYS_MEM_MB} * 32))"
     configure_limits
     configure_fstab
     configure_journald

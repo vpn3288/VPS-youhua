@@ -449,13 +449,9 @@ EOF
     # 可选 purge（仅当明确指定时）
     if [[ "${CLEAN_SYSTEM:-false}" == "true" ]]; then
         local remove_pkgs=(snapd apache2-bin apache2-utils nginx nginx-light nginx-full postfix exim4-base exim4-config)
-        local to_remove=()
-        for pkg in "${remove_pkgs[@]}"; do
-            dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" && to_remove+=("$pkg")
-        done
-        [[ ${#to_remove[@]} -gt 0 ]] && {
-            apt-get remove --purge -y "${to_remove[@]}" >> "$APT_LOG" 2>&1 || true
-        }
+        local to_remove
+        to_remove=$(dpkg -l "${remove_pkgs[@]}" 2>/dev/null | awk '/^ii/{print $2}')
+        [[ -n "$to_remove" ]] && apt-get remove --purge -y $to_remove >> "$APT_LOG" 2>&1 || true
     fi
 
     apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
@@ -1183,7 +1179,7 @@ EOF
 
     # 语法验证（防止把自己锁外面）
     if command -v sshd &>/dev/null; then
-        if ! sshd -t -f "$dropin_file" 2>&1 | grep -qi "error"; then
+        if sshd -t -f "$dropin_file" 2>&1; then
             log_info "SSH 加固已应用 + 语法验证通过"
         else
             log_warn "SSH 配置语法异常，移除并跳过"

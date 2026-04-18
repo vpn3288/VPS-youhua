@@ -605,7 +605,7 @@ main() {
 
     # M16 FIX: 远程执行时 stdin 可能非 TTY（ssh host 'sudo bash script'）
     # 只有在真正可交互时才显示确认提示
-    if [[ -t 0 ]] && ! read -t 0; then
+    if [[ -t 0 ]]; then
         echo -n "继续执行？(y/n，默认 y): "
         read -r -t 30 confirm || confirm="y"
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && exit 0

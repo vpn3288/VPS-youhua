@@ -79,27 +79,31 @@ load_common_optimize
 
 # N5105 内存分级
 _detect_n5105_memory_profile() {
+    # 内存档位策略说明：
+    # - 高内存(≥16GB): 无需zram, swappiness=10, 大TCP缓冲
+    # - 中等内存(4-16GB): 无需zram, swappiness=15, 中TCP缓冲
+    # - 低内存(<4GB): 启用zram 512MB, swappiness=20, 小TCP缓冲
     if [[ $SYS_MEM_MB -ge 16384 ]]; then
-        readonly ZRAM_SIZE=0
-        readonly SWAPPINESS=10
-        readonly TCP_BUF_MAX=33554432
-        readonly CT_MAX=131072
-        readonly MIN_FREE_KB=32768
-        readonly PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
+        local ZRAM_SIZE=0
+        local SWAPPINESS=10
+        local TCP_BUF_MAX=33554432
+        local CT_MAX=131072
+        local MIN_FREE_KB=32768
+        local PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
     elif [[ $SYS_MEM_MB -ge 4096 ]]; then
-        readonly ZRAM_SIZE=0
-        readonly SWAPPINESS=15
-        readonly TCP_BUF_MAX=16777216
-        readonly CT_MAX=65536
-        readonly MIN_FREE_KB=32768
-        readonly PROFILE_DESC="中等内存 (${SYS_MEM_MB}MB)"
+        local ZRAM_SIZE=0
+        local SWAPPINESS=15
+        local TCP_BUF_MAX=16777216
+        local CT_MAX=65536
+        local MIN_FREE_KB=32768
+        local PROFILE_DESC="中等内存 (${SYS_MEM_MB}MB)"
     else
-        readonly ZRAM_SIZE=512
-        readonly SWAPPINESS=20
-        readonly TCP_BUF_MAX=8388608
-        readonly CT_MAX=32768
-        readonly MIN_FREE_KB=16384
-        readonly PROFILE_DESC="低内存 (${SYS_MEM_MB}MB)"
+        local ZRAM_SIZE=512
+        local SWAPPINESS=20
+        local TCP_BUF_MAX=8388608
+        local CT_MAX=32768
+        local MIN_FREE_KB=16384
+        local PROFILE_DESC="低内存 (${SYS_MEM_MB}MB)"
     fi
 }
 

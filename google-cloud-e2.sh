@@ -48,7 +48,9 @@ readonly JOURNALD_MAX_USE="50M"
 readonly TMPFS_SIZE="256M"
 
 # GCP e2-micro TCP 缓冲（1GB 内存 3%，上限 8MB，下限 4MB）
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
+# 三层三元表达式：对 >128MB 机器，(m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024
+# 简化：取内存3%（上限8MB，下限4MB）
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; t=m*31457; if(t>8388608)t=8388608; else if(t<4194304)t=4194304; printf "%.0f",t}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512
@@ -78,7 +80,6 @@ load_common_optimize() {
     
     # 下载到临时目录
     local tmpdir="/tmp/vps-youhua"
-    mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         source "${tmpdir}/common-optimize.sh"
@@ -155,6 +156,8 @@ gcp_cloud_cleanup() {
     log_step "GCP Cloud 专属清理..."
 
     # 关闭 GCP 的 ce-susAttd（Google 的安全守护，消耗资源）
+    # 只清理 ce-susAttd，保留 google-guest-agent（处理 IP/路由/启动脚本必需）
+    # 其他 GCP 服务如 accounts-daemon/metadata-server 无需干预
     for svc in ce-susAttd; do
         if systemctl is-active "$svc" &>/dev/null; then
             systemctl stop "$svc" 2>/dev/null || true
@@ -186,7 +189,9 @@ optimize_memory_gcp() {
         fi
         local mem_kb
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-        local zram_size=$((mem_kb * 1024 / 2))
+        # mem_kb单位为KB，*1024转为字节，再/2得到zram盘大小（字节）
+        local mem_bytes=$((mem_kb * 1024))
+        local zram_size=$((mem_bytes / 2))
         if [[ -f /sys/block/zram0/disksize ]]; then
             echo "${zram_size}" > /sys/block/zram0/disksize 2>/dev/null || true
             mkswap /dev/zram0 >/dev/null 2>&1 || true
@@ -215,7 +220,7 @@ configure_sysctl_gcp() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── 内存（1GB 精简）────────────────────────────────────────────────────────────
-vm.swappiness = ${SWAPPINESS}
+vm.swappiness = 20  # 优先使用Swap保护内存（与configure_swap一致）
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = 50
 vm.oom_kill_allocating_task = 1
@@ -268,10 +273,17 @@ kernel.sched_min_granularity_ns = 1000000
 kernel.sched_wakeup_granularity_ns = 2000000
 EOF
 
-    if sysctl -p "$SYSCTL_FILE" 2>&1 | grep -v "^$" | head -5; then
+    # 检查返回码：关键参数错误降为 warn 但仍记录，其他错误报 error
+    if sysctl -p "$SYSCTL_FILE" 2>&1; then
         log_info "sysctl 参数已应用（$SYSCTL_FILE）"
     else
-        log_warn "sysctl 部分参数不支持当前内核（可忽略）"
+        local sysctl_output
+        sysctl_output=$(sysctl -p "$SYSCTL_FILE" 2>&1 || true)
+        if echo "$sysctl_output" | grep -qiE "error|invalid|permission|readonly"; then
+            log_error "sysctl 应用失败：$(echo "$sysctl_output" | head -3)"
+        else
+            log_warn "sysctl 部分参数不支持当前内核：$(echo "$sysctl_output" | head -3)"
+        fi
     fi
 }
 
@@ -309,6 +321,7 @@ optimize_cpu_gcp() {
 # GCP Cloud 网络优化（VPC + 共享 CPU）
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_network_gcp() {
+    SYS_CPU_CORES=${SYS_CPU_CORES:-$(nproc 2>/dev/null || echo 1)}
     log_step "优化 GCP Cloud 网络..."
 
     # GCP VPC 网卡优化
@@ -380,7 +393,7 @@ optimize_oom() {
     cat > /etc/systemd/system.conf.d/99-oom-policy.conf <<'EOF'
 [Manager]
 OOMPolicy=continue
-OOMScoreAdjust=-900
+OOMScoreAdjust=-500
 EOF
     systemctl daemon-reload 2>/dev/null || true
     log_info "OOM Killer 配置完成"
@@ -396,6 +409,9 @@ configure_journald() {
 [Journal]
 Storage=${JOURNALD_STORAGE}
 SystemMaxUse=${JOURNALD_MAX_USE}
+# 同时设置 SystemMaxUse 和 MaxRetentionSec=7day：
+# SystemMaxUse=50M 限制磁盘占用，MaxRetentionSec=7day 限制日志保留时间
+# 双重保险确保 e2-micro 30GB SSD 不会被日志撑满
 SystemMaxFileSize=10M
 MaxRetentionSec=7day
 Compress=yes
@@ -491,7 +507,7 @@ uninstall_all() {
         exit 1
     fi
 
-    if [[ "${1:-}" != "--uninstall" ]]; then
+    if [[ "${UNINSTALL_MODE:-}" != "true" ]]; then
         return 0
     fi
 
@@ -530,7 +546,7 @@ uninstall_all() {
 
     # 卸载 /tmp tmpfs
     if mount | grep -q "tmpfs on /tmp"; then
-        umount /tmp 2>/dev/null || true
+        umount /tmp 2>/dev/null || log_warn "umount /tmp 失败（可能被进程占用），建议重启系统"
         log_info "/tmp tmpfs 已卸载"
     fi
 
@@ -567,6 +583,7 @@ uninstall_all() {
 # BUG#15+17: 编译依赖（python3-venv/cmake/pkg-config/libssl-dev）
 install_build_deps() {
     log_step "安装编译依赖..."
+    log_info "正在安装编译依赖..."
     install_if_missing build-essential cmake pkg-config libssl-dev \
         python3-venv python3-dev python3-pip \
         libffi-dev libxml2-dev libxslt1-dev zlib1g-dev
@@ -589,7 +606,7 @@ main() {
     for arg in "$@"; do
         case "$arg" in
             --optimize-only) export SKIP_SOFTWARE_SCRIPT="true" ;;
-            --uninstall) ;;
+            --uninstall) export UNINSTALL_MODE="true" ;;
         esac
     done
 
