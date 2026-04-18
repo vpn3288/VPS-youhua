@@ -447,7 +447,7 @@ uninstall_all() {
         exit 1
     fi
 
-    if [[ "${1:-}" == "--uninstall" ]]; then
+    if [[ "${1:-}" != "--uninstall" ]]; then
         return 0
     fi
 
@@ -623,8 +623,9 @@ main() {
     # BUG#1+22 FIX: Oracle 1C4G 在 zram 就位后才判断 swap（避免浪费磁盘 swap）
     configure_swap
     configure_sysctl_oracle
-    # AUDIT-2 FIX: configure_conntrack_hashsize 函数
     configure_conntrack_hashsize
+
+}
 
 configure_conntrack_hashsize() {
     log_step "配置 nf_conntrack_hashsize..."
@@ -640,7 +641,8 @@ configure_conntrack_hashsize() {
         log_warn "nf_conntrack 模块未加载，跳过 hashsize 配置"
     fi
 }
-    configure_limits
+
+configure_limits() {
 
     # BUG#8: 低内存极限清理
     [[ "${IS_LOW_MEMORY}" == "true" ]] && configure_lowmem_purge

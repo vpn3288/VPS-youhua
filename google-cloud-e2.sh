@@ -47,10 +47,8 @@ readonly JOURNALD_STORAGE="volatile"
 readonly JOURNALD_MAX_USE="50M"
 readonly TMPFS_SIZE="256M"
 
-# GCP e2-micro TCP 缓冲（1GB 内存 3%，上限 8MB，下限 4MB）
-# 三层三元表达式：对 >128MB 机器，(m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024
-# 简化：取内存3%（上限8MB，下限4MB）
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; t=m*31457; if(t>8388608)t=8388608; else if(t<4194304)t=4194304; printf "%.0f",t}' /proc/meminfo)
+# GCP e2-micro TCP 缓冲（内存3%，上限8MB，下限4MB）
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024;t=m*31457280;if(t>8388608)t=8388608;else if(t<4194304)t=4194304;printf "%.0f",t}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512
@@ -176,8 +174,8 @@ optimize_memory_gcp() {
     log_step "配置内存优化..."
 
     # 透明大页（Intel CPU，关闭 defrag 减少抖动）
-    echo "always" > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
-    echo "madvise" > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
+    echo "never" > /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null || true
+    echo "never" > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
 
     # zram 内存扩展（e2-micro 1GB，开启压缩约等效 +512MB）
     if ! modprobe zram 2>/dev/null; then
@@ -220,7 +218,7 @@ configure_sysctl_gcp() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── 内存（1GB 精简）────────────────────────────────────────────────────────────
-vm.swappiness = 20  # 优先使用Swap保护内存（与configure_swap一致）
+vm.swappiness = ${SWAPPINESS}  # 优先使用Swap保护内存（与configure_swap一致）
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = 50
 vm.oom_kill_allocating_task = 1
@@ -334,7 +332,7 @@ optimize_network_gcp() {
         ethtool -K "$name" gso on 2>/dev/null || true
         ethtool -K "$name" gro on 2>/dev/null || true
         ethtool -K "$name" tx-gso-robust on 2>/dev/null || true
-        ip link set "$name" txqueuelen 1000 2>/dev/null || true
+        ethtool -s "$name" tx-queue-len 1000 2>/dev/null || true
 
         # RPS（多核时启用，单核跳过）
         if [[ $SYS_CPU_CORES -gt 1 ]]; then

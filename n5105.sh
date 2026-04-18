@@ -35,7 +35,7 @@ set -euo pipefail
 # 平台信息
 # ─────────────────────────────────────────────────────────────────────────────
 readonly PLATFORM_NAME="N5105/N5095 小主机"
-readonly PLATFORM_DESC="Intel N5105 | x86_64 | SSD | 有风扇"
+PLATFORM_DESC="Intel N5105 | x86_64 | SSD | 有风扇"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 平台差异变量
@@ -497,10 +497,20 @@ uninstall_all() {
 
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
-    echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r -t 30 confirm || confirm=""
-    confirm="${confirm,,}"
-    [[ -z "$confirm" || "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    if [[ ! -t 0 ]]; then
+        # 非交互环境：检查 FORCE_UNINSTALL 标志
+        if [[ "$FORCE_UNINSTALL" != "true" ]]; then
+            echo "错误：非交互环境需设置 FORCE_UNINSTALL=true" >&2
+            echo "示例: FORCE_UNINSTALL=true $0 --uninstall" >&2
+            exit 1
+        fi
+        confirm="yes"
+    else
+        echo -n "确认卸载？(输入 'yes' 继续): "
+        read -r -t 30 confirm || confirm=""
+        confirm="${confirm,,}"
+        [[ -z "$confirm" || "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    fi
 
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"

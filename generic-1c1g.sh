@@ -48,7 +48,7 @@ readonly JOURNALD_MAX_USE="30M"
 readonly TMPFS_SIZE="256M"
 
 # 1C1G TCP 缓冲（极保守：内存 3%，上限 8MB，下限 4MB）
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024; printf "%.0f", (m*0.03*1024*1024>8388608)?8388608:(m*0.03*1024*1024<4194304)?4194304:m*0.03*1024*1024}' /proc/meminfo)
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024/1024;t=m*31457280;if(t>8388608)t=8388608;else if(t<4194304)t=4194304;printf "%.0f",t}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512       # 1C1G 低资源限制
@@ -182,8 +182,10 @@ configure_zram_1c1g() {
         if swapon --show 2>/dev/null | grep -q "^/dev/zram0"; then
             swapoff "${zram_dev}" 2>/dev/null || true
         fi
-        # 重置 zram 设备
-        echo 0 > /sys/block/zram0/disksize 2>/dev/null || true
+        # 重置 zram 设备（使用 reset 文件，比 disksize=0 更可靠）
+        if [[ -f /sys/block/zram0/reset ]]; then
+            echo 1 > /sys/block/zram0/reset 2>/dev/null || true
+        fi
         # 重新配置
         echo "${zram_size_bytes}" > /sys/block/zram0/disksize 2>/dev/null || true
         mkswap "${zram_dev}" >/dev/null 2>&1 || true
@@ -450,8 +452,6 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#1: 低内存 Swap 创建
-    configure_swap
     # BUG#5: IPv6 黑洞检测
     configure_ipv6_health
     # BUG#7: DNS 锁定防篡改
@@ -504,8 +504,9 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    # Proxy-only 平台不安装 Docker / Node.js
-    log_info "代理节点专用模式，跳过 Docker / Node.js 安装"
+    if [[ "${SKIP_SOFTWARE_SCRIPT}" == "true" ]]; then
+        log_info "代理节点专用模式，跳过 Docker / Node.js 安装"
+    fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 

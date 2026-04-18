@@ -214,7 +214,7 @@ net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_syncookies = 1
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
-net.netfilter.nf_conntrack_max = ${conntrack_max}
+net.netfilter.nf_conntrack_max = ${calc_conntrack_max}
 # AUDIT-13 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
 # 将在 configure_conntrack_hashsize_t6() 函数中通过 /sys/module 设置
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
@@ -610,6 +610,7 @@ uninstall_all() {
     rm -f /etc/cron.weekly/fstrim-emmc
     rm -f /etc/profile.d/nodejs-memory.sh
     rm -f /etc/docker/daemon.json
+    rm -f /etc/modprobe.d/nf_conntrack.conf
     # 恢复 Armbian zram-config 默认值
     if [[ -f /etc/default/armbian-zram-config ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=false/' /etc/default/armbian-zram-config 2>/dev/null || true

@@ -216,6 +216,7 @@ wait_for_apt_lock() {
           pgrep -x apt-get >/dev/null 2>&1 || \
           pgrep -x dpkg >/dev/null 2>&1; do
         if [[ $waited -ge $max_wait ]]; then
+            cleanup_apt_mask
             log_error "APT 锁等待超时（${max_wait}s），请手动检查："
             log_error "  1. ps aux | grep -E 'apt|dpkg'"
             log_error "  2. sudo kill <PID>"

@@ -91,8 +91,8 @@ check_zram_status() {
     log_section "zram 内存扩展状态"
     if lsmod 2>/dev/null | grep -q zram; then
         local zram_devs
-        zram_devs=$(ls -la /sys/block/zram* 2>/dev/null | wc -l)
-        echo -e "  ${GREEN}✓ zram 模块已加载${RESET}（$(($zram_devs - 1)) 个设备）"
+        zram_devs=$(ls -d /sys/block/zram* 2>/dev/null | wc -l)
+        echo -e "  ${GREEN}✓ zram 模块已加载${RESET}（${zram_devs} 个设备）"
         # 显示各 zram 设备大小
         for dev in /sys/block/zram*; do
             [[ -d "$dev" ]] || continue
@@ -429,7 +429,7 @@ check_sysctl_memory() {
         echo -e "    ${GREEN}✓${RESET} armbian-ramlog /var/log在zram中 (零TF卡写入)"
         # BUG#42 Fix: 检查 armbian-ramlog SIZE 是否合理（应为 128M 或以上）
         local ramlog_size
-        ramlog_size=$(grep -oP '(?<=^SIZE=).+' /etc/default/armbian-ramlog 2>/dev/null | tr -d '"' || echo "")
+        ramlog_size=$(sed -n 's/^SIZE=//p' /etc/default/armbian-ramlog 2>/dev/null | tr -d '"' || echo "")
         if [[ -n "$ramlog_size" ]]; then
             log_pair "armbian-ramlog SIZE" "$ramlog_size"
         else
@@ -660,7 +660,7 @@ check_network_stats() {
 
     echo ""
     echo -e "  ${BOLD}[网卡流量 (RX=接收 TX=发送)]${RESET}"
-    cat /proc/net/dev 2>/dev/null | grep -v "Inter\|face" | awk '{print $1, "RX:"$3, "TX:"$11}' | while read -r iface rx tx; do
+    cat /proc/net/dev 2>/dev/null | grep -v "Inter\|face" | awk '{print $1, "RX:"$2, "TX:"$10}' | while read -r iface rx tx; do
         echo -e "    ${CYAN}${iface}${RESET} RX=$rx  TX=$tx"
     done
 }
