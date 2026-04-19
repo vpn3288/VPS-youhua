@@ -344,14 +344,19 @@ uninstall_all() {
         return 0
     fi
 
-    echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
-    echo ""
-    echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r -t 30 confirm || confirm=""
-    confirm="${confirm,,}"
-    if [[ -z "$confirm" || "$confirm" != "yes" ]]; then
-        echo "已取消卸载。"
-        exit 0
+    # 非交互式环境（如SSH远程执行）跳过确认
+    if [[ -t 0 ]]; then
+        echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
+        echo ""
+        echo -n "确认卸载？(输入 'yes' 继续): "
+        read -r -t 30 confirm || confirm=""
+        confirm="${confirm,,}"
+        if [[ -z "$confirm" || "$confirm" != "yes" ]]; then
+            echo "已取消卸载。"
+            exit 0
+        fi
+    else
+        echo -e "${YELLOW}非交互模式，自动确认卸载...${NC}"
     fi
 
     echo ""

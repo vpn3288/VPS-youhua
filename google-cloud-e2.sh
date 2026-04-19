@@ -513,18 +513,33 @@ uninstall_all() {
         exit 1
     fi
 
-    if [[ "${UNINSTALL_MODE:-}" != "true" ]]; then
+    if [[ "${1:-}" != "--uninstall" ]]; then
         return 0
     fi
 
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
-    echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r -t 30 confirm || confirm=""
-    confirm="${confirm,,}"
-    if [[ -z "$confirm" || "$confirm" != "yes" ]]; then
-        echo "已取消卸载。"
-        exit 0
+    # M6 FIX: 非交互卸载confirm兜底（SSH远程/cron场景）
+    if [[ -t 0 ]]; then
+        echo -n "确认卸载？(输入 'yes' 继续): "
+        read -r -t 30 confirm || confirm=""
+        confirm="${confirm,,}"
+        if [[ -z "$confirm" ]]; then
+            if [[ "${FORCE_UNINSTALL:-false}" == "true" ]]; then
+                confirm="yes"
+            else
+                echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+                exit 0
+            fi
+        fi
+        [[ "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    else
+        # 非交互环境（SSH远程执行/cron）：检查 FORCE_UNINSTALL 变量
+        if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
+            echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+            exit 0
+        fi
+        log_info "非交互模式 + FORCE_UNINSTALL=true，自动确认卸载"
     fi
 
     echo ""
@@ -612,14 +627,16 @@ main() {
     for arg in "$@"; do
         case "$arg" in
             --optimize-only) export SKIP_SOFTWARE_SCRIPT="true" ;;
-            --uninstall) export UNINSTALL_MODE="true" ;;
+            --uninstall) ;;
         esac
     done
 
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
-    uninstall_all "$@" || exit 1
+    if [[ "${1:-}" == "--uninstall" ]]; then
+        uninstall_all "$@" || exit 1
+    fi
 
     clear
     echo "========================================================================"

@@ -873,6 +873,7 @@ main() {
     for arg in "$@"; do
         case "$arg" in
             --optimize-only) export SKIP_SOFTWARE_SCRIPT="true" ;;
+            --docker) export INSTALL_DOCKER="true" ;;
             --uninstall) ;;
         esac
     done

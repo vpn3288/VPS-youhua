@@ -683,14 +683,14 @@ check_vs_targets() {
     check_ok() {
         local p="$1"; local v="$2"; local d="$3"
         echo -e "    ${GREEN}✓${RESET} ${CYAN}${p}${RESET} = ${GREEN}${v}${RESET}  ${DIM}${d}${RESET}"
-        ((passed++))
+        ((++passed))
     }
 
     check_bad() {
         local p="$1"; local v="$2"; local e="$3"; local d="$4"
         echo -e "    ${RED}✗${RESET} ${CYAN}${p}${RESET} = ${RED}${v}${RESET}"
         echo -e "         目标: ${GREEN}${e}${RESET}  ${DIM}${d}${RESET}"
-        ((failed++))
+        ((++failed))
     }
 
     check_eq() {

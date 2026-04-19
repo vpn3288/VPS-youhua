@@ -320,7 +320,7 @@ EOF
     chmod 644 "$dropin_file"
 
     if command -v sshd &>/dev/null; then
-        if sshd -t -f "$dropin_file" 2>&1; then
+        if sshd -t 2>&1; then
             log_info "SSH 加固已应用 + 语法验证通过"
         else
             log_warn "SSH 配置语法异常，移除并跳过"
