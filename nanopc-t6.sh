@@ -46,8 +46,7 @@ readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"             # eMMC 可以用更多日志
 readonly TMPFS_SIZE="1024M"                  # 16GB 机器 /tmp 可以更大
 
-# T6 内存：在 detect_system() 之后动态计算（不在此处用 readonly 硬编码）
-ZRAM_SIZE=0
+# T6 使用 Armbian 原生 zram-config（SIZE=30%），不使用 ZRAM_SIZE 变量
 readonly ZRAM_ALGO="lz4"
 readonly SWAPPINESS=20                        # 16GB 积极回收 page cache
 readonly MIN_FREE_KB=65536                     # 16GB OOM 防线
@@ -743,8 +742,6 @@ main() {
     install_base_tools
     clean_system
     optimize_memory_t6
-    # [M8] FIX: ZRAM_SIZE 在 detect_system() 之后计算，防止 0 值
-    ZRAM_SIZE=$(( SYS_MEM_MB / 16 ))    # 16GB → 1024MB，8GB → 512MB
     # BUG#1 FIX: T6 在 zram 之后才检查 swap（避免与 zram 冲突）
     configure_swap
     configure_sysctl_t6

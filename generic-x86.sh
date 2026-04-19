@@ -638,12 +638,22 @@ uninstall_all() {
         return 0
     fi
 
-    echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
-    echo ""
-    echo -n "确认卸载？(输入 'yes' 继续): "
-    read -r -t 30 confirm || confirm=""
-    confirm="${confirm,,}"
-    [[ -z "$confirm" || "$confirm" != "yes" ]] && { echo "已取消。"; exit 0; }
+    # 非交互卸载时跳过确认提示
+    if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
+        echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
+        echo ""
+        echo -n "确认卸载？(输入 'yes' 继续): "
+        read -r -t 30 confirm || confirm=""
+        confirm="${confirm,,}"
+        if [[ -z "$confirm" ]]; then
+            echo "已取消卸载（未检测到 TTY，请设置 FORCE_UNINSTALL=true 强制卸载）。"
+            exit 0
+        fi
+        if [[ "$confirm" != "yes" ]]; then
+            echo "已取消卸载。"
+            exit 0
+        fi
+    fi
 
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
