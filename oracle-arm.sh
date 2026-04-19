@@ -46,8 +46,8 @@ readonly JOURNALD_STORAGE="persistent"
 readonly JOURNALD_MAX_USE="100M"
 readonly TMPFS_SIZE="512M"
 
-# Oracle Cloud TCP 缓冲（内存的 5%，上限 64MB，下限 16MB）
-# 使用纯整数运算代替浮点计算
+# Oracle Cloud ARM Ampere 带宽：每核 1Gbps（1C=1G，2C=2G，4C=4G），远高于 X86 免费小户型 50Mbps
+# 内存 5% 作为 TCP 缓冲，上限 64MB（2C16G），下限 16MB（1C4G）
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*5/100; if(buf>67108864) buf=67108864; if(buf<16777216) buf=16777216; printf "%d", buf}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=131072
@@ -78,7 +78,7 @@ load_common_optimize() {
     
     # 下载到临时目录
     local tmpdir="/tmp/vps-youhua"
-    local sha256_expected="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
+    local sha256_expected="66db71c53e49b33b807eb03623f9f164aab42549213d8a037fc4d363ac051d35"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then

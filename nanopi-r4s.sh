@@ -80,7 +80,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         # HIGH FIX: SHA256 校验供应链安全
-        local sha256_expected="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
+        local sha256_expected="66db71c53e49b33b807eb03623f9f164aab42549213d8a037fc4d363ac051d35"
         local sha256_actual
         sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
         if [[ "$sha256_actual" != "$sha256_expected" ]]; then

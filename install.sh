@@ -17,15 +17,15 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["common"]="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
+    ["common"]="66db71c53e49b33b807eb03623f9f164aab42549213d8a037fc4d363ac051d35"
     ["nanopi-r4s"]="6a64506bdba39bf2b8459b209ec214844ec5e27f8ae32a94b7559473037480f0"
     ["nanopc-t6"]="91165e55df35329d84bc2e3333ce7646aa166451a8c233f59b76489984283a81"
-    ["oracle-arm"]="3e2da0898cbc002678e6d9d996d2c9b0d051da31bf6485026019e9418ab41428"
-    ["oracle-1c4g"]="377801d0089d7d8596c0ebbec2926cc49fd50160969939a4a56a11ff37baea76"
+    ["oracle-arm"]="7d9a2236719930d13eca1df7c3ea13d0c48e77dc17323b647e5e068fdb3f1a9e"
+    ["oracle-1c4g"]="6fb6f9ff1750380e284f6f366b7e33caec016fc651385e0e36183c2f2918e849"
     ["n5105"]="2bca0e3c851474e7c4ac07686354c03a469a26831f260d2b28f414584378e4c5"
     ["generic-x86"]="015df254973ce3f397ffbb70dcb243d87f3f467cdd868c0565528956aba08362"
     ["generic-1c1g"]="3d5b4a9a120fbb8fd16bf79d69cdb6009092f10a1a376d507c5d23de1513bb25"
-    ["google-cloud-e2"]="3861f503bb16e568f51fe9a3c074c1ca94b461a3336c94ca522892beb7c1c18f"
+    ["google-cloud-e2"]="9bb7ec309690fd6cd5ea652df86abe2af185743e1b1b2e6ccb5b8adb63a42e98"
     ["verify-v3.4"]="2016f79fecab0916d4605ef2a8082fb01602075a4fe47367174da7069766c0c4"
 )
 
@@ -990,10 +990,36 @@ uninstall_all() {
         rm -rf "$tmpdir"
         exit 1
     fi
+
+    # [FIX] uninstall 下载也必须 SHA256 校验，防止供应链攻击
+    local expected="${EXPECTED_SHA256[$platform]:-}"
+    if [[ -n "$expected" ]]; then
+        local actual; actual=$(sha256sum "$platform_file" | awk '{print $1}')
+        if [[ "$actual" != "$expected" ]]; then
+            log_error "SHA256 校验失败！平台脚本可能被篡改。"
+            log_error "期望: $expected"
+            log_error "实际: $actual"
+            rm -rf "$tmpdir"
+            exit 1
+        fi
+    fi
+
     if ! curl -fsSL "${RAW_BASE}/common-optimize.sh" -o "$common_file"; then
         log_error "下载失败: ${RAW_BASE}/common-optimize.sh"
         rm -rf "$tmpdir"
         exit 1
+    fi
+
+    local common_expected="${EXPECTED_SHA256[common]:-}"
+    if [[ -n "$common_expected" ]]; then
+        local common_actual; common_actual=$(sha256sum "$common_file" | awk '{print $1}')
+        if [[ "$common_actual" != "$common_expected" ]]; then
+            log_error "common-optimize.sh SHA256 校验失败！疑似供应链污染。"
+            log_error "期望: $common_expected"
+            log_error "实际: $common_actual"
+            rm -rf "$tmpdir"
+            exit 1
+        fi
     fi
 
     bash "$platform_file" --uninstall

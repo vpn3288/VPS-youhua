@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.4 R76
+# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v${SCRIPT_VERSION}
 # 硬件: Google Cloud e2-micro, 1vCPU(共享) 1GB RAM, 30GB SSD
 # 特点: GCP 共享 CPU 特化优化（burstable CPU + Intel + VPC 网络）
 #       GCP Always Free 机型永久免费（1vCPU 1GB，非 ARM）
@@ -48,8 +48,8 @@ readonly JOURNALD_MAX_USE="50M"
 readonly TMPFS_SIZE="256M"
 
 # GCP e2-micro TCP 缓冲（内存3%，上限8MB，下限4MB）
-# M-2 FIX: awk浮点运算后强制转换为整数，并加整数范围限制确保边界安全
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024;t=int(m*1024*3/100);if(t>8388608)t=8388608;else if(t<4194304)t=4194304;print t}' /proc/meminfo)
+# 修正：MemTotal($2)为KB，转换为字节后乘3%，单位一致
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024;t=int(m*3/100);if(t>8388608)t=8388608;else if(t<4194304)t=4194304;print t}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512
@@ -437,11 +437,14 @@ configure_tmp_tmpfs() {
         return 0
     fi
     mkdir -p /tmp
-    mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null || true
-    if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
-        echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
+    if mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null; then
+        if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
+            echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
+        fi
+        log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"
+    else
+        log_warn "/tmp tmpfs 挂载失败，跳过 fstab 写入"
     fi
-    log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -641,7 +644,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Google Cloud e2-micro 共享 CPU 优化脚本 v${SCRIPT_VERSION} R76${NC}"
+    echo -e "${GREEN}  Google Cloud e2-micro 共享 CPU 优化脚本 v${SCRIPT_VERSION}${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${YELLOW}  ⚠️  GCP Always Free 永久免费机型${NC}"
@@ -725,7 +728,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ GCP e2-micro v${SCRIPT_VERSION} R76 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ GCP e2-micro v${SCRIPT_VERSION} 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

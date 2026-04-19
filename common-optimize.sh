@@ -947,11 +947,8 @@ configure_swap() {
         echo "/swapfile none swap sw 0 0" >> /etc/fstab
     fi
 
-    # swappiness: 低内存代理节点设为 20（1C1G/GCP 场景尽量用 Swap 保护内存）
-    # 仅在 swap 创建成功后设置
-    echo 20 > /proc/sys/vm/swappiness 2>/dev/null || true
-    sysctl -w vm.swappiness=20 2>/dev/null || true
-    log_info "Swap 1GB 创建完成，swappiness=20"
+    # swappiness 由各平台 sysctl 持久化配置控制（vm.swappiness 在 /etc/sysctl.d/ 里统一设置）
+    log_info "Swap 1GB 创建完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -373,7 +373,9 @@ TF卡写入寿命有限。SWAP会产生大量随机小写入，严重影响TF卡
 
 ### Q: Oracle Cloud ARM 为什么 TCP缓冲不是固定值？
 
-Oracle Cloud 的网络带宽是有限制的（最大 50Mbps Small Tenant），不是越高越好。脚本使用动态计算：内存的5%，上限64MB（2C16G）或32MB（1C4G）。这样在不同内存规格下都能获得最优值。
+Oracle Cloud 的网络带宽与实例规格相关：
+- **X86 免费小户型 (AMD/E4)**：最大 50Mbps（Small Tenant），确实不是越高越好。
+- **ARM Ampere (1C/2C/4C)**：每核 1Gbps，最大 4Gbps（4核），带宽远大于 X86 免费版。脚本使用动态计算：内存的5%，上限64MB（2C16G）或32MB（1C4G），在不同内存规格下都能获得最优值。
 
 ### Q: 如何确认 BBR 已开启？
 

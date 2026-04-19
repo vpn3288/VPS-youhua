@@ -84,7 +84,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
 
     local dest="${tmpdir}/common-optimize.sh"
-    local sha256_expected="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
+    local sha256_expected="66db71c53e49b33b807eb03623f9f164aab42549213d8a037fc4d363ac051d35"
     local sha256_actual=""
 
     # 主站下载（带 SHA256 验证）
@@ -210,7 +210,7 @@ optimize_memory_oracle() {
 configure_sysctl_oracle() {
     log_step "配置 sysctl 系统参数..."
 
-    # 先写入通用安全加固参数（BUG#FIX: 丢失通用参数）
+    backup_file "$SYSCTL_FILE"
     write_common_sysctl "$SYSCTL_FILE"
 
     cat >> "$SYSCTL_FILE" <<EOF
@@ -243,7 +243,7 @@ net.ipv4.tcp_syncookies = 1
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 1800
 
-# ── TCP 缓冲（内存 3%，自适应）───────────────────────────────────────────────
+# ── TCP 缓冲（内存 4%，自适应）───────────────────────────────────────────────
 net.core.rmem_max = ${TCP_BUF_MAX}
 net.core.wmem_max = ${TCP_BUF_MAX}
 net.ipv4.tcp_rmem = 4096 262144 ${TCP_BUF_MAX}
@@ -756,7 +756,7 @@ configure_limits() {
     echo "  - zram 内存压缩（约等效扩展 2 倍内存）"
     echo "  - conntrack: ${CT_MAX}（1C4G 保守值）"
     echo "  - BBR + fq qdisc"
-    echo "  - journald: volatile + ${JOURNALD_MAX_USE} 限制"
+    echo "  - journald: ${JOURNALD_STORAGE} + ${JOURNALD_MAX_USE} 限制"
     echo "  - /tmp: tmpfs ${TMPFS_SIZE}"
     echo "  - 每日自动清理"
     echo ""
