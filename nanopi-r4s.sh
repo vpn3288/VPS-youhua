@@ -884,11 +884,13 @@ main() {
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
     FORCE_UNINSTALL="${FORCE_UNINSTALL:-false}"
 
-    uninstall_all "$@" || exit 1
+    if [[ "${1:-}" == "--uninstall" ]]; then
+        uninstall_all "$@" || exit 1
+    fi
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R71${NC}"
+    echo -e "${GREEN}  NanoPi R4S 专用优化安装脚本 v${SCRIPT_VERSION} R76${NC}"
     echo "========================================================================"
     echo ""
 

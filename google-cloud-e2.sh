@@ -641,7 +641,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Google Cloud e2-micro 共享 CPU 优化脚本 v${SCRIPT_VERSION} R65${NC}"
+    echo -e "${GREEN}  Google Cloud e2-micro 共享 CPU 优化脚本 v${SCRIPT_VERSION} R76${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${YELLOW}  ⚠️  GCP Always Free 永久免费机型${NC}"
@@ -725,7 +725,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ GCP e2-micro v${SCRIPT_VERSION} R65 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ GCP e2-micro v${SCRIPT_VERSION} R76 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

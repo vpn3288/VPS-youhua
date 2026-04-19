@@ -78,7 +78,7 @@ load_common_optimize() {
     
     # 下载到临时目录
     local tmpdir="/tmp/vps-youhua"
-    local sha256_expected="239c7fd2cc718c46b280501eb759154326e10b3ec59bb6efd9bd29397cd4b762"
+    local sha256_expected="afd64f38bc9133beb2b85da97299f55b8b98763157ac93bda0067956c59b4361"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
@@ -681,7 +681,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R65${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R76${NC}"
     echo "========================================================================"
     echo ""
 
@@ -763,7 +763,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R65 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R76 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
