@@ -20,14 +20,13 @@ declare -A EXPECTED_SHA256=(
     ["common"]="afd64f38bc9133beb2b85da97299f55b8b98763157ac93bda0067956c59b4361"
     ["nanopi-r4s"]="917995725852c0e7cf29958a725387cf5472766bd104dd9f9bedc59833d7c02d"
     ["nanopi-t6"]="48721482b708f9dc4dcfd020a9c64a6de77eed6b09e73f93b13da87d9343bfec"
-    ["oracle-arm"]="ef9ea8c3192c309670fd41240970da0ce055aaeefd1054a06f9adcdeca366b96"
-    ["oracle-1c4g"]="471ccad70415aefd7eff3754d4abe0a65553304ddd22e2cdf6c965e35a85811d"
-    ["n5105"]="0be99a42df846251de4acb9549469cb45a7604dbf82e844ebb139516e8e863ac"
-    ["generic-x86"]="cf6e8c4b16339e81d53e77d81302c7b8e3bf28f5050deadb68e89318c092c85c"
+    ["oracle-arm"]="2dcb0dabe6a4d1cfbdf76825b45172017b007cf31f3654c5f435794bd1654dae"
+    ["oracle-1c4g"]="63c24b41dbd82d865eb1bac62386109b557519d688c29d0468dcaab2f1a080a4"
+    ["n5105"]="f5e40162eda7219d37cfa02de4f66c675b58731dda9fa1240100d4706d98a5ac"
+    ["generic-x86"]="c8db56358f1535a4d7d9077a7f8566ee69f30d24bee318dc8fcc582489866777"
     ["generic-1c1g"]="3d5b4a9a120fbb8fd16bf79d69cdb6009092f10a1a376d507c5d23de1513bb25"
-    ["google-cloud-e2"]="cb0578655d6d5dd31c9fc109edfe6fab12b874b5d22c137b334e13e7c0e83a09"
+    ["google-cloud-e2"]="8eeefdd2b47130c23906085e87c80a41dd665e9f1b135467bf9addcaedfb6514"
     ["verify-v3.4"]="7d6d58782be900755c4f67864ccb32d4f59db661fe5580a50dbc1462ffd821c7"
-    ["install-sh"]="8b527007d4268fe917cc44ce6e934133ad4448f616d7d9ef0485892a707d6a89"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────

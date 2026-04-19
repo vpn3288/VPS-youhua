@@ -376,12 +376,12 @@ configure_conntrack_hashsize() {
     modprobe nf_conntrack 2>/dev/null || true
 
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
-    local ct_max="${CT_MAX:-16384}"
+    local hashsize=$((CT_MAX / 4))
     if [[ -f "$hashsize_file" ]]; then
-        echo "${ct_max}" > "$hashsize_file" 2>/dev/null || {
+        echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
             log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
             mkdir -p /etc/modprobe.d
-            echo "options nf_conntrack hashsize=${ct_max}" > /etc/modprobe.d/nf_conntrack.conf
+            echo "options nf_conntrack hashsize=$hashsize" > /etc/modprobe.d/nf_conntrack.conf
         }
         local current_hashsize
         current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
