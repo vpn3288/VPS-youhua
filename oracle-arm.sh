@@ -78,7 +78,7 @@ load_common_optimize() {
     
     # 下载到临时目录
     local tmpdir="/tmp/vps-youhua"
-    local sha256_expected="66db71c53e49b33b807eb03623f9f164aab42549213d8a037fc4d363ac051d35"
+    local sha256_expected="700c1fc718042516ca62ebad7a2a2be7a6eb7c4735c16a9c787bf8d159a57642"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then

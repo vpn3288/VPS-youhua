@@ -76,11 +76,22 @@ load_common_optimize() {
         return 0
     fi
     
-    # 下载到临时目录
+    # 下载到临时目录（SHA256 完整性验证）
     local tmpdir="/tmp/vps-youhua"
+    local sha256_expected="700c1fc718042516ca62ebad7a2a2be7a6eb7c4735c16a9c787bf8d159a57642"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
+        # SHA256 校验供应链安全
+        local sha256_actual
+        sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
+        if [[ "$sha256_actual" != "$sha256_expected" ]]; then
+            echo -e "\033[31m[✗] 错误: common-optimize.sh SHA256 校验失败\033[0m" >&2
+            echo -e "\033[31m  期望: $sha256_expected\033[0m" >&2
+            echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
+            rm -f "${tmpdir}/common-optimize.sh"
+            exit 1
+        fi
         source "${tmpdir}/common-optimize.sh"
         return 0
     fi
