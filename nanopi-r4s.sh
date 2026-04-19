@@ -744,6 +744,23 @@ uninstall_all() {
     rm -f /etc/cron.weekly/fstrim-tf
     rm -f /etc/profile.d/nodejs-memory.sh
     rm -f /etc/docker/daemon.json
+    rm -f /var/run/vps-youhua-tmpfs-mount
+    rm -f /etc/profile.d/99-agent-cache.sh
+
+    # 停止并卸载 Docker（如果安装了的话）
+    if command -v docker &>/dev/null; then
+        systemctl stop docker 2>/dev/null || true
+        systemctl disable docker 2>/dev/null || true
+        apt-get remove --purge -y docker.io docker-compose 2>/dev/null || true
+        rm -rf /var/lib/docker 2>/dev/null || true
+        log_info "Docker 已完全卸载"
+    fi
+
+    # 主动卸载 /tmp tmpfs（避免仅清理 fstab 而不卸载）
+    if mount | grep -q "tmpfs on /tmp"; then
+        umount /tmp 2>/dev/null || log_warn "umount /tmp 失败（可能无残留挂载）"
+    fi
+
     # 恢复 Armbian zram-config 默认值（仅恢复 ENABLED，不改 SIZE，因为原值未知）
     if [[ -f /etc/default/armbian-zram-config ]]; then
         sed -i 's/^ENABLED=.*/ENABLED=false/' /etc/default/armbian-zram-config 2>/dev/null || true

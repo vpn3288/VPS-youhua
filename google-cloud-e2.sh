@@ -178,24 +178,34 @@ optimize_memory_gcp() {
     echo "never" > /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null || true
 
     # zram 内存扩展（e2-micro 1GB，开启压缩约等效 +512MB）
+    # 幂等性：已激活则跳过，disksize 已设置则跳过
     if ! modprobe zram 2>/dev/null; then
         log_warn "zram 模块不可用，跳过"
+    elif [[ -b /dev/zram0 ]] && [[ -f /sys/block/zram0/comp_algorithm ]]; then
+        if swapon -s 2>/dev/null | grep -q "^/dev/zram0"; then
+            log_info "zram0 已激活，跳过"
+        else
+            local current_disksize
+            current_disksize=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
+            if [[ "$current_disksize" != "0" ]]; then
+                log_info "zram0 disksize 已设置，跳过"
+            else
+                echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || true
+                local mem_kb
+                mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+                # mem_kb单位为KB，*1024转为字节，再/2得到zram盘大小（字节）
+                local mem_bytes=$((mem_kb * 1024))
+                local zram_size=$((mem_bytes / 2))
+                if [[ -f /sys/block/zram0/disksize ]]; then
+                    echo "${zram_size}" > /sys/block/zram0/disksize 2>/dev/null || true
+                    mkswap /dev/zram0 >/dev/null 2>&1 || true
+                    swapon /dev/zram0 -p 32767 2>/dev/null || true
+                    log_info "zram 开启，压缩后约等效 +$((zram_size / 1024 / 1024))MB 可用内存"
+                fi
+            fi
+        fi
     else
-        # [C2][M13] zram reset: 确保设备处于干净状态，避免二次运行失败
-        if [[ -f /sys/block/zram0/reset ]]; then
-            echo 1 > /sys/block/zram0/reset 2>/dev/null || true
-        fi
-        local mem_kb
-        mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-        # mem_kb单位为KB，*1024转为字节，再/2得到zram盘大小（字节）
-        local mem_bytes=$((mem_kb * 1024))
-        local zram_size=$((mem_bytes / 2))
-        if [[ -f /sys/block/zram0/disksize ]]; then
-            echo "${zram_size}" > /sys/block/zram0/disksize 2>/dev/null || true
-            mkswap /dev/zram0 >/dev/null 2>&1 || true
-            swapon /dev/zram0 -p 32767 2>/dev/null || true
-            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024 / 1024))MB 可用内存"
-        fi
+        log_info "zram0 设备不存在或不支持，跳过"
     fi
 
     log_info "内存优化完成"

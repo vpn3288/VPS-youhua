@@ -626,6 +626,7 @@ main() {
     configure_swap
     configure_sysctl_oracle
     configure_conntrack_hashsize
+    configure_limits
 
 }
 

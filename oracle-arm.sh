@@ -580,12 +580,16 @@ uninstall_all() {
     rm -f /etc/cloud/cloud.cfg.d/99-disable-net.cfg
     rm -f /etc/modprobe.d/nf_conntrack.conf
     rm -f /etc/docker/daemon.json
+    rm -f /var/run/vps-youhua-tmpfs-mount
+    rm -f /etc/profile.d/99-agent-cache.sh
 
     # 停止并卸载 Docker（如果安装了的话）
     if command -v docker &>/dev/null; then
         systemctl stop docker 2>/dev/null || true
         systemctl disable docker 2>/dev/null || true
-        log_info "Docker 服务已停止并禁用"
+        apt-get remove --purge -y docker.io docker-ce docker-ce-cli containerd.io 2>/dev/null || true
+        rm -rf /var/lib/docker 2>/dev/null || true
+        log_info "Docker 已完全卸载"
     fi
 
     # 停止并卸载 unattended-upgrades（如果安装了的话）
