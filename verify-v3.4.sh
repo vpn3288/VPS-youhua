@@ -2,7 +2,7 @@
 #===============================================================================
 # VPS-youhua v3.4 优化验证脚本
 # 用途：验证 AIagent 安装前环境优化是否正确生效
-# 支持：nanopi-r4s / nanopi-t6 / oracle-arm / n5105 / generic-x86
+# 支持：nanopi-r4s / nanopc-t6 / oracle-arm / n5105 / generic-x86
 # 输出：所有优化参数的当前值 + 与目标值对比
 #===============================================================================
 set -euo pipefail
@@ -37,7 +37,7 @@ detect_platform() {
     elif [[ "$board_info" == *"NanoPi R4S"* ]] || [[ "$board_info" == *"R4S"* ]]; then
         echo "nanopi-r4s"
     elif [[ "$board_info" == *"NanoPC T6"* ]] || [[ "$board_info" == *"T6"* ]] && [[ "$board_info" == *"3588"* ]]; then
-        echo "nanopi-t6"
+        echo "nanopc-t6"
     elif [[ "$cpu_info" == *"Ampere"* ]]; then
         # Oracle Cloud 检测（通过元数据端点）
         # BUG FIX: curl -o /dev/null 成功时无输出，需加 -w "%{http_code}" 才能抓到 HTTP 状态码
@@ -782,8 +782,8 @@ check_vs_targets() {
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "1800"  "ESTABLISHED超时"
         check_eq "net.ipv4.tcp_tw_reuse"                                        "1"     "TW重用"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_time_wait"           "30"    "TW超时(Oracle)"
-    elif [[ "$platform" == "nanopi-t6" ]]; then
-        echo -e "  ${BOLD}[nanopi-t6 专用]${RESET}"
+    elif [[ "$platform" == "nanopc-t6" ]]; then
+        echo -e "  ${BOLD}[nanopc-t6 专用]${RESET}"
         check_eq "net.core.netdev_max_backlog"                                 "131072" "网卡队列(2.5GbE)"
         check_eq "vm.dirty_ratio"                                               "20"    "dirty比例(eMMC)"
         check_eq "vm.dirty_background_ratio"                                    "5"     "dirty后台比例"

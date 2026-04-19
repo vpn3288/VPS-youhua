@@ -19,7 +19,7 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 declare -A EXPECTED_SHA256=(
     ["common"]="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
     ["nanopi-r4s"]="3d47f26babea7cd2b23859ca112c14f58d50d083f076b8ae4ff08472846a7571"
-    ["nanopi-t6"]="38a18ebc87ca41bf6ac89d6262042bf4f87164a9b7630aa4c4a649c91899a067"
+    ["nanopc-t6"]="12ff18668ff6e191ad9c50b559a83d4840d5d1581facb7442e0bdfc436a3bd3a"
     ["oracle-arm"]="9e308a93e601227c45e9d6e62af60607e43f71d79f1f511edb81eb8bc8625448"
     ["oracle-1c4g"]="53a8d2076acd42e17491fc90709b67d513b9e495e24286d473b87577193aa2ad"
     ["n5105"]="2bca0e3c851474e7c4ac07686354c03a469a26831f260d2b28f414584378e4c5"
@@ -42,7 +42,7 @@ fi
 # 全局状态（菜单选择结果）
 # ─────────────────────────────────────────────────────────────────────────────
 
-SELECTED_PLATFORM=""      # nanopi-r4s | nanopi-t6 | oracle-arm | oracle-1c4g | n5105 | generic-x86 | generic-1c1g | google-cloud-e2
+SELECTED_PLATFORM=""      # nanopi-r4s | nanopc-t6 | oracle-arm | oracle-1c4g | n5105 | generic-x86 | generic-1c1g | google-cloud-e2
 SELECTED_MODE=""          # optimize | full | custom
 MODE=""                  # uninstall | status（命令行特殊模式）
 INSTALL_DOCKER="ask"      # true | false | ask
@@ -271,7 +271,7 @@ detect_platform() {
             if echo "$model" | grep -qi "NanoPi R4S"; then
                 echo "nanopi-r4s"
             elif echo "$model" | grep -qiE "NanoPC.?T6|T6"; then
-                echo "nanopi-t6"
+                echo "nanopc-t6"
             elif grep -qiE "oracle|oraclecloud" /sys/class/dmi/id/sys_vendor 2>/dev/null || \
                  echo "$cpu_model" | grep -qiE "Ampere|Altra"; then
                 # Oracle Cloud：根据内存自动选择规格
@@ -282,7 +282,7 @@ detect_platform() {
                     echo "oracle-arm"
                 fi
             elif echo "$cpu_model" | grep -qi "RK3588"; then
-                echo "nanopi-t6"
+                echo "nanopc-t6"
             elif echo "$cpu_model" | grep -qi "RK3399"; then
                 echo "nanopi-r4s"
             else
@@ -372,7 +372,7 @@ show_platform_info() {
             echo -e "  ${BLUE}存储:     TF卡（已针对写入保护优化）${NC}"
             echo -e "  ${BLUE}特点:     双千兆网口，低功耗${NC}"
             ;;
-        nanopi-t6)
+        nanopc-t6)
             echo -e "  ${BLUE}设备:     NanoPC T6 (RK3588 ARM64)${NC}"
             echo -e "  ${BLUE}存储:     eMMC（已针对eMMC优化）${NC}"
             echo -e "  ${BLUE}特点:     3网口(1×GbE+2×2.5GbE)，16GB大内存${NC}"
@@ -581,7 +581,7 @@ step2_choose_subplatform() {
             read -r choice
             case "$choice" in
                 1) SELECTED_PLATFORM="nanopi-r4s" ;;
-                2) SELECTED_PLATFORM="nanopi-t6" ;;
+                2) SELECTED_PLATFORM="nanopc-t6" ;;
                 *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
             esac
             ;;

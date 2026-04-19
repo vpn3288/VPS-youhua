@@ -5,9 +5,9 @@
 # VPS 优化脚本 - NanoPC T6 (Armbian)
 #
 # 用法:
-#   sudo bash nanopi-t6.sh                    # 完整安装（底层优化 + 软件依赖）
-#   sudo bash nanopi-t6.sh --optimize-only    # 仅底层优化
-#   sudo bash nanopi-t6.sh --uninstall        # 卸载所有优化
+#   sudo bash nanopc-t6.sh                    # 完整安装（底层优化 + 软件依赖）
+#   sudo bash nanopc-t6.sh --optimize-only    # 仅底层优化
+#   sudo bash nanopc-t6.sh --uninstall        # 卸载所有优化
 #
 # 功能:
 #   - 系统内核参数优化（网络、内存、文件系统）
@@ -24,7 +24,7 @@ set -euo pipefail
 # 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
 # =============================================================================
 #
-# 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-t6.sh)
+# 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopc-t6.sh)
 #
 # 模式说明:
 #   --optimize-only   纯环境优化（不安装 Docker/Node.js）
