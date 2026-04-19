@@ -43,7 +43,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/inst
 
 # 手动指定平台
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)      # NanoPi R4S (4GB ARM, TF卡)
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-t6.sh)       # NanoPC T6 (16GB ARM, eMMC)
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopc-t6.sh)       # NanoPC T6 (16GB ARM, eMMC)
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)      # Oracle Cloud ARM 2C16G
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-1c4g.sh)     # Oracle Cloud ARM 1C4G
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)            # N5105/N5095 小主机
@@ -86,7 +86,7 @@ systemctl --user enable openclaw-gateway  # 开机自启
 | 平台 | CPU | 内存 | 存储 | 推荐脚本 |
 |------|-----|------|------|----------|
 | NanoPi R4S | RK3399 (ARM64) | 4GB | **TF卡** | `nanopi-r4s.sh` |
-| NanoPC T6 | RK3588S (ARM64) | 16GB | **eMMC** | `nanopi-t6.sh` |
+| NanoPC T6 | RK3588S (ARM64) | 16GB | **eMMC** | `nanopc-t6.sh` |
 | Oracle Cloud ARM | Ampere Altra (ARM64) | 2核16GB | 云盘 | `oracle-arm.sh` |
 | Oracle Cloud ARM | Ampere Altra (ARM64) | 1核4GB | 云盘 | `oracle-1c4g.sh` |
 | N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | SSD | `n5105.sh` |

@@ -17,16 +17,16 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["common-optimize"]="700c1fc718042516ca62ebad7a2a2be7a6eb7c4735c16a9c787bf8d159a57642"
-    ["common"]="700c1fc718042516ca62ebad7a2a2be7a6eb7c4735c16a9c787bf8d159a57642"
-    ["nanopc-t6"]="3fe61b0e232b7a3f27dc017c7969061ea13d2c400c66b8f63598f2fdd30fe74c"
-    ["nanopi-r4s"]="e7a7afe9f08ee126dc88a88202b9aa30439d6dc1b85720cfd0f301b993ad514b"
-    ["oracle-arm"]="3eaffcce81377b4bac774a7acd66bba45df025b70a767e18176031a2e02da31d"
-    ["oracle-1c4g"]="7815582bc09ba2418b966d9b2490fa619986bd8bafa7af8ffa6c38aa6941312e"
-    ["n5105"]="d6d801169304ebfbf027928c20381e6ab6ba3fa789eeec657016015e58e857fc"
-    ["generic-x86"]="7614860fd8a5cdf8ef3bc44db29335584ffb07dc1e1fc4736c1b6e307593a77c"
-    ["generic-1c1g"]="6cce6cff2daa80601b335961d662ab78174f99b3dd9afc429c901109cc5dece8"
-    ["google-cloud-e2"]="2dec8cf91330bd96aeeb7c6d221ac8668899d38caa48e2b8a7396b02aeda6142"
+    ["common-optimize"]="26b2fe9227954fae688d60da54046fbaae34c09fddd47084d715e5b72d95f3a8"
+    ["common"]="26b2fe9227954fae688d60da54046fbaae34c09fddd47084d715e5b72d95f3a8"
+    ["nanopc-t6"]="d62da18c7a588eb3468ce1774fa2b1eaf5297f5b84bbc84f02cb61dac49884a6"
+    ["nanopi-r4s"]="748a63b8bcf32046ad810782268d0ce2139b88a5f5bf686907302ed5ef9d9e43"
+    ["oracle-arm"]="b92d9ef2678013065563b8739d6a4f06490dc08fda679ca8b7df2b99a0d3300e"
+    ["oracle-1c4g"]="3fe9a3aee3d945f2c4e785f83c2a9aaefbdd7d702b77032ff20085725ae7b632"
+    ["n5105"]="c0e8b5c3acf84bea8c1d6d02a1f0c4d697087f0074e2f9473017a6e7f5bac489"
+    ["generic-x86"]="089684789bd41603d454f6597963ff9e67742f1cf2d379868e3a96fbd6fe4a6a"
+    ["generic-1c1g"]="5fe2badb8431e55d3ede5358d09d18d4d8ca77fd747f0696d94ab4343ea809b2"
+    ["google-cloud-e2"]="f97b361465d0a12c04ebc8343247ee9b0d2f4fbbcbf1d0c18834a96b856f98af"
     ["verify-v3.4"]="2016f79fecab0916d4605ef2a8082fb01602075a4fe47367174da7069766c0c4"
 )
 

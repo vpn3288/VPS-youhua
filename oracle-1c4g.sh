@@ -84,7 +84,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
 
     local dest="${tmpdir}/common-optimize.sh"
-    local sha256_expected="700c1fc718042516ca62ebad7a2a2be7a6eb7c4735c16a9c787bf8d159a57642"
+    local sha256_expected="26b2fe9227954fae688d60da54046fbaae34c09fddd47084d715e5b72d95f3a8"
     local sha256_actual=""
 
     # 主站下载（带 SHA256 验证）
@@ -278,7 +278,7 @@ optimize_network_oracle() {
 
     # Oracle Cloud MTU 检测（不强制修改）
     local mtu
-    mtu=$(ip link show $(ip route get 8.8.8.8 2>/dev/null | awk '{print $5; exit}') 2>/dev/null | grep -oP 'mtu \K\d+' || echo "1500")
+    mtu=$(ip link show $(ip route get 8.8.8.8 2>/dev/null | awk '{print $5; exit}') 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="mtu") print $(i+1); exit}' || echo "1500")
     log_info "当前网卡 MTU: $mtu"
 
     for iface in /sys/class/net/en* /sys/class/net/eth*; do

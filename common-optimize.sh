@@ -276,7 +276,7 @@ configure_apt_sources() {
 
     local sources_list="/etc/apt/sources.list"
     local codename
-    codename=$(grep -oP '(?<=^VERSION_CODENAME=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "bookworm")
+    codename=$(awk -F'["=]' '/^VERSION_CODENAME=/ {print $2; exit}' /etc/os-release 2>/dev/null || echo "bookworm")
 
     backup_file "$sources_list"
 
