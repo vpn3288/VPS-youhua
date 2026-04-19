@@ -719,19 +719,20 @@ main() {
 
     init_script
     check_idempotent
-    # BUG#5: IPv6 黑洞检测
-    configure_ipv6_health
-    # BUG#7: DNS 锁定防篡改
-    configure_dns_lock
     detect_system
     detect_oracle_cloud
     check_network
     preflight_check
-    
-    # AUDIT-3 FIX: 安装基础工具（包括 curl）后再检查元数据
+
+    # AUDIT-3 FIX: 安装基础工具后再执行需要网络工具的检测
     configure_apt_sources
     install_base_tools
     check_oracle_metadata
+
+    # BUG#5: IPv6 黑洞检测（需要 ping6，需在 install_base_tools 之后）
+    configure_ipv6_health
+    # BUG#7: DNS 锁定防篡改
+    configure_dns_lock
 
     show_platform_summary
 
