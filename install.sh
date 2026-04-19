@@ -18,8 +18,8 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 
 declare -A EXPECTED_SHA256=(
     ["common"]="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
-    ["nanopi-r4s"]="26ae7ab67c38657d1b0e8aa119241b5a9e101f3f9b3460ed29193f62929e1bda"
-    ["nanopc-t6"]="fd7da89cccfa7c350d5b689cb56eb3e1bd103327d0da65dab0256a01401212ef"
+    ["nanopi-r4s"]="6a64506bdba39bf2b8459b209ec214844ec5e27f8ae32a94b7559473037480f0"
+    ["nanopc-t6"]="91165e55df35329d84bc2e3333ce7646aa166451a8c233f59b76489984283a81"
     ["oracle-arm"]="3e2da0898cbc002678e6d9d996d2c9b0d051da31bf6485026019e9418ab41428"
     ["oracle-1c4g"]="377801d0089d7d8596c0ebbec2926cc49fd50160969939a4a56a11ff37baea76"
     ["n5105"]="2bca0e3c851474e7c4ac07686354c03a469a26831f260d2b28f414584378e4c5"
