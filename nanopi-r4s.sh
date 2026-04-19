@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.3 R71
+# NanoPi R4S 专用优化安装脚本 v3.4 R76
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -556,6 +556,7 @@ install_nodejs() {
 
     # R4S TF 卡保护：编译期间临时挂载 1G tmpfs 到 /tmp
     # 避免 npm 百万级小文件写坏 TF 卡
+    # M1 FIX: 固定1G是经验值（足够node_modules编译），过低会导致/tmp溢出，过高会挤压系统内存
     local tmpfs_mounted=false
     if [[ "$SYS_IS_TF_CARD" == "true" ]] && ! mount | grep -q "tmpfs on /tmp"; then
         mount -t tmpfs -o size=1G tmpfs /tmp && tmpfs_mounted=true
@@ -921,8 +922,9 @@ main() {
     optimize_memory_r4s
     # BUG#1 FIX: R4S 在 zram 之后才检查 swap（避免与 zram 冲突）
     configure_swap
-    configure_sysctl_r4s
+    # M2 FIX: conntrack hashsize 必须在 sysctl 之前设置，避免运行时冲突
     configure_conntrack_hashsize_r4s "$((${SYS_MEM_MB} * 32))"
+    configure_sysctl_r4s
     configure_limits
     configure_fstab
     configure_journald

@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.3 R65
+# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.4 R76
 # 硬件: Google Cloud e2-micro, 1vCPU(共享) 1GB RAM, 30GB SSD
 # 特点: GCP 共享 CPU 特化优化（burstable CPU + Intel + VPC 网络）
 #       GCP Always Free 机型永久免费（1vCPU 1GB，非 ARM）
@@ -42,13 +42,14 @@ readonly PLATFORM_DESC="1vCPU 共享 $(awk '/MemTotal/{printf "%.0fGB", $2/1024/
 # 平台差异变量（GCP e2-micro 专项，比 Oracle 1C4G 更保守，共享 CPU）
 # ─────────────────────────────────────────────────────────────────────────────
 readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-gcp-e2.conf"
-# journald volatile（重启丢失，GCP SSD 不需要 persistent）
+# journald volatile（重启丢失，GCP SSD 不需要 persistent。R4 FIX: volatile 是设计选择，非 bug；GCP SSD 持久性和 IOPS 足够好，不需要 journal 持久化）
 readonly JOURNALD_STORAGE="volatile"
 readonly JOURNALD_MAX_USE="50M"
 readonly TMPFS_SIZE="256M"
 
 # GCP e2-micro TCP 缓冲（内存3%，上限8MB，下限4MB）
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024;t=m*31457280;if(t>8388608)t=8388608;else if(t<4194304)t=4194304;printf "%.0f",t}' /proc/meminfo)
+# M-2 FIX: awk浮点运算后强制转换为整数，并加整数范围限制确保边界安全
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024;t=int(m*31457280);if(t>8388608)t=8388608;else if(t<4194304)t=4194304;print t}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512
