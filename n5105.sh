@@ -546,6 +546,16 @@ uninstall_all() {
         apt-get remove --purge -y unattended-upgrades >> /dev/null 2>&1 || true
     fi
 
+    # 停止并卸载 zramswap（如果安装了的话）
+    if systemctl is-active --quiet zramswap 2>/dev/null || \
+       command -v zramswap &>/dev/null; then
+        systemctl stop zramswap 2>/dev/null || true
+        systemctl disable zramswap 2>/dev/null || true
+        rm -f /etc/default/zramswap
+        apt-get remove --purge -y zram-tools >> /dev/null 2>&1 || true
+        log_info "zramswap 已清理"
+    fi
+
     # 停止并卸载 fail2ban（如果安装了的话）
     if command -v fail2ban-server &>/dev/null; then
         systemctl stop fail2ban 2>/dev/null || true

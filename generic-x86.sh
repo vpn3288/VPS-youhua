@@ -146,16 +146,64 @@ optimize_memory_generic() {
             # [M11] FIX: 不卸载 zram-config 包（可能包含用户自定义配置），仅停止服务
             systemctl stop zram-config 2>/dev/null || true
             systemctl disable zram-config 2>/dev/null || true
-            apt-get install -y --no-install-recommends zram-tools >> "$APT_LOG" 2>&1 || log_warn "zram-tools 安装失败，继续使用内核内置 zram"
 
-            cat > /etc/default/zramswap <<EOF
+            # 检查 zram-tools 是否可用（优先使用，失败则回退到内核内置）
+            local zram_backend="builtin"
+            if command -v zramswap &>/dev/null; then
+                zram_backend="zramswap"
+            elif apt-get install -y --no-install-recommends zram-tools >> "$APT_LOG" 2>&1; then
+                zram_backend="zramswap"
+                log_info "zram-tools 安装成功"
+            else
+                log_warn "zram-tools 安装失败，使用内核内置 zram"
+            fi
+
+            if [[ "$zram_backend" == "zramswap" ]]; then
+                # 使用 zram-tools (zramswap)
+                cat > /etc/default/zramswap <<EOF
 ALGO=lzo
 SIZE=${ZRAM_SIZE}
 PRIORITY=100
 EOF
-            systemctl enable --now zramswap 2>/dev/null || { log_warn "zramswap 启用失败"; return 1; }
+                if ! systemctl enable --now zramswap 2>/dev/null; then
+                    log_warn "zramswap 启用失败，尝试内核内置方式"
+                    zram_backend="builtin"
+                fi
+            fi
+
+            if [[ "$zram_backend" == "builtin" ]]; then
+                # 内核内置 zram（兼容不支持 zram-tools 的系统）
+                local zram_size_bytes=$((ZRAM_SIZE * 1024 * 1024))
+                if [[ -w /sys/block/zram0/disksize ]]; then
+                    echo "$zram_size_bytes" > /sys/block/zram0/disksize 2>/dev/null || {
+                        log_warn "zram disksize 设置失败"
+                        return 1
+                    }
+                    if ! mkswap /dev/zram0 >/dev/null 2>&1; then
+                        log_warn "mkswap /dev/zram0 失败"
+                        return 1
+                    fi
+                    if ! swapon /dev/zram0 -p 100 2>/dev/null; then
+                        log_warn "swapon /dev/zram0 失败"
+                        return 1
+                    fi
+                else
+                    log_warn "zram 设备不可用，跳过"
+                    return 1
+                fi
+            fi
+
             sleep 2
-            lsblk | grep -q zram && log_info "ZRAM ${ZRAM_SIZE}MB 已启用"
+            # 验证 zram 是否真正启用
+            if swapon --show | grep -q zram; then
+                local zram_dev=$(lsblk -n -o NAME,TYPE | awk '$2=="swap" && /zram/ {print $1}' | head -1)
+                [[ -n "$zram_dev" ]] && log_info "ZRAM ${ZRAM_SIZE}MB 已启用 (/dev/${zram_dev})"
+            else
+                log_warn "ZRAM 启用验证失败"
+                return 1
+            fi
+        else
+            log_warn "zram 模块不可用"
         fi
     else
         log_info "跳过 ZRAM（${PROFILE_DESC}）"
@@ -320,7 +368,7 @@ EOF
     chmod 644 "$dropin_file"
 
     if command -v sshd &>/dev/null; then
-        if sshd -t 2>&1; then
+        if sshd -t -f /dev/stdin < "$dropin_file" 2>&1; then
             log_info "SSH 加固已应用 + 语法验证通过"
         else
             log_warn "SSH 配置语法异常，移除并跳过"
