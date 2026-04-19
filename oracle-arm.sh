@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.4 R77
+# Oracle Cloud ARM 专用优化安装脚本 v3.4 R78
 # 硬件: Ampere Altra, 2核16GB, 100GB 云盘
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
@@ -279,6 +279,38 @@ optimize_network_oracle() {
     done
 
     log_info "Oracle Cloud 网络优化完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CPUFreq Governor（Oracle Cloud ARM 物理机，设置为 performance）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_cpufreq() {
+    log_step "配置 CPUFreq Governor (performance)..."
+
+    # 检查 cpufrequtils 是否可用
+    if ! command -v cpufreq-set &>/dev/null; then
+        log_info "cpufrequtils 未安装，跳过（通常在虚拟化环境中）"
+        return 0
+    fi
+
+    # 设置所有核心为 performance（-r = 全局）
+    cpufreq-set -r -g performance 2>/dev/null || {
+        log_warn "cpufreq-set -r 失败，尝试逐核心设置..."
+        for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+            [[ -f "$cpu/cpufreq/scaling_governor" ]] || continue
+            echo "performance" > "$cpu/cpufreq/scaling_governor" 2>/dev/null || true
+        done
+    }
+
+    # 持久化到 /etc/default/cpufrequtils（系统重启后生效）
+    mkdir -p /etc/default
+    cat > /etc/default/cpufrequtils <<'EOF'
+ENABLE="true"
+GOVERNOR="performance"
+EOF
+
+    local gov; gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
+    log_info "CPUFreq Governor: $gov"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -681,7 +713,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R77${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R78${NC}"
     echo "========================================================================"
     echo ""
 
@@ -717,6 +749,7 @@ main() {
     clean_system
     oracle_cloud_cleanup
     optimize_memory_oracle
+    configure_cpufreq
     # BUG#1 FIX: Oracle ARM 在 zram 之后才检查 swap（避免冲突）
     configure_swap
     configure_sysctl_oracle
@@ -763,7 +796,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R77 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R78 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
