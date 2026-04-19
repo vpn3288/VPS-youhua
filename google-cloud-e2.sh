@@ -49,7 +49,7 @@ readonly TMPFS_SIZE="256M"
 
 # GCP e2-micro TCP 缓冲（内存3%，上限8MB，下限4MB）
 # 修正：MemTotal($2)为KB，转换为字节后乘3%，单位一致
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024;t=int(m*3/100);if(t>8388608)t=8388608;else if(t<4194304)t=4194304;print t}' /proc/meminfo)
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024/1024;t=m*3145728;if(t>8388608)t=8388608;else if(t<4194304)t=4194304;printf "%.0f",t}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512
@@ -650,7 +650,8 @@ main() {
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
     if [[ "${1:-}" == "--uninstall" ]]; then
-        uninstall_all "$@" || exit 1
+        uninstall_all "$@"
+        exit $?
     fi
 
     clear

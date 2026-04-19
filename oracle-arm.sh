@@ -395,12 +395,27 @@ install_docker() {
     fi
 
     # H8 FIX: 使用临时文件替代 curl|bash 管道安装 Docker
-    local docker_install_script="/tmp/get-docker.sh"
-    if curl -fsSL https://get.docker.com -o "$docker_install_script" && \
-       chmod +x "$docker_install_script" && \
-       "$docker_install_script" >> "$APT_LOG" 2>&1; then
-        log_info "Docker (get.docker.com) 安装完成"
-    else
+    # 供应链安全: SHA256 校验（与 n5105.sh 保持一致）
+    local docker_install_script="/tmp/get.docker.sh"
+    local docker_download_ok=false
+    if curl -fsSL https://get.docker.com -o "$docker_install_script" 2>/dev/null; then
+        docker_download_ok=true
+    fi
+
+    if [[ "$docker_download_ok" == "true" ]]; then
+        local expected_docker_sha256="2605f1eff3cfe9a1a6d2aa9a2fc66b07fc82f058a58a93b1b4e52ed754c84e2e"
+        local actual_docker_sha256
+        actual_docker_sha256=$(sha256sum "$docker_install_script" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_docker_sha256" == "$expected_docker_sha256" ]] || [[ -z "$expected_docker_sha256" ]]; then
+            chmod +x "$docker_install_script" && "$docker_install_script" >> "$APT_LOG" 2>&1 && docker_download_ok="verified" || docker_download_ok="failed"
+        else
+            log_warn "Docker 安装脚本 SHA256 校验异常，跳过执行"
+            docker_download_ok="failed"
+        fi
+        rm -f "$docker_install_script"
+    fi
+
+    if [[ "$docker_download_ok" != "verified" ]]; then
         log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
             log_error "Docker 安装失败，请查看 $APT_LOG"
@@ -465,12 +480,25 @@ install_nodejs() {
     fi
 
     # H8 FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
-    local nodesource_setup="/tmp/nodesource_setup.sh"
-    if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_setup" && \
-       chmod +x "$nodesource_setup" && \
-       "$nodesource_setup" >> "$APT_LOG" 2>&1; then
-        log_info "NodeSource 安装完成"
-    else
+    # 供应链安全: SHA256 校验（与 n5105.sh 保持一致）
+    local nodesource_script="/tmp/nodesource_setup_22.sh"
+    local nodesource_download_ok=false
+    curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null && nodesource_download_ok=true
+
+    if [[ "$nodesource_download_ok" == "true" ]]; then
+        local expected_nodesource_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
+        local actual_nodesource_sha256
+        actual_nodesource_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_nodesource_sha256" == "$expected_nodesource_sha256" ]]; then
+            chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && nodesource_download_ok="verified" || nodesource_download_ok="failed"
+        else
+            log_warn "NodeSource 安装脚本 SHA256 校验异常，跳过执行"
+            nodesource_download_ok="failed"
+        fi
+        rm -f "$nodesource_script"
+    fi
+
+    if [[ "$nodesource_download_ok" != "verified" ]]; then
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"

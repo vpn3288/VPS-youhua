@@ -663,22 +663,6 @@ main() {
 
 }
 
-configure_conntrack_hashsize() {
-    log_step "配置 nf_conntrack_hashsize..."
-    modprobe nf_conntrack 2>/dev/null || true
-    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
-    if [[ -f "$hashsize_file" ]]; then
-        local hashsize=$(( CT_MAX / 4 ))
-        echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
-            log_warn "hashsize 写入失败，尝试写入 modprobe 配置"
-            mkdir -p /etc/modprobe.d
-            echo "options nf_conntrack hashsize=${hashsize}" > /etc/modprobe.d/nf_conntrack.conf
-        }
-    else
-        log_warn "nf_conntrack 模块未加载，跳过 hashsize 配置"
-    fi
-}
-
 configure_limits() {
 
     # BUG#8: 低内存极限清理

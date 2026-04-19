@@ -741,6 +741,10 @@ main() {
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
+    if [[ "${1:-}" == "--uninstall" ]]; then
+        uninstall_all "$@"
+        exit $?
+    fi
     uninstall_all "$@"
 
     clear
