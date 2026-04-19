@@ -26,7 +26,7 @@ declare -A EXPECTED_SHA256=(
     ["generic-x86"]="4381868c945d48a9b6ac9d43bdb33a9e34e1d65373bfb3c7012351fb23c0a58b"
     ["generic-1c1g"]="688167a0defa2e06923da00648a306721b7f80dfd23b6d4c2cb3558007df3898"
     ["google-cloud-e2"]="81469db7d63732fd753c6ed64efd27c519fedf9b3cc418b8a90a66ec454fa383"
-    ["verify-v3.1"]="6fdd998e4ba8d8545e4eff27b7cddc8ce9880095b9d0336feffe3fa54385e4a3"
+    ["verify-v3.1"]="f5baf03a809702c62eda00397eef359d6ece66521ef0efa1dd0526f346bea5b6"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1071,6 +1071,15 @@ fi
         local verify_script
         verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.1.sh"
         if [[ -f "$verify_script" ]]; then
+            # [C5] SHA256 校验
+            local actual_sha256
+            actual_sha256=$(sha256sum "$verify_script" | awk '{print $1}')
+            if [[ "$actual_sha256" != "${EXPECTED_SHA256[verify-v3.1]}" ]]; then
+                log_error "verify-v3.1.sh SHA256 校验失败！疑似文件被篡改。"
+                log_error "预期: ${EXPECTED_SHA256[verify-v3.1]}"
+                log_error "实际: $actual_sha256"
+                exit 1
+            fi
             bash "$verify_script"; local ret=$?; exit $ret
         else
             log_error "验证脚本不存在: $verify_script"; exit 1

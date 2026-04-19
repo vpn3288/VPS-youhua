@@ -361,17 +361,27 @@ install_docker() {
 
     log_info "添加 Docker GPG 密钥..."
     mkdir -p /etc/apt/keyrings
-    local gpg_output; gpg_output=$(mktemp)
-    if ! curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>"$gpg_output"; then
-        log_error "Docker GPG 密钥获取失败"
-        cat "$gpg_output" >> "$APT_LOG" 2>/dev/null
-        rm -f "$gpg_output"
+    local gpg_tmp; gpg_tmp=$(mktemp)
+    local gpg_stderr; gpg_stderr=$(mktemp)
+    trap 'rm -f "$gpg_tmp" "$gpg_stderr"' RETURN INT
+
+    # [H12] FIX: 先下载到临时文件，避免 TOCTOU 漏洞
+    if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then
+        log_error "Docker GPG 密钥下载失败"
+        cat "$gpg_stderr" >> "$APT_LOG" 2>/dev/null
         return 1
     fi
-    rm -f "$gpg_output"
 
-    # [H12] FIX: 验证 GPG 密钥指纹，防止供应链污染
-    local key_fingerprint; key_fingerprint=$(gpg --show-keys --with-colons /etc/apt/keyrings/docker.gpg 2>/dev/null | awk -F: '/^fpr:/ {print $10; exit}')
+    # 转换为 gpg 格式（dearmor）到另一个临时文件
+    local gpg_dearmored; gpg_dearmored=$(mktemp)
+    if ! gpg --dearmor -o "$gpg_dearmored" "$gpg_tmp" 2>"$gpg_stderr"; then
+        log_error "Docker GPG 密钥格式转换失败"
+        cat "$gpg_stderr" >> "$APT_LOG" 2>/dev/null
+        return 1
+    fi
+
+    # [H12] FIX: 在写入目标位置之前验证指纹，防止 TOCTOU 攻击
+    local key_fingerprint; key_fingerprint=$(gpg --show-keys --with-colons "$gpg_dearmored" 2>/dev/null | awk -F: '/^fpr:/ {print $10; exit}')
     local expected_fingerprint="0EBFCD88"
     if [[ -z "$key_fingerprint" ]]; then
         log_error "无法读取 GPG 密钥指纹"
@@ -384,6 +394,10 @@ install_docker() {
         return 1
     fi
     log_info "Docker GPG 密钥指纹校验通过 ($key_fingerprint)"
+
+    # 验证通过后，原子性移动到目标位置
+    chmod 644 "$gpg_dearmored"
+    mv -f "$gpg_dearmored" /etc/apt/keyrings/docker.gpg
 
     log_info "添加 Docker APT 仓库..."
     local codename; codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
