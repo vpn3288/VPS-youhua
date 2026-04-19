@@ -86,7 +86,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         # HIGH FIX: SHA256 校验供应链安全
-        local sha256_expected="239c7fd2cc718c46b280501eb759154326e10b3ec59bb6efd9bd29397cd4b762"
+        local sha256_expected="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
         local sha256_actual
         sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
         if [[ "$sha256_actual" != "$sha256_expected" ]]; then
@@ -192,8 +192,10 @@ EOF
 configure_sysctl_t6() {
     log_step "配置 sysctl (NanoPC T6)..."
 
-    # 计算 conntrack_max（使用 CT_HASH_SIZE=131072 作为上限）
-    local calc_conntrack_max=$(( CT_HASH_SIZE * 4 ))
+    # 计算 conntrack_max（使用 RAM_MB * 32 公式，范围 [16384, 1048576]）
+    local calc_conntrack_max=$(( SYS_MEM_MB * 32 ))
+    [[ $calc_conntrack_max -lt 16384 ]] && calc_conntrack_max=16384
+    [[ $calc_conntrack_max -gt 1048576 ]] && calc_conntrack_max=1048576
 
     backup_file "$SYSCTL_FILE"
 

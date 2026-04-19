@@ -7,7 +7,7 @@
 #===============================================================================
 set -euo pipefail
 
- readonly VERSION="3.4"
+readonly VERSION="3.4"
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
@@ -36,7 +36,7 @@ detect_platform() {
         echo "google-cloud-e2"
     elif [[ "$board_info" == *"NanoPi R4S"* ]] || [[ "$board_info" == *"R4S"* ]]; then
         echo "nanopi-r4s"
-    elif [[ "$board_info" == *"NanoPC T6"* ]] || [[ "$board_info" == *"T6"* ]] && [[ "$board_info" == *"3588"* ]]; then
+    elif [[ "$board_info" == *"NanoPC T6"* ]] || { [[ "$board_info" == *"T6"* ]] && [[ "$board_info" == *"3588"* ]]; }; then
         echo "nanopc-t6"
     elif [[ "$cpu_info" == *"Ampere"* ]]; then
         # Oracle Cloud 检测（通过元数据端点）
@@ -861,7 +861,7 @@ main() {
     echo -e "${SEP}"
     echo -e "${BOLD}  🎯 环境就绪状态${RESET}"
     echo -e "${SEP}"
-    if [[ $failed -eq 0 ]] && [[ $passed -gt 0 ]]; then
+    if [[ "${failed:-0}" -eq 0 ]] && [[ "${passed:-0}" -gt 0 ]]; then
         echo -e "  ${GREEN}✓ 底层环境优化完成，系统处于最佳状态${RESET}"
         echo -e "  ${GREEN}✓ 可以安全安装任意官方 agent 脚本（参考对应项目文档）${RESET}"
         echo ""
