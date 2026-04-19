@@ -497,15 +497,30 @@ install_docker() {
     fi
 
     # Docker 官方安装脚本
-    # H9 FIX: 先下载到临时文件，校验后执行
+    # R6-A1 FIX: 先下载到临时文件，校验 SHA256 后执行（供应链安全）
     local docker_install_script="/tmp/get-docker.sh"
-    if curl -fsSL https://get.docker.com -o "$docker_install_script" && \
-       chmod +x "$docker_install_script" && \
-       "$docker_install_script" >> "$APT_LOG" 2>&1; then
-        log_info "Docker 安装成功"
+    local sha256_expected="2605f1eff3cfe9a1a6d2aa9a2fc66b07fc82f058a58a93b1b4e52ed754c84e2e"
+    if curl -fsSL https://get.docker.com -o "$docker_install_script"; then
+        local sha256_actual
+        sha256_actual=$(sha256sum "$docker_install_script" | awk '{print $1}')
+        if [[ "$sha256_actual" != "$sha256_expected" ]]; then
+            echo -e "\033[31m[✗] 错误: get.docker.com SHA256 校验失败\033[0m" >&2
+            echo -e "\033[31m  期望: $sha256_expected\033[0m" >&2
+            echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
+            rm -f "$docker_install_script"
+            return 1
+        fi
+        chmod +x "$docker_install_script" && "$docker_install_script" >> "$APT_LOG" 2>&1 || {
+            rm -f "$docker_install_script"
+            log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
+            apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
+                log_error "Docker 安装失败，请查看 $APT_LOG"
+                return 1
+            }
+        }
     else
         rm -f "$docker_install_script"
-        log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
+        log_warn "get.docker.com 下载失败，尝试 apt 安装 docker.io..."
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
             log_error "Docker 安装失败，请查看 $APT_LOG"
             return 1

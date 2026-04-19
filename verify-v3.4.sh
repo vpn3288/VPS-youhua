@@ -677,6 +677,7 @@ check_vs_targets() {
     echo ""
 
     # 跨函数追踪（由 check_vs_targets 更新）
+    # R6-A3 FIX: 不使用 local，确保 passed/failed 是全局变量可供 main() 读取
     passed=0
     failed=0
 
