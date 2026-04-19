@@ -728,7 +728,7 @@ main() {
 
     if [[ -t 0 ]]; then
         echo -n "继续执行？(y/n，默认 y): "
-        read -r confirm
+        read -r -t 30 confirm || confirm="y"
         [[ "$confirm" == "n" || "$confirm" == "N" ]] && exit 0
     fi
 

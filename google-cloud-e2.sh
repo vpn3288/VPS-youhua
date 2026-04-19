@@ -49,7 +49,7 @@ readonly TMPFS_SIZE="256M"
 
 # GCP e2-micro TCP 缓冲（内存3%，上限8MB，下限4MB）
 # M-2 FIX: awk浮点运算后强制转换为整数，并加整数范围限制确保边界安全
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024;t=int(m*31457280);if(t>8388608)t=8388608;else if(t<4194304)t=4194304;print t}' /proc/meminfo)
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024;t=int(m*1024*3/100);if(t>8388608)t=8388608;else if(t<4194304)t=4194304;print t}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512

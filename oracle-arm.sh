@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.4 R79
+# Oracle Cloud ARM 专用优化安装脚本 v3.4
 # 硬件: Ampere Altra, 2核16GB, 100GB 云盘
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
@@ -78,7 +78,7 @@ load_common_optimize() {
     
     # 下载到临时目录
     local tmpdir="/tmp/vps-youhua"
-    local sha256_expected="afd64f38bc9133beb2b85da97299f55b8b98763157ac93bda0067956c59b4361"
+    local sha256_expected="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
@@ -268,7 +268,12 @@ optimize_network_oracle() {
         if [[ $SYS_CPU_CORES -gt 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
             if [[ $cores -gt 0 ]]; then
-                local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
+                local mask
+                if [[ $cores -eq 63 ]]; then
+                    mask="7fffffffffffffff"
+                else
+                    mask=$(printf '%x' $(( (1 << cores) - 1 )))
+                fi
                 for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
                     [[ -f "$rps_file" ]] || continue
                     printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
@@ -709,11 +714,13 @@ main() {
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
     local did_install=false
 
-    uninstall_all "$@" || exit 1
+    if [[ "${1:-}" == "--uninstall" ]]; then
+        uninstall_all "$@" || exit 1
+    fi
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION} R79${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION}${NC}"
     echo "========================================================================"
     echo ""
 
@@ -797,7 +804,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} R79 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

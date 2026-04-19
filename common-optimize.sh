@@ -122,8 +122,8 @@ detect_system() {
     SYS_KERNEL=$(uname -r)
     SYS_ARCH=$(uname -m)
 
-    SYS_OS_ID=$(grep -oP '(?<=^ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "unknown")
-    SYS_OS_VERSION=$(grep -oP '(?<=^VERSION_ID=).+' /etc/os-release 2>/dev/null | tr -d '"' || echo "unknown")
+    SYS_OS_ID=$(awk -F'["= ]' '/^ID=/ {print $2; exit}' /etc/os-release 2>/dev/null || echo "unknown")
+    SYS_OS_VERSION=$(awk -F'["= ]' '/^VERSION_ID=/ {print $2; exit}' /etc/os-release 2>/dev/null || echo "unknown")
 
     SYS_DISK_TOTAL_GB=$(df -BG / 2>/dev/null | awk 'NR==2 {print $2}' | tr -d 'G' || echo 0)
     SYS_DISK_AVAIL_GB=$(df -BG / 2>/dev/null | awk 'NR==2 {print $4}' | tr -d 'G' || echo 0)
@@ -321,7 +321,7 @@ EOF
         local fastest=""
         local fastest_ms=9999
 
-        for m in $mirrors; do
+        for m in ${mirrors//,/ }; do
             local name="${m%%:*}"
             local host="${m#*:}"
             local ms; ms=$(curl --connect-timeout 3 -s -o /dev/null -w "%{time_total}" "http://${host}/debian/" 2>/dev/null | awk '{printf "%.0f", $1*1000}')
@@ -570,10 +570,6 @@ configure_firewall_lo() {
     if command -v iptables-save &>/dev/null; then
         iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
         log_info "iptables 规则已保存（/etc/iptables/rules.v4）"
-        # 仅当 iptables-persistent 已安装时才重新保存规则
-        if dpkg -l iptables-persistent &>/dev/null 2>&1; then
-            iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
-        fi
     fi
 }
 
@@ -678,9 +674,9 @@ configure_limits() {
     log_step "配置资源限制..."
 
     # ── 内存检测 ─────────────────────────────────────────────────────────────
-    local SYS_MEM_MB SYS_MEM_KB
-    SYS_MEM_KB=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
-    SYS_MEM_MB=$((SYS_MEM_KB / 1024))
+    local sys_mem_kb sys_mem_mb
+    sys_mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+    sys_mem_mb=$((sys_mem_kb / 1024))
     IS_LOW_MEMORY=false
     [[ "${SYS_MEM_MB:-0}" -gt 0 ]] && [[ "${SYS_MEM_MB}" -lt 2048 ]] && IS_LOW_MEMORY=true
 
@@ -924,7 +920,7 @@ configure_swap() {
 
     # 检查磁盘空间（至少需要 1.2GB 可用空间）
     local available_mb
-    available_mb=$(df / | awk 'NR==2 {print int($4/1024)}')
+    available_mb=$(df -BM / 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
     if [[ "${available_mb}" -lt 1200 ]]; then
         log_warn "磁盘空间不足（可用: ${available_mb}MB），跳过 Swap 创建"
         return 0
@@ -951,11 +947,10 @@ configure_swap() {
         echo "/swapfile none swap sw 0 0" >> /etc/fstab
     fi
 
-    # swappiness: 低内存代理节点设为 10-30（与 R4S 相反）
-    # 1C1G/GCP 场景希望尽量用 Swap 保护内存
+    # swappiness: 低内存代理节点设为 20（1C1G/GCP 场景尽量用 Swap 保护内存）
+    # 仅在 swap 创建成功后设置
     echo 20 > /proc/sys/vm/swappiness 2>/dev/null || true
     sysctl -w vm.swappiness=20 2>/dev/null || true
-
     log_info "Swap 1GB 创建完成，swappiness=20"
 }
 

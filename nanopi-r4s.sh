@@ -247,7 +247,7 @@ optimize_memory_r4s() {
             echo "$((zram_size * 1024))" > /sys/block/zram0/disksize 2>/dev/null || true
             mkswap /dev/zram0 >/dev/null 2>&1 || true
             swapon /dev/zram0 -p 32767 2>/dev/null || true
-            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))GB（Armbian 24.04 推荐）"
+            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))MB（Armbian 24.04 推荐）"
         fi
     fi
 
@@ -922,8 +922,8 @@ main() {
     clean_system
     configure_tf_card_protection
     optimize_memory_r4s
-    # BUG#1 FIX: R4S 在 zram 之后才检查 swap（避免与 zram 冲突）
-    configure_swap
+    # R4S TF 卡保护：跳过 configure_swap（swapfile 会缩短 TF 卡寿命）
+    log_info "R4S: skip configure_swap (TF card protection — zram active)"
     # M2 FIX: conntrack hashsize 必须在 sysctl 之前设置，避免运行时冲突
     configure_conntrack_hashsize_r4s "$((${SYS_MEM_MB} * 32))"
     configure_sysctl_r4s

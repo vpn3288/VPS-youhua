@@ -84,7 +84,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
 
     local dest="${tmpdir}/common-optimize.sh"
-    local sha256_expected="afd64f38bc9133beb2b85da97299f55b8b98763157ac93bda0067956c59b4361"
+    local sha256_expected="abbd32f68ce8723ef579d159128af038d760cd1ead088a5c151b00091e7cc187"
     local sha256_actual=""
 
     # 主站下载（带 SHA256 验证）
@@ -99,12 +99,18 @@ load_common_optimize() {
         fi
     fi
 
-    # Fallback: GitHub raw CDN（不验证 SHA256，接受任何内容）
+    # Fallback: GitHub raw CDN（带 SHA256 验证）
     local fallback_url="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/common-optimize.sh"
     if curl -fsSL "$fallback_url" -o "$dest" 2>/dev/null; then
-        echo -e "\033[33m[!] 使用备用源下载，SHA256 未验证\033[0m" >&2
-        source "$dest"
-        return 0
+        sha256_actual=$(sha256sum "$dest" 2>/dev/null | awk '{print $1}' || echo "")
+        if [[ -n "$sha256_actual" && "$sha256_actual" == "$sha256_expected" ]]; then
+            source "$dest"
+            return 0
+        else
+            echo -e "\033[31m[✗] 错误: common-optimize.sh SHA256 校验失败\033[0m" >&2
+            rm -f "$dest"
+            exit 1
+        fi
     fi
 
     echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh（主站和备用源均失败）\033[0m" >&2
@@ -220,7 +226,8 @@ vm.vfs_cache_pressure = 50
 vm.oom_kill_allocating_task = 1
 vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
-vm.dirty_writeback_centisecs = 3000   # 1C4G 低核省IO
+# 1C4G 低核省IO
+vm.dirty_writeback_centisecs = 3000
 vm.dirty_expire_centisecs = 30000
 
 # ── 网络（Oracle Cloud 1C4G 精简）──────────────────────────────────────────
@@ -661,10 +668,11 @@ configure_conntrack_hashsize() {
     modprobe nf_conntrack 2>/dev/null || true
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
-        echo "${CT_MAX}" > "$hashsize_file" 2>/dev/null || {
+        local hashsize=$(( CT_MAX / 4 ))
+        echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
             log_warn "hashsize 写入失败，尝试写入 modprobe 配置"
             mkdir -p /etc/modprobe.d
-            echo "options nf_conntrack hashsize=${CT_MAX}" > /etc/modprobe.d/nf_conntrack.conf
+            echo "options nf_conntrack hashsize=${hashsize}" > /etc/modprobe.d/nf_conntrack.conf
         }
     else
         log_warn "nf_conntrack 模块未加载，跳过 hashsize 配置"
