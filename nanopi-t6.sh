@@ -468,11 +468,26 @@ install_nodejs() {
 
     # [H10] FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
     local nodesource_script="/tmp/setup_nodesource.sh"
-    if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" && \
-       chmod +x "$nodesource_script" && \
-       "$nodesource_script" >> "$APT_LOG" 2>&1; then
-        log_info "Node.js 安装完成"
-    else
+    local nodesource_download_ok=false
+    if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null; then
+        nodesource_download_ok=true
+    fi
+
+    if [[ "$nodesource_download_ok" == "true" ]]; then
+        # SHA256 完整性校验（防止供应链污染）
+        local expected_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
+        local actual_sha256
+        actual_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_sha256" == "$expected_sha256" ]]; then
+            chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && log_info "Node.js 安装完成" || nodesource_download_ok="failed"
+        else
+            log_warn "NodeSource SHA256 校验异常，跳过执行"
+            nodesource_download_ok="failed"
+        fi
+        rm -f "$nodesource_script"
+    fi
+
+    if [[ "$nodesource_download_ok" != "true" ]]; then
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"

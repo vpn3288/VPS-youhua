@@ -970,7 +970,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R71 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPi R4S v${SCRIPT_VERSION} R76 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

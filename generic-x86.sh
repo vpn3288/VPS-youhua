@@ -524,20 +524,25 @@ install_nodejs() {
     fi
 
     local node_setup="/tmp/nodesource_setup_22.sh"
+    local node_install_ok=false
     if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$node_setup" 2>/dev/null; then
-        bash "$node_setup" >> "$APT_LOG" 2>&1 || {
-            rm -f "$node_setup"
-            log_warn "NodeSource 安装失败，尝试 apt 安装..."
-            apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
-                log_error "Node.js 安装失败，请查看 $APT_LOG"
-                return 1
-            }
-        }
+        # SHA256 完整性校验（防止供应链污染）
+        local expected_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
+        local actual_sha256
+        actual_sha256=$(sha256sum "$node_setup" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_sha256" == "$expected_sha256" ]]; then
+            bash "$node_setup" >> "$APT_LOG" 2>&1 && node_install_ok=true || node_install_ok=false
+        else
+            log_warn "NodeSource SHA256 校验异常，跳过执行"
+            node_install_ok=false
+        fi
         rm -f "$node_setup"
-    else
-        log_warn "NodeSource setup 下载失败，尝试 apt 安装..."
+    fi
+
+    if [[ "$node_install_ok" != "true" ]]; then
+        log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
-            log_error "Node.js 安装失败"
+            log_error "Node.js 安装失败，请查看 $APT_LOG"
             return 1
         }
     fi

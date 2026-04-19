@@ -406,10 +406,10 @@ install_nodejs() {
 
     if [[ "$nodesource_download_ok" == "true" ]]; then
         # SHA256 完整性校验（防止供应链污染）
-        local expected_nodesource_sha256="c48d6c1e47b056c28bc8e78c0697c2d5d2e6e80e2c3e5a8c1f4b7c8d9e0f1a2b"
+        local expected_nodesource_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
         local actual_nodesource_sha256
         actual_nodesource_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
-        if [[ "$actual_nodesource_sha256" == "$expected_nodesource_sha256" ]] || [[ -z "$expected_nodesource_sha256" ]]; then
+        if [[ "$actual_nodesource_sha256" == "$expected_nodesource_sha256" ]]; then
             bash "$nodesource_script" >> "$APT_LOG" 2>&1 && nodesource_download_ok="verified" || nodesource_download_ok="failed"
         else
             log_warn "NodeSource 安装脚本 SHA256 校验异常，跳过执行"
