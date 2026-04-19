@@ -21,13 +21,13 @@ declare -A EXPECTED_SHA256=(
     ["nanopi-r4s"]="39f137a9cddae5d17bc7ea70b5f55e34f5f69d1a033777aa382553e556debcbb"
     ["nanopi-t6"]="8cafb1e9394837322373024ab60f12d9d111bf205f0bcb18c8a1f46a1d2e9168"
     ["oracle-arm"]="d6be45f551292db300c7bdae9782378f40b00eeb8a15852ed7f621c98dad5830"
-    ["oracle-1c4g"]="29a86f62b31f1cf33027389362d6eb1385f115d94421074e733a439b499fdb25"
+    ["oracle-1c4g"]="471ccad70415aefd7eff3754d4abe0a65553304ddd22e2cdf6c965e35a85811d"
     ["n5105"]="0be99a42df846251de4acb9549469cb45a7604dbf82e844ebb139516e8e863ac"
     ["generic-x86"]="e4ff00c75d653db7bcc5675b28fdee2e4173b31cf22a9695ca29db2208cdfc5a"
     ["generic-1c1g"]="3d5b4a9a120fbb8fd16bf79d69cdb6009092f10a1a376d507c5d23de1513bb25"
     ["google-cloud-e2"]="9c437a5360763123f5202bf9645e1c01129f47146e7f7eee8014c33784c12f89"
     ["verify-v3.4"]="7d6d58782be900755c4f67864ccb32d4f59db661fe5580a50dbc1462ffd821c7"
-    ["install-sh"]="cdfdf005b11436ff25edd2041822360c3470e2bf51a529d5e3c6216486dd6676"
+    ["install-sh"]="2294631bfadc1d3acbff69844105194bbd970510da249ea93284af30a7da1bac"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
