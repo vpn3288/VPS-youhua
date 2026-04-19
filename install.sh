@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AIagent 环境优化脚本（统一入口） v3.3
+# AIagent 环境优化脚本（统一入口） v3.4
 # 支持平台: NanoPi R4S, NanoPC T6, Oracle ARM, N5105, 通用 x86 VPS
 # =============================================================================
 
 set -euo pipefail
 IFS=$'\n\t'
 
-readonly VERSION="3.3"
+readonly VERSION="3.4"
 readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -17,16 +17,17 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["common"]="239c7fd2cc718c46b280501eb759154326e10b3ec59bb6efd9bd29397cd4b762"
+    ["common"]="afd64f38bc9133beb2b85da97299f55b8b98763157ac93bda0067956c59b4361"
     ["nanopi-r4s"]="ef271da01e9cb9e82ce44e74ccb327d4e9c6600342b1a2e40cd429b6b1ff1384"
     ["nanopi-t6"]="143d551f92c78ac85eb91eee9e310288ff187b96294250af51789ccfb54a5078"
     ["oracle-arm"]="cc2817bd50bac11b70b469310934e701e54a8605a3c3eed9762f79acfc7d4a26"
-    ["oracle-1c4g"]="f6cbf6effbe51e3ce20f8cc056e4c15ec6613cd5d5a1957b46e8f3cfb81b0f6e"
-    ["n5105"]="e8dbfee4348d6860fdd000b1b8ad31318021aab6f15736fd6753f4785186278a"
+    ["oracle-1c4g"]="29a86f62b31f1cf33027389362d6eb1385f115d94421074e733a439b499fdb25"
+    ["n5105"]="0be99a42df846251de4acb9549469cb45a7604dbf82e844ebb139516e8e863ac"
     ["generic-x86"]="4381868c945d48a9b6ac9d43bdb33a9e34e1d65373bfb3c7012351fb23c0a58b"
-    ["generic-1c1g"]="688167a0defa2e06923da00648a306721b7f80dfd23b6d4c2cb3558007df3898"
+    ["generic-1c1g"]="3d5b4a9a120fbb8fd16bf79d69cdb6009092f10a1a376d507c5d23de1513bb25"
     ["google-cloud-e2"]="81469db7d63732fd753c6ed64efd27c519fedf9b3cc418b8a90a66ec454fa383"
-    ["verify-v3.3"]="afa55fd2b023488c20baa9c9f2eb1203e22cd4f115bb4ee3f1a293b26a8180c8"
+    ["verify-v3.4"]="2de6dbc840b75ee0d7dcba405d7b1cdeea5ca67dff626f7b842973f78f94eb86"
+    ["install-sh"]="28ab9272258a7e5f65b4db53340f452528db04853959b1d6941255d731a787b6"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -110,12 +111,12 @@ log_step()  { echo -e "${CYAN}[➜]${NC} $1"; }
 
 run_verify_status() {
     echo -e "${BOLD}正在下载并运行环境健康检查...${NC}"
-    local verify_url="${RAW_BASE}/verify-v3.3.sh"
+    local verify_url="${RAW_BASE}/verify-v3.4.sh"
     local verify_file
     verify_file=$(mktemp /tmp/vps-youhua-verify-XXXXXX.sh)
 
     if ! curl -fsSL "$verify_url" -o "$verify_file"; then
-        log_error "无法下载 verify-v3.3.sh，请检查网络连接"
+        log_error "无法下载 verify-v3.4.sh，请检查网络连接"
         rm -f "$verify_file"
         return 1
     fi
@@ -123,9 +124,9 @@ run_verify_status() {
     # [C5] SHA256 校验
     local actual_sha256
     actual_sha256=$(sha256sum "$verify_file" | awk '{print $1}')
-    if [[ "$actual_sha256" != "${EXPECTED_SHA256[verify-v3.3]}" ]]; then
-        log_error "verify-v3.3.sh SHA256 校验失败！疑似供应链污染。"
-        log_error "预期: ${EXPECTED_SHA256[verify-v3.3]}"
+    if [[ "$actual_sha256" != "${EXPECTED_SHA256[verify-v3.4]}" ]]; then
+        log_error "verify-v3.4.sh SHA256 校验失败！疑似供应链污染。"
+        log_error "预期: ${EXPECTED_SHA256[verify-v3.4]}"
         log_error "实际: $actual_sha256"
         rm -f "$verify_file"
         return 1
@@ -1069,14 +1070,14 @@ fi
     if [[ "${MODE}" == "status" ]]; then
         log_info "运行状态验证..."
         local verify_script
-        verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.3.sh"
+        verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.4.sh"
         if [[ -f "$verify_script" ]]; then
             # [C5] SHA256 校验
             local actual_sha256
             actual_sha256=$(sha256sum "$verify_script" | awk '{print $1}')
-            if [[ "$actual_sha256" != "${EXPECTED_SHA256[verify-v3.3]}" ]]; then
-                log_error "verify-v3.3.sh SHA256 校验失败！疑似文件被篡改。"
-                log_error "预期: ${EXPECTED_SHA256[verify-v3.3]}"
+            if [[ "$actual_sha256" != "${EXPECTED_SHA256[verify-v3.4]}" ]]; then
+                log_error "verify-v3.4.sh SHA256 校验失败！疑似文件被篡改。"
+                log_error "预期: ${EXPECTED_SHA256[verify-v3.4]}"
                 log_error "实际: $actual_sha256"
                 exit 1
             fi
@@ -1191,7 +1192,7 @@ fi
         echo "========================================================================"
         echo ""
         echo -e "  ${CYAN}重启前可运行验证脚本检查优化效果:${NC}"
-        echo -e "  ${GREEN}curl -fsSL ${RAW_BASE}/verify-v3.3.sh -o /tmp/verify-v3.3.sh && bash /tmp/verify-v3.3.sh${NC}"
+        echo -e "  ${GREEN}curl -fsSL ${RAW_BASE}/verify-v3.4.sh -o /tmp/verify-v3.4.sh && bash /tmp/verify-v3.4.sh${NC}"
         echo ""
         
         # 非交互模式跳过重启询问

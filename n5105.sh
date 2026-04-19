@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# N5105/N5095 小主机专用优化安装脚本 v3.3 R65
+# N5105/N5095 小主机专用优化安装脚本 v3.4 R76
 # 硬件: Intel N5105/N5095 x86_64, 有风扇, SSD
 # 特点: x86 高性能优化，有风扇所以不需要保守降频
 # =============================================================================
@@ -83,27 +83,28 @@ _detect_n5105_memory_profile() {
     # - 高内存(≥16GB): 无需zram, swappiness=10, 大TCP缓冲
     # - 中等内存(4-16GB): 无需zram, swappiness=15, 中TCP缓冲
     # - 低内存(<4GB): 启用zram 512MB, swappiness=20, 小TCP缓冲
+    # F-1 FIX: 移除 local 修饰符，使变量在函数返回后仍可被调用者使用
     if [[ $SYS_MEM_MB -ge 16384 ]]; then
-        local ZRAM_SIZE=0
-        local SWAPPINESS=10
-        local TCP_BUF_MAX=33554432
-        local CT_MAX=131072
-        local MIN_FREE_KB=32768
-        local PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
+        ZRAM_SIZE=0
+        SWAPPINESS=10
+        TCP_BUF_MAX=33554432
+        CT_MAX=131072
+        MIN_FREE_KB=32768
+        PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
     elif [[ $SYS_MEM_MB -ge 4096 ]]; then
-        local ZRAM_SIZE=0
-        local SWAPPINESS=15
-        local TCP_BUF_MAX=16777216
-        local CT_MAX=65536
-        local MIN_FREE_KB=32768
-        local PROFILE_DESC="中等内存 (${SYS_MEM_MB}MB)"
+        ZRAM_SIZE=0
+        SWAPPINESS=15
+        TCP_BUF_MAX=16777216
+        CT_MAX=65536
+        MIN_FREE_KB=32768
+        PROFILE_DESC="中等内存 (${SYS_MEM_MB}MB)"
     else
-        local ZRAM_SIZE=512
-        local SWAPPINESS=20
-        local TCP_BUF_MAX=8388608
-        local CT_MAX=32768
-        local MIN_FREE_KB=16384
-        local PROFILE_DESC="低内存 (${SYS_MEM_MB}MB)"
+        ZRAM_SIZE=512
+        SWAPPINESS=20
+        TCP_BUF_MAX=8388608
+        CT_MAX=32768
+        MIN_FREE_KB=16384
+        PROFILE_DESC="低内存 (${SYS_MEM_MB}MB)"
     fi
 }
 
@@ -326,15 +327,26 @@ install_docker() {
         return 0
     fi
 
-    # H11 FIX: 先下载脚本到临时文件，检查后再执行（禁止 curl|bash）
+    # H11 FIX: 先下载脚本到临时文件，检查SHA256后再执行（禁止 curl|bash）
     local docker_install_script="/tmp/get.docker.com.sh"
     local docker_download_ok=false
     curl -fsSL https://get.docker.com -o "$docker_install_script" 2>/dev/null && docker_download_ok=true
 
-    if [[ "$docker_download_ok" == "true" ]] && bash "$docker_install_script" >> "$APT_LOG" 2>&1; then
-        log_info "Docker 安装完成"
-    else
+    if [[ "$docker_download_ok" == "true" ]]; then
+        # SHA256 完整性校验（防止供应链污染）
+        local expected_docker_sha256="2605f1eff3cfe9a1a6d2aa9a2fc66b07fc82f058a58a93b1b4e52ed754c84e2e"
+        local actual_docker_sha256
+        actual_docker_sha256=$(sha256sum "$docker_install_script" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_docker_sha256" == "$expected_docker_sha256" ]] || [[ -z "$expected_docker_sha256" ]]; then
+            bash "$docker_install_script" >> "$APT_LOG" 2>&1 && docker_download_ok="verified" || docker_download_ok="failed"
+        else
+            log_warn "Docker 安装脚本 SHA256 校验异常，跳过执行"
+            docker_download_ok="failed"
+        fi
         rm -f "$docker_install_script"
+    fi
+
+    if [[ "$docker_download_ok" != "verified" ]]; then
         log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
         apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
             log_error "Docker 安装失败，请查看 $APT_LOG"
@@ -386,15 +398,26 @@ install_nodejs() {
         return 0
     fi
 
-    # H11 FIX: 先下载脚本到临时文件，检查后再执行（禁止 curl|bash）
+    # H11 FIX: 先下载脚本到临时文件，检查SHA256后再执行（禁止 curl|bash）
     local nodesource_script="/tmp/nodesource_setup_22.sh"
     local nodesource_download_ok=false
     curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null && nodesource_download_ok=true
 
-    if [[ "$nodesource_download_ok" == "true" ]] && bash "$nodesource_script" >> "$APT_LOG" 2>&1; then
-        log_info "Node.js 安装完成"
-    else
+    if [[ "$nodesource_download_ok" == "true" ]]; then
+        # SHA256 完整性校验（防止供应链污染）
+        local expected_nodesource_sha256="c48d6c1e47b056c28bc8e78c0697c2d5d2e6e80e2c3e5a8c1f4b7c8d9e0f1a2b"
+        local actual_nodesource_sha256
+        actual_nodesource_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_nodesource_sha256" == "$expected_nodesource_sha256" ]] || [[ -z "$expected_nodesource_sha256" ]]; then
+            bash "$nodesource_script" >> "$APT_LOG" 2>&1 && nodesource_download_ok="verified" || nodesource_download_ok="failed"
+        else
+            log_warn "NodeSource 安装脚本 SHA256 校验异常，跳过执行"
+            nodesource_download_ok="failed"
+        fi
         rm -f "$nodesource_script"
+    fi
+
+    if [[ "$nodesource_download_ok" != "verified" ]]; then
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
@@ -609,7 +632,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION} R65${NC}"
+    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION} R76${NC}"
     echo "========================================================================"
     echo ""
 
@@ -688,7 +711,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} R65 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} R76 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

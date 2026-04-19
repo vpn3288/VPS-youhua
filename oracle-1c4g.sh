@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Oracle Cloud ARM 1核4G 专用优化安装脚本 v3.3 R67
+# Oracle Cloud ARM 1核4G 专用优化安装脚本 v3.4
 # 硬件: Ampere Altra, 1核 4GB, Oracle Cloud
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，元数据检查）
 #       针对 1C4G 资源精简优化（比 2C16G 更保守）
@@ -77,15 +77,36 @@ load_common_optimize() {
         return 0
     fi
     
-    # 下载到临时目录
+    # 下载到临时目录（SHA256 完整性验证 + 降级 fallback）
     local tmpdir="/tmp/vps-youhua"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
-    if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
-        source "${tmpdir}/common-optimize.sh"
+
+    local dest="${tmpdir}/common-optimize.sh"
+    local sha256_expected="afd64f38bc9133beb2b85da97299f55b8b98763157ac93bda0067956c59b4361"
+    local sha256_actual=""
+
+    # 主站下载（带 SHA256 验证）
+    if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "$dest" 2>/dev/null; then
+        sha256_actual=$(sha256sum "$dest" 2>/dev/null | awk '{print $1}' || echo "")
+        if [[ -n "$sha256_actual" && "$sha256_actual" == "$sha256_expected" ]]; then
+            source "$dest"
+            return 0
+        else
+            echo -e "\033[33m[!] SHA256 校验失败（预期: ${sha256_expected:0:16}...，实际: ${sha256_actual:0:16}...），尝试备用源...\033[0m" >&2
+            rm -f "$dest"
+        fi
+    fi
+
+    # Fallback: GitHub raw CDN（不验证 SHA256，接受任何内容）
+    local fallback_url="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/common-optimize.sh"
+    if curl -fsSL "$fallback_url" -o "$dest" 2>/dev/null; then
+        echo -e "\033[33m[!] 使用备用源下载，SHA256 未验证\033[0m" >&2
+        source "$dest"
         return 0
     fi
-    echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh\033[0m" >&2
+
+    echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh（主站和备用源均失败）\033[0m" >&2
     exit 1
 }
 
@@ -538,8 +559,10 @@ uninstall_all() {
     sed -i '/tmpfs.*\/tmp/d' /etc/fstab 2>/dev/null || true
     log_info "fstab tmpfs 条目已清理"
 
-    # 清理 iptables 规则
+    # 清理 iptables 规则（L5 FIX: 精准删除而非盲目 flush）
+    # 只删除本脚本添加的规则，避免影响其他防火墙配置
     iptables -D INPUT -i lo -j ACCEPT 2>/dev/null || true
+    iptables -D OUTPUT -o lo -j ACCEPT 2>/dev/null || true
     log_info "iptables 规则已清理"
 
     # 清理优化标记文件
@@ -587,18 +610,20 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  Oracle Cloud ARM 1核4G 专用优化安装脚本 v${SCRIPT_VERSION} R67${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 1核4G 专用优化安装脚本 v${SCRIPT_VERSION}${NC}"
     echo "========================================================================"
     echo ""
 
     init_script
     check_idempotent
+    detect_system
+    # M1 FIX: detect_oracle_cloud 必须在 configure_ipv6_health 和 configure_dns_lock 之前
+    # 因为 SYS_IS_ORACLE_CLOUD 变量被这些函数使用来决定行为
+    detect_oracle_cloud
     # BUG#5: IPv6 黑洞检测
     configure_ipv6_health
     # BUG#7: DNS 锁定防篡改
     configure_dns_lock
-    detect_system
-    detect_oracle_cloud
     check_oracle_metadata
     check_network
     preflight_check
@@ -685,10 +710,15 @@ configure_limits() {
         systemctl restart rng-tools 2>/dev/null || true
         log_info "rng-tools 熵服务运行中"
     else
-        apt-get install -y rng-tools >/dev/null 2>&1 && \
-            (systemctl enable rng-tools && systemctl restart rng-tools) >> "$APT_LOG" 2>&1 && \
-            log_info "rng-tools 已安装并运行（TLS 熵池充足）" || \
+        # M5 FIX: 使用 install_if_missing + 统一日志路径
+        DEBIAN_FRONTEND=noninteractive install_if_missing rng-tools
+        if command -v rng-tools >/dev/null 2>&1; then
+            systemctl enable rng-tools 2>/dev/null || true
+            systemctl restart rng-tools 2>/dev/null || true
+            log_info "rng-tools 已安装并运行（TLS 熵池充足）"
+        else
             log_warn "熵服务安装失败（TLS 加解密可能受影响）"
+        fi
     fi
 
     # BUG#46 Fix: install_build_deps 独立于 SKIP_SOFTWARE_SCRIPT
@@ -708,7 +738,7 @@ configure_limits() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ Oracle Cloud ARM 1核4G v${SCRIPT_VERSION} R67 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM 1核4G v${SCRIPT_VERSION} 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"

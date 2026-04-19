@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPS-youhua 通用函数库 v3.3 R65
+# VPS-youhua 通用函数库 v3.4 R76
 # 所有平台共享的函数和变量（各平台脚本 source 此文件）
 # =============================================================================
 
@@ -26,7 +26,7 @@ log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局常量（可被调用者 override）
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="3.3"
+readonly SCRIPT_VERSION="3.4"
 readonly APT_LOG="/var/log/vps-youhua.log"         # 统一日志路径（所有平台共用）
 readonly LOCK_FILE="/var/lock/vps-youhua.lock"      # 统一锁文件
 
@@ -564,14 +564,16 @@ configure_firewall_lo() {
     log_info "lo 网卡已无脑放行"
 
     # BUG#FIX: iptables 规则持久化（重启后保留）
+    # M4 FIX: 不再自动安装 iptables-persistent（会触发交互提示）
+    # 用户如有需要可手动安装，或确保 iptables-save 能在启动时自动加载
     mkdir -p /etc/iptables
     if command -v iptables-save &>/dev/null; then
         iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
-        log_info "iptables 规则已持久化（/etc/iptables/rules.v4）"
-    fi
-    # 安装 iptables-persistent 以便下次重启自动加载规则
-    if ! dpkg -l iptables-persistent &>/dev/null; then
-        DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent >> "$APT_LOG" 2>&1 || true
+        log_info "iptables 规则已保存（/etc/iptables/rules.v4）"
+        # 仅当 iptables-persistent 已安装时才重新保存规则
+        if dpkg -l iptables-persistent &>/dev/null 2>&1; then
+            iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+        fi
     fi
 }
 
@@ -712,11 +714,11 @@ root hard nproc ${NPROC_VAL}
 * hard nproc ${NPROC_VAL}
 EOF
 
-    # systemd 级别
+    # systemd 级别（L3 FIX: nofile 设为 infinity 避免数值覆盖冲突）
     mkdir -p /etc/systemd/system.conf.d
     cat > /etc/systemd/system.conf.d/99-resource-limits.conf <<EOF
 [Manager]
-DefaultLimitNOFILE=${NOFILE_VAL}:${NOFILE_VAL}
+DefaultLimitNOFILE=infinity
 DefaultLimitNPROC=${NPROC_VAL}:${NPROC_VAL}
 DefaultLimitMEMLOCK=infinity
 EOF
@@ -990,7 +992,7 @@ write_common_sysctl() {
     # 写入通用 sysctl 配置（使用已确定的 BBR_CC 值）
     cat > "$file" <<EOF
 # =============================================================================
-# VPS-youhua 通用内核加固参数 v3.3 R65
+# VPS-youhua 通用内核加固参数 v3.4 R76
 # 所有平台共享
 # =============================================================================
 
