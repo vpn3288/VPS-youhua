@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v${SCRIPT_VERSION}
+# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.4
 # 硬件: Google Cloud e2-micro, 1vCPU(共享) 1GB RAM, 30GB SSD
 # 特点: GCP 共享 CPU 特化优化（burstable CPU + Intel + VPC 网络）
 #       GCP Always Free 机型永久免费（1vCPU 1GB，非 ARM）

@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.4 R76
+# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.4
 # 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
 # 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
 # =============================================================================
@@ -85,7 +85,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         # HIGH FIX: SHA256 校验供应链安全
-        local sha256_expected="66db71c53e49b33b807eb03623f9f164aab42549213d8a037fc4d363ac051d35"
+        local sha256_expected="700c1fc718042516ca62ebad7a2a2be7a6eb7c4735c16a9c787bf8d159a57642"
         local sha256_actual
         sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
         if [[ "$sha256_actual" != "$sha256_expected" ]]; then
@@ -710,7 +710,7 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION} R76${NC}"
+    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION}${NC}"
     echo "========================================================================"
     echo ""
 
@@ -788,7 +788,7 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} R76 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
