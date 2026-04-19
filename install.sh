@@ -26,7 +26,7 @@ declare -A EXPECTED_SHA256=(
     ["generic-x86"]="e4ff00c75d653db7bcc5675b28fdee2e4173b31cf22a9695ca29db2208cdfc5a"
     ["generic-1c1g"]="3d5b4a9a120fbb8fd16bf79d69cdb6009092f10a1a376d507c5d23de1513bb25"
     ["google-cloud-e2"]="9c437a5360763123f5202bf9645e1c01129f47146e7f7eee8014c33784c12f89"
-    ["verify-v3.4"]="2de6dbc840b75ee0d7dcba405d7b1cdeea5ca67dff626f7b842973f78f94eb86"
+    ["verify-v3.4"]="7d6d58782be900755c4f67864ccb32d4f59db661fe5580a50dbc1462ffd821c7"
     ["install-sh"]="cdfdf005b11436ff25edd2041822360c3470e2bf51a529d5e3c6216486dd6676"
 )
 
