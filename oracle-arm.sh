@@ -786,8 +786,6 @@ main() {
     oracle_cloud_cleanup
     optimize_memory_oracle
     configure_cpufreq
-    # BUG#1 FIX: Oracle ARM - configure zram first, then check swap
-    configure_zram
     # Check swap after zram to avoid conflicts
     configure_swap
     configure_sysctl_oracle
