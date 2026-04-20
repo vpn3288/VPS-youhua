@@ -983,11 +983,12 @@ configure_swap() {
         return 0
     fi
 
-    # 检查磁盘空间（至少需要 1.2GB 可用空间）
+    # Round 10 Fix: Add disk space threshold check (1500MB minimum for swapfile)
+    # 检查磁盘空间（至少需要 1.5GB 可用空间，为 1GB swapfile 留出安全余量）
     local available_mb
     available_mb=$(df -BM / 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
-    if [[ "${available_mb}" -lt 1200 ]]; then
-        log_warn "磁盘空间不足（可用: ${available_mb}MB），跳过 Swap 创建"
+    if [[ "${available_mb}" -lt 1500 ]]; then
+        log_warn "磁盘空间不足（可用: ${available_mb}MB < 1500MB），跳过 Swap 创建"
         return 0
     fi
 

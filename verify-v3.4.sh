@@ -250,6 +250,10 @@ check_locale_chain() {
         ((issues++))
     fi
 
+    # Round 10 Fix: Add filesystem overhead to available_mb check (reserve 200MB)
+    local fs_overhead_mb=200
+    local available_with_overhead=$((available_mb - fs_overhead_mb))
+
     # Layer 3: /etc/environment.d/90-chinese.conf (systemd/PAM)
     echo -e "  ${DIM}Layer 3 - /etc/environment.d/90-chinese.conf:${RESET}"
     if [[ -f /etc/environment.d/90-chinese.conf ]]; then
