@@ -106,17 +106,27 @@ cleanup_legacy_tmpfs() {
     # HERMES-P1 FIX: 检查进程占用后再清理遗留 tmpfs 挂载
     # 确保后续 configure_tmp_tmpfs 能正确执行（remount 不会因已有挂载而失败或丢失数据）
     # 合并两种清理场景：残留挂载 + PID文件标记
+    # HIGH FIX: Add flock to prevent TOCTOU race condition
+    local lockfile="/var/lock/vps-youhua-tmpfs.lock"
+    exec 200>"$lockfile"
+    if ! flock -n 200; then
+        log_warn "另一个进程正在操作 tmpfs，跳过清理"
+        return 0
+    fi
+
     if mount | grep -q "tmpfs on /tmp"; then
         log_warn "检测到残留 tmpfs /tmp 挂载，检查进程占用..."
         # 检查是否有进程正在使用 /tmp
         if lsof /tmp 2>/dev/null | grep -q /tmp; then
             log_error "清理失败: /tmp 被进程占用，请先停止相关进程后手动执行: umount /tmp"
+            flock -u 200
             return 1
         fi
         umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
             log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
         }
     fi
+    flock -u 200
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -287,12 +297,25 @@ optimize_memory_r4s() {
     else
         local mem_kb
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-        local zram_size=$((mem_kb * 50 / 100))
-        if [[ -f /sys/block/zram0/disksize ]]; then
-            echo "$((zram_size * 1024))" > /sys/block/zram0/disksize 2>/dev/null || true
-            mkswap /dev/zram0 >/dev/null 2>&1 || true
-            swapon /dev/zram0 -p 32767 2>/dev/null || true
-            log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))MB（Armbian 24.04 推荐）"
+        # CRITICAL FIX: Check mem_kb before use
+        if [[ -z "$mem_kb" || "$mem_kb" -le 0 ]]; then
+            log_warn "无法读取内存信息，跳过 zram"
+        else
+            local zram_size=$((mem_kb * 50 / 100))
+            # MEDIUM FIX: Wait for zram device to be ready (race condition)
+            local retry=0
+            while [[ $retry -lt 10 ]] && [[ ! -b /dev/zram0 ]]; do
+                sleep 0.1
+                retry=$((retry + 1))
+            done
+            if [[ -f /sys/block/zram0/disksize ]]; then
+                echo "$((zram_size * 1024))" > /sys/block/zram0/disksize 2>/dev/null || true
+                mkswap /dev/zram0 >/dev/null 2>&1 || true
+                swapon /dev/zram0 -p 32767 2>/dev/null || true
+                log_info "zram 开启，压缩后约等效 +$((zram_size / 1024))MB（Armbian 24.04 推荐）"
+            else
+                log_warn "zram0 设备未就绪，跳过"
+            fi
         fi
     fi
 
