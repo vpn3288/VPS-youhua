@@ -199,6 +199,7 @@ configure_zram_1c1g() {
         fi
         # 重置 zram 设备（使用 reset 文件，比 disksize=0 更可靠）
         if [[ -f /sys/block/zram0/reset ]]; then
+            sync
             echo 1 > /sys/block/zram0/reset 2>/dev/null || true
         fi
         # 重新配置
