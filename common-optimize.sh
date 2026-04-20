@@ -314,6 +314,16 @@ EOF
         return 0
     fi
 
+    # 幂等性检查：若已标记为已配置，跳过镜像切换（仅保留 apt-get update）
+    local apt_marker="/etc/vps-youhua-apt-sources-configured"
+    if [[ -f "$apt_marker" ]]; then
+        log_info "APT 源已配置，跳过镜像切换"
+        if ! apt-get update -qq >> "$APT_LOG" 2>&1; then
+            log_warn "APT 更新失败"
+        fi
+        return 0
+    fi
+
     # 地区检测函数
     auto_select_mirror() {
         local latencies=""
@@ -325,7 +335,8 @@ EOF
             local name="${m%%:*}"
             local host="${m#*:}"
             local ms; ms=$(curl --connect-timeout 3 -s -o /dev/null -w "%{time_total}" "http://${host}/debian/" 2>/dev/null | awk '{printf "%.0f", $1*1000}')
-            [[ -n "$ms" && "$ms" != "0" ]] || continue
+            # 防御：确保 ms 是有效数字（curl 失败或 awk 无输出时跳过）
+            [[ -n "$ms" && "$ms" =~ ^[0-9]+$ && "$ms" -gt 0 ]] || continue
             [[ $ms -lt $fastest_ms ]] && fastest_ms=$ms && fastest=$name
         done
 
@@ -404,6 +415,7 @@ EOF
     fi
 
     log_info "APT 源配置完成"
+    touch "$apt_marker"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -914,14 +926,15 @@ configure_lowmem_purge() {
 configure_swap() {
     log_step "配置 Swap（低内存防护）..."
 
-    # 幂等性检查：如果本脚本创建的标记文件存在，跳过
-    local swap_marker="/etc/vps-youhua-swap-created"
-    if [[ -f "$swap_marker" ]]; then
-        log_info "Swap 由本脚本创建，跳过"
+    # 幂等性检查：如果已有活跃 swap，跳过（不论来源）
+    local swap_active
+    swap_active=$(swapon --show 2>/dev/null | tail -n +2 | wc -l)
+    if [[ "${swap_active}" -gt 0 ]]; then
+        log_info "Swap 已活跃（${swap_active} device），跳过"
         return 0
     fi
 
-    # 检查是否已有 Swap（物理 swap + zram swap 都算）
+    # 检查是否已有物理 swap 或 zram
     local swap_total zram_total=0
     swap_total=$(awk '/SwapTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
     # zram 也算 Swap（/proc/meminfo 的 Swap 统计不包含 zram，需手动计算）
@@ -1073,25 +1086,6 @@ EOF
 apply_sysctl() {
     log_step "应用 sysctl 参数..."
     sysctl --system >> "$APT_LOG" 2>&1 || sysctl -e -f /etc/sysctl.d/*.conf 2>/dev/null || true
-    
-    # 验证关键参数是否生效
-    local failed_params=()
-    local critical_params=(
-        "net.core.somaxconn"
-        "net.ipv4.tcp_max_syn_backlog"
-        "vm.swappiness"
-    )
-    
-    for param in "${critical_params[@]}"; do
-        if ! sysctl -n "$param" >/dev/null 2>&1; then
-            failed_params+=("$param")
-        fi
-    done
-    
-    if [[ ${#failed_params[@]} -gt 0 ]]; then
-        log_warn "以下关键参数未生效: ${failed_params[*]}"
-    fi
-    
     log_info "sysctl 已应用"
 }
 
