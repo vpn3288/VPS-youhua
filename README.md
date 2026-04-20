@@ -38,40 +38,40 @@
 ### 第一步：运行优化脚本（选一个）
 
 
-# 自动检测平台（推荐新手）
+### 自动检测平台（推荐新手）
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh)
 ```
-# 手动指定平台
-# NanoPi R4S (4GB ARM, TF卡)
+### 手动指定平台
+### NanoPi R4S (4GB ARM, TF卡)
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)
 ```
-# NanoPC T6 (16GB ARM, eMMC)
+### NanoPC T6 (16GB ARM, eMMC)
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopc-t6.sh)
 ```
-# Oracle Cloud ARM 2C16G
+### Oracle Cloud ARM 2C16G
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)
 ```
-# Oracle Cloud ARM 1C4G
+### Oracle Cloud ARM 1C4G
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-1c4g.sh)
 ```
-# N5105/N5095 小主机
+### N5105/N5095 小主机
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)
 ```
-# 通用 x86 VPS
+### 通用 x86 VPS
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)
 ```
-# 通用 1C1G 低配 VPS
+### 通用 1C1G 低配 VPS
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-1c1g.sh)
 ```
- # Geoogl Cloud e2-micro
+ ### Geoogl Cloud e2-micro
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/google-cloud-e2.sh)
 ```
