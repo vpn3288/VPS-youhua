@@ -789,6 +789,7 @@ main() {
     # BUG#1 FIX: Oracle ARM 在 zram 之后才检查 swap（避免冲突）
     configure_swap
     configure_sysctl_oracle
+    # AUDIT-2 FIX: 调用 configure_conntrack_hashsize 设置只读参数
     configure_conntrack_hashsize
     configure_limits
     configure_fstab

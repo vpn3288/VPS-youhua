@@ -193,12 +193,12 @@ preflight_check() {
 
     if [[ $EUID -ne 0 ]]; then
         log_error "需要 root 权限"
-        ((errors++))
+        errors=$((errors + 1))
     fi
 
     if [[ $SYS_DISK_AVAIL_GB -lt 3 ]]; then
         log_warn "磁盘可用空间 ${SYS_DISK_AVAIL_GB}GB < 3GB"
-        [[ $SYS_DISK_AVAIL_GB -lt 1 ]] && ((errors++))
+        [[ $SYS_DISK_AVAIL_GB -lt 1 ]] && errors=$((errors + 1))
     fi
 
     if [[ $SYS_MEM_MB -lt 256 ]]; then
@@ -314,6 +314,16 @@ EOF
         return 0
     fi
 
+    # 幂等性检查：若已标记为已配置，跳过镜像切换（仅保留 apt-get update）
+    local apt_marker="/etc/vps-youhua-apt-sources-configured"
+    if [[ -f "$apt_marker" ]]; then
+        log_info "APT 源已配置，跳过镜像切换"
+        if ! apt-get update -qq >> "$APT_LOG" 2>&1; then
+            log_warn "APT 更新失败"
+        fi
+        return 0
+    fi
+
     # 地区检测函数
     auto_select_mirror() {
         local latencies=""
@@ -325,7 +335,8 @@ EOF
             local name="${m%%:*}"
             local host="${m#*:}"
             local ms; ms=$(curl --connect-timeout 3 -s -o /dev/null -w "%{time_total}" "http://${host}/debian/" 2>/dev/null | awk '{printf "%.0f", $1*1000}')
-            [[ -n "$ms" && "$ms" != "0" ]] || continue
+            # 防御：确保 ms 是有效数字（curl 失败或 awk 无输出时跳过）
+            [[ -n "$ms" && "$ms" =~ ^[0-9]+$ && "$ms" -gt 0 ]] || continue
             [[ $ms -lt $fastest_ms ]] && fastest_ms=$ms && fastest=$name
         done
 
@@ -404,6 +415,7 @@ EOF
     fi
 
     log_info "APT 源配置完成"
+    touch "$apt_marker"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -697,9 +709,13 @@ configure_limits() {
     ulimit -m unlimited
     [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
 
-    # 持久化
+    # 持久化（幂等性检查）
+    local limits_conf="/etc/security/limits.d/99-vps-youhua.conf"
     mkdir -p /etc/security/limits.d
-    cat > /etc/security/limits.d/99-vps-youhua.conf <<EOF
+    if [[ -f "$limits_conf" ]] && grep -q "vps-youhua" "$limits_conf" 2>/dev/null; then
+        log_info "资源限制已配置，跳过"
+    else
+        cat > "$limits_conf" <<EOF
 root soft nofile ${NOFILE_VAL}
 root hard nofile ${NOFILE_VAL}
 root soft nproc ${NPROC_VAL}
@@ -708,16 +724,24 @@ root hard nproc ${NPROC_VAL}
 * hard nofile ${NOFILE_VAL}
 * soft nproc ${NPROC_VAL}
 * hard nproc ${NPROC_VAL}
+# vps-youhua
 EOF
+    fi
 
-    # systemd 级别（L3 FIX: nofile 设为 infinity 避免数值覆盖冲突）
+    # systemd 级别（幂等性检查）
+    local systemd_conf="/etc/systemd/system.conf.d/99-resource-limits.conf"
     mkdir -p /etc/systemd/system.conf.d
-    cat > /etc/systemd/system.conf.d/99-resource-limits.conf <<EOF
+    if [[ -f "$systemd_conf" ]] && grep -q "vps-youhua" "$systemd_conf" 2>/dev/null; then
+        log_info "systemd 资源限制已配置，跳过"
+    else
+        cat > "$systemd_conf" <<EOF
 [Manager]
 DefaultLimitNOFILE=infinity
 DefaultLimitNPROC=${NPROC_VAL}:${NPROC_VAL}
 DefaultLimitMEMLOCK=infinity
+# vps-youhua
 EOF
+    fi
     systemctl daemon-reload 2>/dev/null || true
 
     # ── BUG#1: RAM<=1024MB 自动创建 1GB Swap（防止 GCP/1C1G OOM）──────────────
@@ -897,12 +921,53 @@ configure_lowmem_purge() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# conntrack hashsize 配置（所有平台通用部分）
+# AUDIT-2 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# 通过 /sys/module/nf_conntrack/parameters/hashsize 设置（需先加载模块）
+# modprobe 失败时回退到 /etc/modprobe.d/ 配置（下次启动生效）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_conntrack_hashsize() {
+    # CT_MAX 由调用者定义（各平台不同）
+    local CT_MAX="${CT_MAX:-65536}"
+    local hashsize=$((CT_MAX / 4))
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+
+    log_step "配置 nf_conntrack_hashsize..."
+
+    # 确保模块已加载（modprobe 失败不算致命错误，继续尝试直接写入）
+    if ! modprobe nf_conntrack 2>/dev/null; then
+        log_warn "nf_conntrack 模块加载失败（可能已内置或内核不支持）"
+    fi
+
+    if [[ -f "$hashsize_file" ]]; then
+        if ! echo "$hashsize" > "$hashsize_file" 2>/dev/null; then
+            log_warn "nf_conntrack_hashsize 运行时设置失败，写入 modprobe 配置（下次启动生效）"
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=$hashsize" > /etc/modprobe.d/nf_conntrack.conf
+        fi
+        local current_hashsize
+        current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
+        log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
+    else
+        log_warn "nf_conntrack 模块未加载或不支持，跳过 hashsize 配置"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # BUG#5: configure_swap 实现（低内存机器自动创建 1GB Swap）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_swap() {
     log_step "配置 Swap（低内存防护）..."
 
-    # 检查是否已有 Swap（物理 swap + zram swap 都算）
+    # 幂等性检查：如果已有活跃 swap，跳过（不论来源）
+    local swap_active
+    swap_active=$(swapon --show 2>/dev/null | tail -n +2 | wc -l)
+    if [[ "${swap_active}" -gt 0 ]]; then
+        log_info "Swap 已活跃（${swap_active} device），跳过"
+        return 0
+    fi
+
+    # 检查是否已有物理 swap 或 zram
     local swap_total zram_total=0
     swap_total=$(awk '/SwapTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
     # zram 也算 Swap（/proc/meminfo 的 Swap 统计不包含 zram，需手动计算）
@@ -947,6 +1012,9 @@ configure_swap() {
         echo "/swapfile none swap sw 0 0" >> /etc/fstab
     fi
 
+    # 创建标记文件，记录本脚本已创建 swap
+    touch "$swap_marker"
+
     # swappiness 由各平台 sysctl 持久化配置控制（vm.swappiness 在 /etc/sysctl.d/ 里统一设置）
     log_info "Swap 1GB 创建完成"
 }
@@ -957,6 +1025,16 @@ configure_swap() {
 # ─────────────────────────────────────────────────────────────────────────────
 write_common_sysctl() {
     local file="$1"
+    # 输入验证：确保 file 参数不为空
+    if [[ -z "$file" ]]; then
+        log_error "write_common_sysctl: file 参数不能为空"
+        return 1
+    fi
+    # 幂等性检查：如果文件已存在且包含 vps-youhua 标记，跳过
+    if [[ -f "$file" ]] && grep -q "vps-youhua" "$file" 2>/dev/null; then
+        log_info "sysctl 配置已存在 ($file)，跳过"
+        return 0
+    fi
     backup_file "$file"
 
     # BUG#4: BBR 自适应检测（先运行，再写文件）
@@ -1046,25 +1124,6 @@ EOF
 apply_sysctl() {
     log_step "应用 sysctl 参数..."
     sysctl --system >> "$APT_LOG" 2>&1 || sysctl -e -f /etc/sysctl.d/*.conf 2>/dev/null || true
-    
-    # 验证关键参数是否生效
-    local failed_params=()
-    local critical_params=(
-        "net.core.somaxconn"
-        "net.ipv4.tcp_max_syn_backlog"
-        "vm.swappiness"
-    )
-    
-    for param in "${critical_params[@]}"; do
-        if ! sysctl -n "$param" >/dev/null 2>&1; then
-            failed_params+=("$param")
-        fi
-    done
-    
-    if [[ ${#failed_params[@]} -gt 0 ]]; then
-        log_warn "以下关键参数未生效: ${failed_params[*]}"
-    fi
-    
     log_info "sysctl 已应用"
 }
 
@@ -1084,6 +1143,13 @@ configure_tmp_tmpfs() {
     echo "tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=${tmpfs_size} 0 0" >> /etc/fstab
     mkdir -p /tmp
     mount -o remount /tmp 2>/dev/null || mount /tmp 2>/dev/null || log_warn "/tmp tmpfs 挂载失败"
+
+    # P1-1 FIX: tmpfs mount without verification - add mount check
+    if ! mount | grep -q "tmpfs on /tmp type tmpfs"; then
+        log_warn "/tmp tmpfs 挂载验证失败"
+        return 1
+    fi
+
     log_info "/tmp tmpfs 已配置（${tmpfs_size}）"
 }
 

@@ -99,50 +99,95 @@ load_common_optimize() {
 
 load_common_optimize
 
-# HIGH FIX: 在 configure_tmp_tmpfs 之前强制清理遗留的 tmpfs /tmp 挂载
-# 确保后续 configure_tmp_tmpfs 能正确执行（remount 不会因已有挂载而失败或丢失数据）
-# 合并两种清理场景：残留挂载 + PID文件标记
-if mount | grep -q "tmpfs on /tmp"; then
-    log_warn "检测到残留 tmpfs /tmp 挂载，强制卸载..."
-    umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
-        log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
-    }
-fi
+# ─────────────────────────────────────────────────────────────────────────────
+# 清理遗留 tmpfs 挂载（必须在 main 函数中调用，不在全局执行）
+# ─────────────────────────────────────────────────────────────────────────────
+cleanup_legacy_tmpfs() {
+    # HERMES-P1 FIX: 检查进程占用后再清理遗留 tmpfs 挂载
+    # 确保后续 configure_tmp_tmpfs 能正确执行（remount 不会因已有挂载而失败或丢失数据）
+    # 合并两种清理场景：残留挂载 + PID文件标记
+    if mount | grep -q "tmpfs on /tmp"; then
+        log_warn "检测到残留 tmpfs /tmp 挂载，检查进程占用..."
+        # 检查是否有进程正在使用 /tmp
+        if lsof /tmp 2>/dev/null | grep -q /tmp; then
+            log_error "清理失败: /tmp 被进程占用，请先停止相关进程后手动执行: umount /tmp"
+            return 1
+        fi
+        umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
+            log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
+        }
+    fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TF 卡检测（R4S 专项，多方法交叉验证）
+# 存储类型检测（usb_hdd, usb_ssd, tf_card, emmc, unknown）
 # ─────────────────────────────────────────────────────────────────────────────
 detect_storage_type() {
-    local root_dev
+    local root_dev root_base storage_type="unknown"
+
+    # Step 1: Get root device
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    root_dev=$(basename "$root_dev" 2>/dev/null)
+    [[ -z "$root_dev" ]] && { log_warn "无法检测根设备，使用 unknown"; STORAGE_TYPE="unknown"; SYS_IS_TF_CARD=false; return 0; }
 
-    # 多方法验证 TF 卡
-    local is_tf=false
+    # Step 2: Strip partition suffix
+    root_base=$(basename "$root_dev" 2>/dev/null)
+    if [[ "$root_base" =~ ^sd[a-z][0-9]+$ ]]; then
+        root_base="${root_base%[0-9]*}"  # sda1 -> sda
+    elif [[ "$root_base" =~ ^mmcblk[0-9]+p[0-9]+$ ]]; then
+        root_base="${root_base%p[0-9]*}"  # mmcblk0p1 -> mmcblk0
+    elif [[ "$root_base" =~ ^nvme[0-9]+n[0-9]+p[0-9]+$ ]]; then
+        root_base="${root_base%p[0-9]*}"  # nvme0n1p1 -> nvme0n1
+    fi
 
-    # 方法1：检查 mmcblk0 是否为 TF 卡（无 eMMC 或 eMMC 在 mmcblk1）
-    if [[ "$root_dev" == mmcblk0* ]]; then
-        # 检查 eMMC 是否存在（mmcblk1 通常是 eMMC）
-        if [[ -d /sys/class/block/mmcblk1/device ]]; then
-            local emmc_name=""
-            emmc_name=$(cat /sys/class/block/mmcblk1/device/name 2>/dev/null || echo "")
-            if [[ -n "$emmc_name" ]]; then
-                # eMMC 存在，mmcblk0 必定是 TF 卡
-                is_tf=true
-                log_info "检测到 TF 卡（mmcblk0，eMMC=$emmc_name 存在于 mmcblk1）— 启用写入保护"
+    # Step 3: Detect sd* devices (USB-attached)
+    if [[ "$root_base" =~ ^sd[a-z]$ ]]; then
+        local device_path="/sys/block/${root_base}/device"
+        if [[ -L "$device_path" ]]; then
+            local real_path
+            real_path=$(readlink -f "$device_path" 2>/dev/null || echo "")
+            if [[ "$real_path" == *"/usb"* ]]; then
+                # USB-attached, check rotational
+                local rotational
+                rotational=$(cat "/sys/block/${root_base}/queue/rotational" 2>/dev/null || echo "1")
+                if [[ "$rotational" == "1" ]]; then
+                    storage_type="usb_hdd"
+                else
+                    storage_type="usb_ssd"
+                fi
             fi
+        fi
+    # Step 4: Detect mmcblk* devices (TF card vs eMMC)
+    elif [[ "$root_base" =~ ^mmcblk[0-9]+$ ]]; then
+        local has_emmc=false
+        # Check if any mmcblk device is eMMC
+        for dev_type in /sys/class/block/mmcblk*/device/type; do
+            [[ -f "$dev_type" ]] || continue
+            local type_val
+            type_val=$(cat "$dev_type" 2>/dev/null || echo "")
+            if [[ "$type_val" == "MMC" ]]; then
+                has_emmc=true
+                break
+            fi
+        done
+
+        if [[ "$has_emmc" == "true" ]]; then
+            storage_type="emmc"
         else
-            # 无 eMMC，mmcblk0 即为 TF 卡
-            is_tf=true
-            log_info "检测到 TF 卡（mmcblk0，无 eMMC）— 启用写入保护"
+            storage_type="tf_card"
         fi
     fi
 
-    if [[ "$is_tf" == "true" ]]; then
+    # Output results
+    STORAGE_TYPE="$storage_type"
+    echo "STORAGE_TYPE=${storage_type} DEVICE=/dev/${root_base}"
+
+    # Set legacy TF card flag for backward compatibility
+    if [[ "$storage_type" == "tf_card" ]]; then
         SYS_IS_TF_CARD=true
+        log_info "检测到 TF 卡 (/dev/${root_base}) — 启用写入保护"
     else
         SYS_IS_TF_CARD=false
-        log_info "非 TF 卡存储（$root_dev）"
+        log_info "存储类型: ${storage_type} (/dev/${root_base})"
     fi
 }
 
@@ -601,9 +646,13 @@ install_nodejs() {
     fi
 
     # 卸载临时 tmpfs（编译已完成）
-    # FIX: 记录到 PID 文件，失败时告警并留存清理标记
+    # HERMES-P1 FIX: 检查进程占用后再卸载，避免数据丢失
     if [[ "$tmpfs_mounted" == "true" ]]; then
-        if umount /tmp 2>/dev/null; then
+        # 检查是否有进程正在使用 /tmp
+        if lsof /tmp 2>/dev/null | grep -q /tmp; then
+            log_warn "/tmp 被进程占用，延迟卸载（写入清理标记）"
+            echo "$$" > /var/run/vps-youhua-tmpfs-mount
+        elif umount /tmp 2>/dev/null; then
             log_info "已卸载临时 tmpfs"
             rm -f /var/run/vps-youhua-tmpfs-mount
         else
@@ -918,6 +967,8 @@ main() {
     detect_storage_type
     check_network
     preflight_check
+    # HERMES-14 FIX: 清理遗留 tmpfs 挂载
+    cleanup_legacy_tmpfs
 
     show_platform_summary
 

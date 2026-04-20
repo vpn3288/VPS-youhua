@@ -199,6 +199,7 @@ configure_zram_1c1g() {
         fi
         # 重置 zram 设备（使用 reset 文件，比 disksize=0 更可靠）
         if [[ -f /sys/block/zram0/reset ]]; then
+            sync
             echo 1 > /sys/block/zram0/reset 2>/dev/null || true
         fi
         # 重新配置
@@ -213,7 +214,7 @@ configure_zram_1c1g() {
 # conntrack hashsize 配置（generic-1c1g 专用）
 # AUDIT-FIX: nf_conntrack_buckets 是只读参数，不能通过 sysctl 设置
 # ─────────────────────────────────────────────────────────────────────────────
-configure_conntrack_hashsize() {
+configure_conntrack_hashsize_1c1g() {
     log_step "配置 nf_conntrack_hashsize（1C1G）..."
 
     modprobe nf_conntrack 2>/dev/null || true
@@ -282,7 +283,7 @@ journalctl --vacuum-time=2d 2>/dev/null || true
 apt-get clean 2>/dev/null || true
 rm -rf /tmp/pear 2>/dev/null || true
 rm -rf /var/cache/apt/archives/*.deb 2>/dev/null || true
-rm -rf /var/tmp/* 2>/dev/null || true
+rm -rf /var/tmp/vps-youhua-* 2>/dev/null || true
 EOF
     chmod +x /etc/cron.daily/vps-youhua-clean
     log_info "每日清理任务已配置"
@@ -506,7 +507,7 @@ main() {
     configure_apt_sources
     clean_system
     configure_sysctl_generic_1c1g
-    configure_conntrack_hashsize
+    configure_conntrack_hashsize_1c1g
     configure_limits
 
     # BUG#8: 低内存极限清理

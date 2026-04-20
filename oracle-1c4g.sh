@@ -242,6 +242,7 @@ net.ipv4.tcp_syncookies = 1
 # ── conntrack（1C4G 资源有限，保持较小）─────────────────────────────────────
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 1800
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 30
 
 # ── TCP 缓冲（内存 4%，自适应）───────────────────────────────────────────────
 net.core.rmem_max = ${TCP_BUF_MAX}
@@ -267,6 +268,32 @@ EOF
         log_info "sysctl 参数已应用（$SYSCTL_FILE）"
     else
         log_warn "sysctl 部分参数不支持当前内核（可忽略）"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRITICAL FIX: 设置 nf_conntrack_hashsize（只读参数，不能通过 sysctl）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_conntrack_hashsize() {
+    log_step "配置 nf_conntrack_hashsize..."
+    
+    # 加载 nf_conntrack 模块
+    modprobe nf_conntrack 2>/dev/null || true
+    
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+    if [[ -f "$hashsize_file" ]]; then
+        local hashsize=$((CT_MAX / 4))
+        echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
+            log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
+            # 备用方案：通过 modprobe 配置（下次启动或模块重载时生效）
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=$hashsize" > /etc/modprobe.d/nf_conntrack.conf
+        }
+        local current_hashsize
+        current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
+        log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
+    else
+        log_warn "nf_conntrack 模块未加载或不支持，跳过 hashsize 配置"
     fi
 }
 
@@ -661,12 +688,9 @@ main() {
     configure_conntrack_hashsize
     configure_limits
 
-}
-
-configure_limits() {
-
-    # BUG#8: 低内存极限清理
-    [[ "${IS_LOW_MEMORY}" == "true" ]] && configure_lowmem_purge
+    configure_sysctl_oracle
+    configure_conntrack_hashsize
+    configure_limits
     configure_fstab
     configure_journald
     configure_dns

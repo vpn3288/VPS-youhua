@@ -140,14 +140,21 @@ optimize_memory_t6() {
 
     # ── Armbian 原生 zram-config 强化（T6 16GB）────────────────────────────────
     if [[ -f /etc/default/armbian-zram-config ]]; then
+        # HERMES-P1 FIX: 添加 $ 锚点确保 sed 幂等性（避免重复追加）
         if grep -q "^ENABLED=" /etc/default/armbian-zram-config 2>/dev/null; then
-            sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-zram-config
+            # 只在值不是 true 时才修改
+            if ! grep -q "^ENABLED=true$" /etc/default/armbian-zram-config 2>/dev/null; then
+                sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-zram-config
+            fi
         else
             echo "ENABLED=true" >> /etc/default/armbian-zram-config
         fi
         # 16GB 内存下 zram SIZE=30%（T6 eMMC 耐久好，不强制压缩内存）
         if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
-            sed -i 's/^SIZE=.*/SIZE=30%/' /etc/default/armbian-zram-config
+            # 只在值不是 30% 时才修改
+            if ! grep -q "^SIZE=30%$" /etc/default/armbian-zram-config 2>/dev/null; then
+                sed -i 's/^SIZE=.*$/SIZE=30%/' /etc/default/armbian-zram-config
+            fi
         else
             echo "SIZE=30%" >> /etc/default/armbian-zram-config
         fi
@@ -157,12 +164,12 @@ optimize_memory_t6() {
     # ── Armbian 原生 ramlog 强化（T6）──────────────────────────────────────────
     if [[ -f /etc/default/armbian-ramlog ]]; then
         if grep -q "^ENABLED=" /etc/default/armbian-ramlog 2>/dev/null; then
-            sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog
+            sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-ramlog
         else
             echo "ENABLED=true" >> /etc/default/armbian-ramlog
         fi
         if grep -q "^SIZE=" /etc/default/armbian-ramlog 2>/dev/null; then
-            sed -i 's/^SIZE=.*/SIZE=256M/' /etc/default/armbian-ramlog
+            sed -i 's/^SIZE=.*$/SIZE=256M/' /etc/default/armbian-ramlog
         else
             echo "SIZE=256M" >> /etc/default/armbian-ramlog
         fi
@@ -296,32 +303,36 @@ optimize_network_t6() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# T6 conntrack hashsize 配置（通过 /sys/module 设置）
-# AUDIT-16 FIX: 添加缺失的 conntrack hashsize 配置函数
+# HIGH FIX: 标准化 nf_conntrack_hashsize 配置（只读参数，不能通过 sysctl）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_conntrack_hashsize_t6() {
-    log_step "配置 conntrack hashsize（T6）..."
+    log_step "配置 nf_conntrack_hashsize..."
     
     # 加载 nf_conntrack 模块
     modprobe nf_conntrack 2>/dev/null || true
     
-    # [M7] FIX: 直接使用 CT_HASH_SIZE 常量，而非硬编码 /4 计算
-    local calc_conntrack_max
-    calc_conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
-    local hashsize=$(( calc_conntrack_max / 4 ))
-    # CT_HASH_SIZE 作为上限保护
-    if [[ $hashsize -gt $CT_HASH_SIZE ]]; then
-        hashsize=$CT_HASH_SIZE
-    fi
-    
-    # 通过 /sys/module 设置（只读参数，不能用 sysctl）
-    if [[ -f /sys/module/nf_conntrack/parameters/hashsize ]]; then
-        echo "$hashsize" > /sys/module/nf_conntrack/parameters/hashsize 2>/dev/null || {
-            log_warn "无法设置 nf_conntrack hashsize（可能需要重启）"
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+    if [[ -f "$hashsize_file" ]]; then
+        # 计算 hashsize（conntrack_max / 4，上限为 CT_HASH_SIZE）
+        local calc_conntrack_max
+        calc_conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
+        local hashsize=$(( calc_conntrack_max / 4 ))
+        # CT_HASH_SIZE 作为上限保护
+        if [[ $hashsize -gt $CT_HASH_SIZE ]]; then
+            hashsize=$CT_HASH_SIZE
+        fi
+        
+        echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
+            log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
+            # 备用方案：通过 modprobe 配置（下次启动或模块重载时生效）
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=$hashsize" > /etc/modprobe.d/nf_conntrack.conf
         }
-        log_info "nf_conntrack hashsize 已设置为 $hashsize"
+        local current_hashsize
+        current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
+        log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
     else
-        log_warn "nf_conntrack 模块未加载，跳过 hashsize 配置"
+        log_warn "nf_conntrack 模块未加载或不支持，跳过 hashsize 配置"
     fi
 }
 

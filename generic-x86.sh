@@ -82,7 +82,7 @@ load_common_optimize() {
             rm -f "${tmpdir}/common-optimize.sh"
             exit 1
         fi
-        source "${tmpdir}/common-optimize.sh"
+        source "${tmpdir}/common-optimize.sh" || return 1
         return 0
     fi
     echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh\033[0m" >&2
