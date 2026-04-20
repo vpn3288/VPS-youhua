@@ -99,15 +99,20 @@ load_common_optimize() {
 
 load_common_optimize
 
-# HIGH FIX: 在 configure_tmp_tmpfs 之前强制清理遗留的 tmpfs /tmp 挂载
-# 确保后续 configure_tmp_tmpfs 能正确执行（remount 不会因已有挂载而失败或丢失数据）
-# 合并两种清理场景：残留挂载 + PID文件标记
-if mount | grep -q "tmpfs on /tmp"; then
-    log_warn "检测到残留 tmpfs /tmp 挂载，强制卸载..."
-    umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
-        log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
-    }
-fi
+# ─────────────────────────────────────────────────────────────────────────────
+# 清理遗留 tmpfs 挂载（必须在 main 函数中调用，不在全局执行）
+# ─────────────────────────────────────────────────────────────────────────────
+cleanup_legacy_tmpfs() {
+    # HIGH FIX: 在 configure_tmp_tmpfs 之前强制清理遗留的 tmpfs /tmp 挂载
+    # 确保后续 configure_tmp_tmpfs 能正确执行（remount 不会因已有挂载而失败或丢失数据）
+    # 合并两种清理场景：残留挂载 + PID文件标记
+    if mount | grep -q "tmpfs on /tmp"; then
+        log_warn "检测到残留 tmpfs /tmp 挂载，强制卸载..."
+        umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
+            log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
+        }
+    fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TF 卡检测（R4S 专项，多方法交叉验证）
@@ -918,6 +923,8 @@ main() {
     detect_storage_type
     check_network
     preflight_check
+    # HERMES-14 FIX: 清理遗留 tmpfs 挂载
+    cleanup_legacy_tmpfs
 
     show_platform_summary
 
