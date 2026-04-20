@@ -3,6 +3,7 @@
 # 修复: 非交互式环境(如SSH远程执行)需要 TERM 变量
 : "${TERM:=xterm}"
 # VPS 优化脚本 - N5105/N5095 小主机
+# GPT-5.3-codex test
 #
 # 用法:
 #   sudo bash n5105.sh                    # 完整安装（底层优化 + 软件依赖）
