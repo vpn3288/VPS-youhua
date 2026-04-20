@@ -1025,6 +1025,11 @@ configure_swap() {
 # ─────────────────────────────────────────────────────────────────────────────
 write_common_sysctl() {
     local file="$1"
+    # 输入验证：确保 file 参数不为空
+    if [[ -z "$file" ]]; then
+        log_error "write_common_sysctl: file 参数不能为空"
+        return 1
+    fi
     # 幂等性检查：如果文件已存在且包含 vps-youhua 标记，跳过
     if [[ -f "$file" ]] && grep -q "vps-youhua" "$file" 2>/dev/null; then
         log_info "sysctl 配置已存在 ($file)，跳过"
