@@ -76,11 +76,11 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/gene
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/google-cloud-e2.sh)
 ```
 
-# 可选参数：
-#   --optimize-only   仅做环境优化，跳过 Docker / Node.js / OpenClaw 安装
-#   --clean-system    清理 apt purge 预装软件（apache2/nginx/postfix 等）
-#   --uninstall       卸载已安装的优化配置
-#   --non-interactive 自动执行（适合自动化）
+可选参数：
+--optimize-only   仅做环境优化，跳过 Docker / Node.js / OpenClaw 安装
+--clean-system    清理 apt purge 预装软件（apache2/nginx/postfix 等）
+--uninstall       卸载已安装的优化配置
+--non-interactive 自动执行（适合自动化）
 
 
 ### 第二步：验证优化效果
