@@ -103,7 +103,8 @@ detect_storage_type() {
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    if [[ -f "/sys/block/${root_dev}/queue/rotational" ]]; then
+    # P1-3 FIX: Add fallback when rotational detection fails
+    if [[ -n "$root_dev" ]] && [[ -f "/sys/block/${root_dev}/queue/rotational" ]]; then
         if [[ "$(cat "/sys/block/${root_dev}/queue/rotational" 2>/dev/null)" == "0" ]]; then
             SYS_IS_SSD=true
             log_info "检测到 SSD: $root_dev"
@@ -111,6 +112,10 @@ detect_storage_type() {
             SYS_IS_SSD=false
             log_info "检测到 HDD: $root_dev"
         fi
+    else
+        # Fallback: assume SSD for cloud VPS (most common case)
+        SYS_IS_SSD=true
+        log_warn "无法检测存储类型（${root_dev:-unknown}），默认假设为 SSD（云VPS常见配置）"
     fi
 }
 

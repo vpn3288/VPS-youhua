@@ -460,6 +460,12 @@ show_quick_start_menu() {
     read -r quick_choice
     quick_choice="${quick_choice:-1}"
 
+    # Sanitize input: only accept 1-6
+    if [[ ! "$quick_choice" =~ ^[1-6]$ ]]; then
+        log_warn "无效选项 '$quick_choice'，使用默认值 1"
+        quick_choice="1"
+    fi
+
     case "$quick_choice" in
         1)
             SELECTED_MODE="optimize"
@@ -595,10 +601,15 @@ step2_choose_subplatform() {
             echo ""
             echo -n "请输入选项 [1/2]: "
             read -r choice
+            # Sanitize: only accept 1 or 2
+            if [[ ! "$choice" =~ ^[12]$ ]]; then
+                echo -e "${YELLOW}无效选项 '$choice'${NC}"
+                step2_choose_subplatform
+                return
+            fi
             case "$choice" in
                 1) SELECTED_PLATFORM="oracle-arm" ;;
                 2) SELECTED_PLATFORM="oracle-1c4g" ;;
-                *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
             esac
             ;;
         google)
@@ -666,11 +677,16 @@ step3_choose_mode() {
     echo -n "请输入选项 [1/2/0，默认 1]: "
     read -r choice
     choice="${choice:-1}"
+    # Sanitize: only accept 0, 1, or 2
+    if [[ ! "$choice" =~ ^[012]$ ]]; then
+        echo -e "${YELLOW}无效选项 '$choice'${NC}"
+        step3_choose_mode
+        return
+    fi
     case "$choice" in
         1) SELECTED_MODE="optimize" ;;
         2) SELECTED_MODE="full" ;;
         0) echo "已退出。"; exit 0 ;;
-        *) echo -e "${YELLOW}无效选项${NC}"; step3_choose_mode; return ;;
     esac
 }
 
@@ -775,11 +791,16 @@ resolve_full_extras() {
         echo -e "      ${CYAN}建议安装，输入 y 或直接回车${NC}"
         echo -n "  是否安装 Docker？[y/n，默认 y]: "
         read -r yn
-
         yn="${yn:-y}"
+        # Sanitize: only accept y/Y/n/N
+        yn="${yn,,}"  # lowercase
+        if [[ ! "$yn" =~ ^[yn]$ ]]; then
+            log_warn "无效输入 '$yn'，默认安装 Docker"
+            yn="y"
+        fi
         case "$yn" in
-            n|N) INSTALL_DOCKER="false" ;;
-            *)   INSTALL_DOCKER="true" ;;
+            n) INSTALL_DOCKER="false" ;;
+            *) INSTALL_DOCKER="true" ;;
         esac
     fi
 
@@ -789,11 +810,16 @@ resolve_full_extras() {
         echo -e "  ${GREEN}[✓]${NC} ${BOLD}Node.js${NC}（运行环境，用于全局安装 npm 包）"
         echo -n "  是否安装 Node.js？[y/n，默认 y]: "
         read -r yn
-
         yn="${yn:-y}"
+        # Sanitize: only accept y/Y/n/N
+        yn="${yn,,}"  # lowercase
+        if [[ ! "$yn" =~ ^[yn]$ ]]; then
+            log_warn "无效输入 '$yn'，默认安装 Node.js"
+            yn="y"
+        fi
         case "$yn" in
-            n|N) INSTALL_NODEJS="false" ;;
-            *)   INSTALL_NODEJS="true" ;;
+            n) INSTALL_NODEJS="false" ;;
+            *) INSTALL_NODEJS="true" ;;
         esac
     fi
 

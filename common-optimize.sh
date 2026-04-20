@@ -1134,15 +1134,23 @@ configure_tmp_tmpfs() {
     log_step "配置 /tmp 为 tmpfs..."
     local tmpfs_size="${TMPFS_SIZE:-512M}"
 
-    # 精确检查：是否已有 tmpfs 类型的 /tmp 条目
+    # P1-1 FIX: Validate existing tmpfs size before skipping
     if grep -qE "^tmpfs\s+/tmp\s+" /etc/fstab 2>/dev/null; then
-        log_info "/tmp 已配置 tmpfs（跳过）"
-        return 0
+        local existing_size
+        existing_size=$(grep -E "^tmpfs\s+/tmp\s+" /etc/fstab | grep -oP 'size=\K[^,\s]+' || echo "")
+        if [[ -n "$existing_size" && "$existing_size" != "$tmpfs_size" ]]; then
+            log_warn "/tmp tmpfs 已存在但大小不匹配（当前: ${existing_size}, 期望: ${tmpfs_size}），更新配置"
+            sed -i "s|^tmpfs\s\+/tmp\s\+tmpfs.*|tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=${tmpfs_size} 0 0|" /etc/fstab
+            mount -o remount /tmp 2>/dev/null || log_warn "/tmp tmpfs 重新挂载失败"
+        else
+            log_info "/tmp 已配置 tmpfs（跳过）"
+            return 0
+        fi
+    else
+        echo "tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=${tmpfs_size} 0 0" >> /etc/fstab
+        mkdir -p /tmp
+        mount -o remount /tmp 2>/dev/null || mount /tmp 2>/dev/null || log_warn "/tmp tmpfs 挂载失败"
     fi
-
-    echo "tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=${tmpfs_size} 0 0" >> /etc/fstab
-    mkdir -p /tmp
-    mount -o remount /tmp 2>/dev/null || mount /tmp 2>/dev/null || log_warn "/tmp tmpfs 挂载失败"
 
     # P1-1 FIX: tmpfs mount without verification - add mount check
     if ! mount | grep -q "tmpfs on /tmp type tmpfs"; then
