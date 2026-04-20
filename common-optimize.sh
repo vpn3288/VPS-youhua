@@ -1143,6 +1143,13 @@ configure_tmp_tmpfs() {
     echo "tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=${tmpfs_size} 0 0" >> /etc/fstab
     mkdir -p /tmp
     mount -o remount /tmp 2>/dev/null || mount /tmp 2>/dev/null || log_warn "/tmp tmpfs 挂载失败"
+
+    # P1-1 FIX: tmpfs mount without verification - add mount check
+    if ! mount | grep -q "tmpfs on /tmp type tmpfs"; then
+        log_warn "/tmp tmpfs 挂载验证失败"
+        return 1
+    fi
+
     log_info "/tmp tmpfs 已配置（${tmpfs_size}）"
 }
 

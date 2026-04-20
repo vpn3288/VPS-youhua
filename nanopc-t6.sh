@@ -140,11 +140,11 @@ optimize_memory_t6() {
 
     # ── Armbian 原生 zram-config 强化（T6 16GB）────────────────────────────────
     if [[ -f /etc/default/armbian-zram-config ]]; then
-        # HIGH FIX: 添加 grep -q 检查确保 sed 幂等性
+        # HERMES-P1 FIX: 添加 $ 锚点确保 sed 幂等性（避免重复追加）
         if grep -q "^ENABLED=" /etc/default/armbian-zram-config 2>/dev/null; then
             # 只在值不是 true 时才修改
-            if ! grep -q "^ENABLED=true" /etc/default/armbian-zram-config 2>/dev/null; then
-                sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-zram-config
+            if ! grep -q "^ENABLED=true$" /etc/default/armbian-zram-config 2>/dev/null; then
+                sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-zram-config
             fi
         else
             echo "ENABLED=true" >> /etc/default/armbian-zram-config
@@ -152,8 +152,8 @@ optimize_memory_t6() {
         # 16GB 内存下 zram SIZE=30%（T6 eMMC 耐久好，不强制压缩内存）
         if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
             # 只在值不是 30% 时才修改
-            if ! grep -q "^SIZE=30%" /etc/default/armbian-zram-config 2>/dev/null; then
-                sed -i 's/^SIZE=.*/SIZE=30%/' /etc/default/armbian-zram-config
+            if ! grep -q "^SIZE=30%$" /etc/default/armbian-zram-config 2>/dev/null; then
+                sed -i 's/^SIZE=.*$/SIZE=30%/' /etc/default/armbian-zram-config
             fi
         else
             echo "SIZE=30%" >> /etc/default/armbian-zram-config
@@ -164,12 +164,12 @@ optimize_memory_t6() {
     # ── Armbian 原生 ramlog 强化（T6）──────────────────────────────────────────
     if [[ -f /etc/default/armbian-ramlog ]]; then
         if grep -q "^ENABLED=" /etc/default/armbian-ramlog 2>/dev/null; then
-            sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog
+            sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-ramlog
         else
             echo "ENABLED=true" >> /etc/default/armbian-ramlog
         fi
         if grep -q "^SIZE=" /etc/default/armbian-ramlog 2>/dev/null; then
-            sed -i 's/^SIZE=.*/SIZE=256M/' /etc/default/armbian-ramlog
+            sed -i 's/^SIZE=.*$/SIZE=256M/' /etc/default/armbian-ramlog
         else
             echo "SIZE=256M" >> /etc/default/armbian-ramlog
         fi

@@ -103,11 +103,16 @@ load_common_optimize
 # 清理遗留 tmpfs 挂载（必须在 main 函数中调用，不在全局执行）
 # ─────────────────────────────────────────────────────────────────────────────
 cleanup_legacy_tmpfs() {
-    # HIGH FIX: 在 configure_tmp_tmpfs 之前强制清理遗留的 tmpfs /tmp 挂载
+    # HERMES-P1 FIX: 检查进程占用后再清理遗留 tmpfs 挂载
     # 确保后续 configure_tmp_tmpfs 能正确执行（remount 不会因已有挂载而失败或丢失数据）
     # 合并两种清理场景：残留挂载 + PID文件标记
     if mount | grep -q "tmpfs on /tmp"; then
-        log_warn "检测到残留 tmpfs /tmp 挂载，强制卸载..."
+        log_warn "检测到残留 tmpfs /tmp 挂载，检查进程占用..."
+        # 检查是否有进程正在使用 /tmp
+        if lsof /tmp 2>/dev/null | grep -q /tmp; then
+            log_error "清理失败: /tmp 被进程占用，请先停止相关进程后手动执行: umount /tmp"
+            return 1
+        fi
         umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
             log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
         }
@@ -606,9 +611,13 @@ install_nodejs() {
     fi
 
     # 卸载临时 tmpfs（编译已完成）
-    # FIX: 记录到 PID 文件，失败时告警并留存清理标记
+    # HERMES-P1 FIX: 检查进程占用后再卸载，避免数据丢失
     if [[ "$tmpfs_mounted" == "true" ]]; then
-        if umount /tmp 2>/dev/null; then
+        # 检查是否有进程正在使用 /tmp
+        if lsof /tmp 2>/dev/null | grep -q /tmp; then
+            log_warn "/tmp 被进程占用，延迟卸载（写入清理标记）"
+            echo "$$" > /var/run/vps-youhua-tmpfs-mount
+        elif umount /tmp 2>/dev/null; then
             log_info "已卸载临时 tmpfs"
             rm -f /var/run/vps-youhua-tmpfs-mount
         else

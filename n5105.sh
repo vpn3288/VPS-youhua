@@ -166,8 +166,20 @@ PRIORITY=100
 EOF
         systemctl enable zramswap 2>/dev/null || true
         systemctl restart zramswap 2>/dev/null || true
-        sleep 2
-        lsblk | grep -q zram && log_info "ZRAM ${ZRAM_SIZE}MB 已启用"
+
+        # P1-3 FIX: zram startup race condition - add wait loop
+        local retry=0
+        local max_retries=10
+        while ! lsblk | grep -q zram && [[ $retry -lt $max_retries ]]; do
+            sleep 1
+            ((retry++))
+        done
+
+        if lsblk | grep -q zram; then
+            log_info "ZRAM ${ZRAM_SIZE}MB 已启用"
+        else
+            log_warn "ZRAM 启动超时（${max_retries}s）"
+        fi
     else
         log_info "跳过 ZRAM（内存充足）"
     fi
@@ -232,6 +244,14 @@ net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 EOF
 
     apply_sysctl
+
+    # P1-5 FIX: sysctl live reset missing - add reset logic
+    sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
+    sysctl -w vm.min_free_kbytes=$MIN_FREE_KB 2>/dev/null || true
+    sysctl -w net.core.rmem_max=$TCP_BUF_MAX 2>/dev/null || true
+    sysctl -w net.core.wmem_max=$TCP_BUF_MAX 2>/dev/null || true
+    sysctl -w net.netfilter.nf_conntrack_max=$CT_MAX 2>/dev/null || true
+
     log_info "N5105 sysctl 配置完成"
 }
 
@@ -390,11 +410,20 @@ install_docker() {
 }
 EOF
     systemctl restart docker 2>/dev/null || true
+
+    # P1-2 FIX: Docker wait loop timeout - add --max-time to curl
+    local retry=0
+    local max_retries=30
+    while ! docker ps >/dev/null 2>&1 && [[ $retry -lt $max_retries ]]; do
+        sleep 1
+        ((retry++))
+    done
+
     # Docker 健康检查
     if docker ps >/dev/null 2>&1; then
         log_info "Docker 运行正常: $(docker ps -q | wc -l) 个容器在运行"
     else
-        log_warn "Docker 守护进程可能未正常启动"
+        log_warn "Docker 守护进程可能未正常启动（超时 ${max_retries}s）"
     fi
     log_info "Docker 安装完成"
 }
@@ -492,7 +521,9 @@ configure_fail2ban() {
         }
     fi
 
-    cat > /etc/fail2ban/jail.local << 'EOF'
+    # P1-4 FIX: Fail2ban overwrite risk - use separate config file
+    mkdir -p /etc/fail2ban/jail.d
+    cat > /etc/fail2ban/jail.d/99-vps-youhua-sshd.conf << 'EOF'
 [sshd]
 enabled   = true
 port      = ssh
