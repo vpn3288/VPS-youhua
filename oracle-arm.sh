@@ -265,7 +265,7 @@ optimize_network_oracle() {
 
         # RPS
         # AUDIT-4 FIX: 防御性检查 cores=0 的情况
-        if [[ $SYS_CPU_CORES -gt 1 ]]; then
+        if [[ ${SYS_CPU_CORES:-0} -gt 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
             if [[ $cores -gt 0 ]]; then
                 local mask

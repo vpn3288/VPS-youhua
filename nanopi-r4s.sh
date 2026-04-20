@@ -356,7 +356,7 @@ optimize_memory_r4s() {
 # R4S sysctl（TF 卡保护 + 网络优化）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_sysctl_r4s() {
-    local conntrack_max=$(( SYS_MEM_MB * 32 ))
+    local conntrack_max=$(( ${SYS_MEM_MB:-0} * 32 ))
     log_step "配置 sysctl (NanoPi R4S)..."
 
     backup_file "$SYSCTL_FILE"
@@ -1018,7 +1018,7 @@ main() {
     # R4S TF 卡保护：跳过 configure_swap（swapfile 会缩短 TF 卡寿命）
     log_info "R4S: skip configure_swap (TF card protection — zram active)"
     # M2 FIX: conntrack hashsize 必须在 sysctl 之前设置，避免运行时冲突
-    configure_conntrack_hashsize_r4s "$((${SYS_MEM_MB} * 32))"
+    configure_conntrack_hashsize_r4s "$((${SYS_MEM_MB:-0} * 32))"
     configure_sysctl_r4s
     configure_limits
     configure_fstab
