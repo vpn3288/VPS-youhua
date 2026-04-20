@@ -1014,6 +1014,7 @@ configure_swap() {
     fi
 
     # 创建标记文件，记录本脚本已创建 swap
+    local swap_marker="/etc/vps-youhua-swap-created"
     touch "$swap_marker"
 
     # swappiness 由各平台 sysctl 持久化配置控制（vm.swappiness 在 /etc/sysctl.d/ 里统一设置）
