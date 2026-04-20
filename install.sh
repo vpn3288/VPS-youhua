@@ -77,7 +77,7 @@ for arg in "$@"; do
         --with-fail2ban)             CONFIGURE_FAIL2BAN="true" ;;
         --without-fail2ban)          CONFIGURE_FAIL2BAN="false" ;;
         --mirror-auto)               CONFIGURE_MIRROR="auto" ;;
-        --mirror-off)                CONFIGURE_MIRROR="preserve" ;;
+        --mirror-off)                CONFIGURE_MIRROR="off" ;;
         --clean-system)              CLEAN_SYSTEM="true" ;;
         --uninstall)                 MODE="uninstall" ;;
         --status)                    MODE="status" ;;
@@ -422,7 +422,7 @@ show_platform_info() {
 show_quick_start_menu() {
     # NONINTERACTIVE 模式跳过交互菜单
     if [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
-        quick_choice="${QUICK_CHOICE:-1}"
+        quick_choice="1"
         log_info "非交互模式: quick_choice=${quick_choice}"
         return 0
     fi
@@ -824,7 +824,7 @@ resolve_full_extras() {
     echo ""
     echo -e "${YELLOW}即将开始执行，是否继续？${NC}"
     echo -n "按回车继续，或 Ctrl+C 取消: "
-    [[ "$INTERACTIVE" == "true" ]] && read -r dummy || true
+    if [[ "$INTERACTIVE" == "true" ]]; then read -r dummy; fi
     echo ""
 }
 
@@ -924,7 +924,6 @@ download_and_run() {
     export INSTALL_NODEJS="$INSTALL_NODEJS"
     # M5 FIX: 移除重复的 INSTALL_DOCKER_SCRIPT/INSTALL_NODEJS_SCRIPT export（已在上两行定义）
     export INSTALL_DEPS="${INSTALL_DEPS:-false}"
-    export INSTALL_METHOD="docker"
     export CONFIGURE_UNATTENDED="$CONFIGURE_UNATTENDED"
     export CONFIGURE_FAIL2BAN="$CONFIGURE_FAIL2BAN"
     export CONFIGURE_MIRROR="$CONFIGURE_MIRROR"
@@ -1163,6 +1162,7 @@ fi
     elif [[ "${NONINTERACTIVE:-0}" == "1" ]]; then
         # BUG#45 Fix: NONINTERACTIVE 模式使用自动检测的平台
         SELECTED_PLATFORM="$auto_platform"
+        SELECTED_MODE="${FORCE_MODE:-optimize}"
         echo -e "${GREEN}非交互模式: 使用自动检测平台 ${SELECTED_PLATFORM}${NC}"
     else
         # ── 交互式菜单 ─────────────────────────────────────────────────────

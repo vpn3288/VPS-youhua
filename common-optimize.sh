@@ -193,12 +193,12 @@ preflight_check() {
 
     if [[ $EUID -ne 0 ]]; then
         log_error "需要 root 权限"
-        ((errors++))
+        errors=$((errors + 1))
     fi
 
     if [[ $SYS_DISK_AVAIL_GB -lt 3 ]]; then
         log_warn "磁盘可用空间 ${SYS_DISK_AVAIL_GB}GB < 3GB"
-        [[ $SYS_DISK_AVAIL_GB -lt 1 ]] && ((errors++))
+        [[ $SYS_DISK_AVAIL_GB -lt 1 ]] && errors=$((errors + 1))
     fi
 
     if [[ $SYS_MEM_MB -lt 256 ]]; then
@@ -697,9 +697,13 @@ configure_limits() {
     ulimit -m unlimited
     [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
 
-    # 持久化
+    # 持久化（幂等性检查）
+    local limits_conf="/etc/security/limits.d/99-vps-youhua.conf"
     mkdir -p /etc/security/limits.d
-    cat > /etc/security/limits.d/99-vps-youhua.conf <<EOF
+    if [[ -f "$limits_conf" ]] && grep -q "vps-youhua" "$limits_conf" 2>/dev/null; then
+        log_info "资源限制已配置，跳过"
+    else
+        cat > "$limits_conf" <<EOF
 root soft nofile ${NOFILE_VAL}
 root hard nofile ${NOFILE_VAL}
 root soft nproc ${NPROC_VAL}
@@ -708,16 +712,24 @@ root hard nproc ${NPROC_VAL}
 * hard nofile ${NOFILE_VAL}
 * soft nproc ${NPROC_VAL}
 * hard nproc ${NPROC_VAL}
+# vps-youhua
 EOF
+    fi
 
-    # systemd 级别（L3 FIX: nofile 设为 infinity 避免数值覆盖冲突）
+    # systemd 级别（幂等性检查）
+    local systemd_conf="/etc/systemd/system.conf.d/99-resource-limits.conf"
     mkdir -p /etc/systemd/system.conf.d
-    cat > /etc/systemd/system.conf.d/99-resource-limits.conf <<EOF
+    if [[ -f "$systemd_conf" ]] && grep -q "vps-youhua" "$systemd_conf" 2>/dev/null; then
+        log_info "systemd 资源限制已配置，跳过"
+    else
+        cat > "$systemd_conf" <<EOF
 [Manager]
 DefaultLimitNOFILE=infinity
 DefaultLimitNPROC=${NPROC_VAL}:${NPROC_VAL}
 DefaultLimitMEMLOCK=infinity
+# vps-youhua
 EOF
+    fi
     systemctl daemon-reload 2>/dev/null || true
 
     # ── BUG#1: RAM<=1024MB 自动创建 1GB Swap（防止 GCP/1C1G OOM）──────────────
@@ -902,6 +914,13 @@ configure_lowmem_purge() {
 configure_swap() {
     log_step "配置 Swap（低内存防护）..."
 
+    # 幂等性检查：如果本脚本创建的标记文件存在，跳过
+    local swap_marker="/etc/vps-youhua-swap-created"
+    if [[ -f "$swap_marker" ]]; then
+        log_info "Swap 由本脚本创建，跳过"
+        return 0
+    fi
+
     # 检查是否已有 Swap（物理 swap + zram swap 都算）
     local swap_total zram_total=0
     swap_total=$(awk '/SwapTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
@@ -947,6 +966,9 @@ configure_swap() {
         echo "/swapfile none swap sw 0 0" >> /etc/fstab
     fi
 
+    # 创建标记文件，记录本脚本已创建 swap
+    touch "$swap_marker"
+
     # swappiness 由各平台 sysctl 持久化配置控制（vm.swappiness 在 /etc/sysctl.d/ 里统一设置）
     log_info "Swap 1GB 创建完成"
 }
@@ -957,6 +979,11 @@ configure_swap() {
 # ─────────────────────────────────────────────────────────────────────────────
 write_common_sysctl() {
     local file="$1"
+    # 幂等性检查：如果文件已存在且包含 vps-youhua 标记，跳过
+    if [[ -f "$file" ]] && grep -q "vps-youhua" "$file" 2>/dev/null; then
+        log_info "sysctl 配置已存在 ($file)，跳过"
+        return 0
+    fi
     backup_file "$file"
 
     # BUG#4: BBR 自适应检测（先运行，再写文件）
