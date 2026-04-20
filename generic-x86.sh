@@ -103,7 +103,8 @@ detect_storage_type() {
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    if [[ -f "/sys/block/${root_dev}/queue/rotational" ]]; then
+    # P1-3 FIX: Add fallback when rotational detection fails
+    if [[ -n "$root_dev" ]] && [[ -f "/sys/block/${root_dev}/queue/rotational" ]]; then
         if [[ "$(cat "/sys/block/${root_dev}/queue/rotational" 2>/dev/null)" == "0" ]]; then
             SYS_IS_SSD=true
             log_info "检测到 SSD: $root_dev"
@@ -111,6 +112,10 @@ detect_storage_type() {
             SYS_IS_SSD=false
             log_info "检测到 HDD: $root_dev"
         fi
+    else
+        # Fallback: assume SSD for cloud VPS (most common case)
+        SYS_IS_SSD=true
+        log_warn "无法检测存储类型（${root_dev:-unknown}），默认假设为 SSD（云VPS常见配置）"
     fi
 }
 
@@ -461,8 +466,16 @@ install_docker() {
 
     log_info "添加 Docker APT 仓库..."
     local codename; codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian ${codename} stable" > /etc/apt/sources.list.d/docker.list 2>/dev/null || \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${codename} stable" > /etc/apt/sources.list.d/docker.list 2>/dev/null || true
+
+    # Round 10 Fix: Validate mirror_url before curl (prevent empty/malformed URLs)
+    local mirror_url="download.docker.com"
+    if [[ -z "$mirror_url" ]] || [[ ! "$mirror_url" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+        log_error "Docker 镜像 URL 无效: ${mirror_url}"
+        return 1
+    fi
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://${mirror_url}/linux/debian ${codename} stable" > /etc/apt/sources.list.d/docker.list 2>/dev/null || \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://${mirror_url}/linux/ubuntu ${codename} stable" > /etc/apt/sources.list.d/docker.list 2>/dev/null || true
 
     log_info "安装 Docker..."
     apt-get update -qq >> "$APT_LOG" 2>&1

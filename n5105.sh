@@ -167,18 +167,22 @@ EOF
         systemctl enable zramswap 2>/dev/null || true
         systemctl restart zramswap 2>/dev/null || true
 
-        # P1-3 FIX: zram startup race condition - add wait loop
+        # P1-2 FIX: zram devicemapper race - wait for device AND swap activation
         local retry=0
-        local max_retries=10
-        while ! lsblk | grep -q zram && [[ $retry -lt $max_retries ]]; do
+        local max_retries=15
+        while [[ $retry -lt $max_retries ]]; do
+            if [[ -b /dev/zram0 ]] && swapon --show 2>/dev/null | grep -q zram; then
+                break
+            fi
             sleep 1
             ((retry++))
         done
 
-        if lsblk | grep -q zram; then
-            log_info "ZRAM ${ZRAM_SIZE}MB 已启用"
+        if swapon --show 2>/dev/null | grep -q zram; then
+            local zram_dev=$(lsblk -n -o NAME,TYPE | awk '$2=="swap" && /zram/ {print $1}' | head -1)
+            [[ -n "$zram_dev" ]] && log_info "ZRAM ${ZRAM_SIZE}MB 已启用 (/dev/${zram_dev})"
         else
-            log_warn "ZRAM 启动超时（${max_retries}s）"
+            log_warn "ZRAM devicemapper 启动超时（${max_retries}s）"
         fi
     else
         log_info "跳过 ZRAM（内存充足）"
