@@ -786,7 +786,9 @@ main() {
     oracle_cloud_cleanup
     optimize_memory_oracle
     configure_cpufreq
-    # BUG#1 FIX: Oracle ARM 在 zram 之后才检查 swap（避免冲突）
+    # BUG#1 FIX: Oracle ARM - configure zram first, then check swap
+    configure_zram
+    # Check swap after zram to avoid conflicts
     configure_swap
     configure_sysctl_oracle
     # AUDIT-2 FIX: 调用 configure_conntrack_hashsize 设置只读参数
