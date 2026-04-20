@@ -37,26 +37,51 @@
 
 ### 第一步：运行优化脚本（选一个）
 
-```bash
+
 # 自动检测平台（推荐新手）
+```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh)
 
 # 手动指定平台
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)      # NanoPi R4S (4GB ARM, TF卡)
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopc-t6.sh)       # NanoPC T6 (16GB ARM, eMMC)
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)      # Oracle Cloud ARM 2C16G
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-1c4g.sh)     # Oracle Cloud ARM 1C4G
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)            # N5105/N5095 小主机
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)     # 通用 x86 VPS
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-1c1g.sh)      # 通用 1C1G 低配 VPS
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/google-cloud-e2.sh) # Google Cloud e2-micro
+# NanoPi R4S (4GB ARM, TF卡)
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)
+```
+# NanoPC T6 (16GB ARM, eMMC)
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopc-t6.sh)
+```
+# Oracle Cloud ARM 2C16G
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)
+```
+# Oracle Cloud ARM 1C4G
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-1c4g.sh)
+```
+# N5105/N5095 小主机
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)
+```
+# 通用 x86 VPS
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)
+```
+# 通用 1C1G 低配 VPS
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-1c1g.sh)
+```
+ # Geoogl Cloud e2-micro
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/google-cloud-e2.sh)
+```
 
 # 可选参数：
 #   --optimize-only   仅做环境优化，跳过 Docker / Node.js / OpenClaw 安装
 #   --clean-system    清理 apt purge 预装软件（apache2/nginx/postfix 等）
 #   --uninstall       卸载已安装的优化配置
 #   --non-interactive 自动执行（适合自动化）
-```
+
 
 ### 第二步：验证优化效果
 
