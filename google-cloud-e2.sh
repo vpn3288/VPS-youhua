@@ -99,6 +99,8 @@ load_common_optimize() {
     exit 1
 }
 
+# Test comment from Claude Code acceptEdits mode
+
 load_common_optimize
 
 # ─────────────────────────────────────────────────────────────────────────────
