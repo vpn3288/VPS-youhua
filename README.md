@@ -41,7 +41,7 @@
 # 自动检测平台（推荐新手）
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh)
-
+```
 # 手动指定平台
 # NanoPi R4S (4GB ARM, TF卡)
 ```bash
