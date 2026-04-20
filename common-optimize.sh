@@ -921,6 +921,39 @@ configure_lowmem_purge() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# conntrack hashsize 配置（所有平台通用部分）
+# AUDIT-2 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# 通过 /sys/module/nf_conntrack/parameters/hashsize 设置（需先加载模块）
+# modprobe 失败时回退到 /etc/modprobe.d/ 配置（下次启动生效）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_conntrack_hashsize() {
+    # CT_MAX 由调用者定义（各平台不同）
+    local CT_MAX="${CT_MAX:-65536}"
+    local hashsize=$((CT_MAX / 4))
+    local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
+
+    log_step "配置 nf_conntrack_hashsize..."
+
+    # 确保模块已加载（modprobe 失败不算致命错误，继续尝试直接写入）
+    if ! modprobe nf_conntrack 2>/dev/null; then
+        log_warn "nf_conntrack 模块加载失败（可能已内置或内核不支持）"
+    fi
+
+    if [[ -f "$hashsize_file" ]]; then
+        if ! echo "$hashsize" > "$hashsize_file" 2>/dev/null; then
+            log_warn "nf_conntrack_hashsize 运行时设置失败，写入 modprobe 配置（下次启动生效）"
+            mkdir -p /etc/modprobe.d
+            echo "options nf_conntrack hashsize=$hashsize" > /etc/modprobe.d/nf_conntrack.conf
+        fi
+        local current_hashsize
+        current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
+        log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
+    else
+        log_warn "nf_conntrack 模块未加载或不支持，跳过 hashsize 配置"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # BUG#5: configure_swap 实现（低内存机器自动创建 1GB Swap）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_swap() {
