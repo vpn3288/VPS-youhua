@@ -213,7 +213,7 @@ configure_zram_1c1g() {
 # conntrack hashsize 配置（generic-1c1g 专用）
 # AUDIT-FIX: nf_conntrack_buckets 是只读参数，不能通过 sysctl 设置
 # ─────────────────────────────────────────────────────────────────────────────
-configure_conntrack_hashsize() {
+configure_conntrack_hashsize_1c1g() {
     log_step "配置 nf_conntrack_hashsize（1C1G）..."
 
     modprobe nf_conntrack 2>/dev/null || true
@@ -506,7 +506,7 @@ main() {
     configure_apt_sources
     clean_system
     configure_sysctl_generic_1c1g
-    configure_conntrack_hashsize
+    configure_conntrack_hashsize_1c1g
     configure_limits
 
     # BUG#8: 低内存极限清理
