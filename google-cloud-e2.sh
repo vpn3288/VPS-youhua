@@ -48,8 +48,8 @@ readonly JOURNALD_MAX_USE="50M"
 readonly TMPFS_SIZE="256M"
 
 # GCP e2-micro TCP 缓冲（内存3%，上限8MB，下限4MB）
-# 修正：MemTotal($2)为KB，转换为字节后乘3%，单位一致
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024/1024;t=m*3145728;if(t>8388608)t=8388608;else if(t<4194304)t=4194304;printf "%.0f",t}' /proc/meminfo)
+# MemTotal($2)为KB，转换为字节后计算3%，单位一致
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*3/100; if(buf>8388608) buf=8388608; if(buf<4194304) buf=4194304; printf "%d", buf}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512

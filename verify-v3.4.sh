@@ -7,6 +7,10 @@
 #===============================================================================
 set -euo pipefail
 
+# R6-A3 FIX: 声明 passed/failed 为全局变量（在所有函数之前）
+passed=0
+failed=0
+
 readonly VERSION="3.4"
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
