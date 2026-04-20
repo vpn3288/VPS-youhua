@@ -236,7 +236,7 @@ configure_tf_card_protection() {
         # R66 FIX: 动态计算 ZRAM_SIZE（基于实际物理内存）
         local total_mem_kb
         total_mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-        local zram_mb=$((total_mem_kb * 50 / 1024))  # 50% of memory in MB
+        local zram_mb=$((total_mem_kb / 2 / 1024))  # 50% of memory in MB
         if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
             sed -i "s/^SIZE=.*/SIZE=${zram_mb}M/" /etc/default/armbian-zram-config
         else

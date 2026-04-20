@@ -688,9 +688,6 @@ main() {
     configure_conntrack_hashsize
     configure_limits
 
-    configure_sysctl_oracle
-    configure_conntrack_hashsize
-    configure_limits
     configure_fstab
     configure_journald
     configure_dns

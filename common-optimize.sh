@@ -812,7 +812,7 @@ configure_fstab() {
                 BEGIN { found=0 }
                 $1 == dev { print newline; found=1; next }
                 { print }
-            ' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
+            ' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab && test -f /etc/fstab && chmod 644 /etc/fstab
             fstab_changed=true
         fi
     done < /etc/fstab
