@@ -1337,3 +1337,43 @@ show_platform_summary() {
     fi
     echo ""
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 熵服务配置（TLS 加解密加速）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_entropy() {
+    log_step "配置熵服务（TLS 加速）..."
+    
+    # 检查是否已有熵服务运行
+    if systemctl is-active --quiet haveged 2>/dev/null; then
+        log_info "haveged 熵服务运行中"
+        return 0
+    fi
+    
+    if systemctl is-active --quiet rng-tools 2>/dev/null; then
+        log_info "rng-tools 熵服务运行中"
+        return 0
+    fi
+    
+    # 尝试安装并启动熵服务
+    if command -v haveged >/dev/null 2>&1; then
+        systemctl enable haveged 2>/dev/null || true
+        systemctl restart haveged 2>/dev/null || true
+        log_info "haveged 熵服务已启动"
+    elif command -v rng-tools >/dev/null 2>&1; then
+        systemctl enable rng-tools 2>/dev/null || true
+        systemctl restart rng-tools 2>/dev/null || true
+        log_info "rng-tools 熵服务已启动"
+    else
+        DEBIAN_FRONTEND=noninteractive apt-get install -y rng-tools 2>/dev/null || true
+        if command -v rng-tools >/dev/null 2>&1; then
+            systemctl enable rng-tools 2>/dev/null || true
+            systemctl restart rng-tools 2>/dev/null || true
+            log_info "rng-tools 已安装并运行（TLS 熵池充足）"
+        else
+            log_warn "熵服务安装失败（TLS 加解密可能受影响）"
+        fi
+    fi
+    
+    log_info "熵服务配置完成"
+}
