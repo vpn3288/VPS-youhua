@@ -17,17 +17,17 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # ─────────────────────────────────────────────────────────────────────────────
 
 declare -A EXPECTED_SHA256=(
-    ["common-optimize"]="26b2fe9227954fae688d60da54046fbaae34c09fddd47084d715e5b72d95f3a8"
-    ["common"]="26b2fe9227954fae688d60da54046fbaae34c09fddd47084d715e5b72d95f3a8"
-    ["nanopc-t6"]="d62da18c7a588eb3468ce1774fa2b1eaf5297f5b84bbc84f02cb61dac49884a6"
-    ["nanopi-r4s"]="ed1a2e660d488444e2b753e6a16e5e3a90e6e10e47f59bfe7e254d604a03397a"
-    ["oracle-arm"]="1a82c18e878c136c02489d7f83ec629044c254ee4fe072508ca01b9a4f60127e"
-    ["oracle-1c4g"]="e5c81358bb97e56e574db56634186bc248ea603c8823744511a43e2d80b62e25"
-    ["n5105"]="c0e8b5c3acf84bea8c1d6d02a1f0c4d697087f0074e2f9473017a6e7f5bac489"
-    ["generic-x86"]="16e633b85548db1e9ee0a5e98910f7d6be60bdbac0c39fd2fbbc6ba72f5492f1"
-    ["generic-1c1g"]="176b93ae2299744a090b4c4ed901239881c636bbbf41f4a0467a07738972d204"
-    ["google-cloud-e2"]="b0a59fb1e8144566d045ec5b2ee9fb865b9c37904a05bd1231e109c261cc2efb"
-    ["verify-v3.4"]="48e2114259bb8293311c59abef0d952070d70fb5a10532bb41d45b98d76446fa"
+    ["common-optimize"]="6209227a2ff933be3e33f3e7af0a29f8daf2ad6f7a4f223110a7458f3137de38"
+    ["common"]="6209227a2ff933be3e33f3e7af0a29f8daf2ad6f7a4f223110a7458f3137de38"
+    ["nanopc-t6"]="1879d3ed819731dc00d225af2f5cfffbdebf73f06ee0398bae9f6ae7878de090"
+    ["nanopi-r4s"]="8a0523027bffd3c8746f5a3d8abde5db52ecb1368a3a088ae04a91634b363b54"
+    ["oracle-arm"]="b93ad2742fca0414dc520a3ec9e0900c036a9800a5f35fda835f7bb65cbafffa"
+    ["oracle-1c4g"]="afcdb3ef5a480aabb63b6783b42c597b9f41d774e1ac289ca1c579aa1b673fb7"
+    ["n5105"]="2d878bbc7d7f9485447a60af257eb93e6cc7d108b1afae8005e200b8c8c50a28"
+    ["generic-x86"]="daadc29ef975ec518fde0f9136087b60dba33a4a311e136b3c4408fcb616e926"
+    ["generic-1c1g"]="f7a56639fc3ce2cb06a4fcd2d3a8559340b4b77c7e844cb6ab63fd8edfbd1976"
+    ["google-cloud-e2"]="294617aa5fdee641fd08c406d134ddcc6b3e18a3b6b75a9ad08cbc75af4e19b7"
+    ["verify-v3.4"]="1cec4781c42cde8058aef409c94690fb55d122f35e6e0c46772581b8a5bd7a45"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
