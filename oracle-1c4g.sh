@@ -182,6 +182,10 @@ optimize_memory_oracle() {
                 echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || true
                 local mem_kb
                 mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+                if [[ -z "$mem_kb" || ! "$mem_kb" =~ ^[0-9]+$ ]]; then
+                    log_error "无法读取有效的内存信息"
+                    return 1
+                fi
                 local zram_size=$((mem_kb * 1024))  # zram 1:1 匹配 RAM（字节）
                 if [[ -f /sys/block/zram0/disksize ]]; then
                     echo "${zram_size}" > /sys/block/zram0/disksize 2>/dev/null || true
