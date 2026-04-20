@@ -323,7 +323,7 @@ optimize_network_oracle() {
 
         # RPS（多核时启用，单核跳过）
         # M2 FIX: 限制为 63 核防止 bitmask 溢出（bash 算术溢出）
-        if [[ $SYS_CPU_CORES -gt 1 ]]; then
+        if [[ ${SYS_CPU_CORES:-0} -gt 1 ]]; then
             local cores=$SYS_CPU_CORES
             [[ $cores -gt 63 ]] && cores=63
             if [[ $cores -gt 0 ]]; then
