@@ -1041,10 +1041,27 @@ write_common_sysctl() {
 
     # BUG#4: BBR 自适应检测（先运行，再写文件）
     BBR_CC="cubic"
+    
+    # 智能选择 qdisc：优先 CAKE（为 BBR 优化），回退到 fq
     BBR_QDISC="fq"
+    modprobe -q sch_cake 2>/dev/null || true
+    if lsmod | grep -qw sch_cake 2>/dev/null; then
+        BBR_QDISC="cake"
+        # 持久化 CAKE 模块加载
+        mkdir -p /etc/modules-load.d
+        if ! grep -q "^sch_cake$" /etc/modules-load.d/qdisc.conf 2>/dev/null; then
+            echo "sch_cake" > /etc/modules-load.d/qdisc.conf
+            log_info "队列调度: cake（已加载并持久化，为 BBR 优化）"
+        else
+            log_info "队列调度: cake（已加载，为 BBR 优化）"
+        fi
+    else
+        log_info "队列调度: fq（CAKE 不可用，使用默认）"
+    fi
+    
     if [[ -f /proc/sys/net/ipv4/tcp_available_congestion_control ]]; then
         modprobe -q tcp_bbr2 2>/dev/null || true
-        if grep -q "bbr2" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+        if grep -qw "bbr2" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
             BBR_CC="bbr"
             # 持久化 BBR 模块加载
             mkdir -p /etc/modules-load.d
@@ -1056,7 +1073,7 @@ write_common_sysctl() {
             fi
         else
             modprobe -q tcp_bbr 2>/dev/null || true
-            if grep -q "bbr " /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+            if grep -qw "bbr" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
                 BBR_CC="bbr"
                 # 持久化 BBR 模块加载
                 mkdir -p /etc/modules-load.d
