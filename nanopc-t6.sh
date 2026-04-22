@@ -423,19 +423,66 @@ install_docker() {
         return 0
     fi
 
-    # [H10] FIX: 使用临时文件替代 curl|bash 管道安装 Docker
-    local docker_install_script="/tmp/get-docker.sh"
-    if curl -fsSL https://get.docker.com -o "$docker_install_script" && \
-       chmod +x "$docker_install_script" && \
-       "$docker_install_script" >> "$APT_LOG" 2>&1; then
-        log_info "Docker 安装完成"
-    else
-        log_warn "get.docker.com 安装失败，尝试 apt 安装 docker.io..."
-        apt-get install -y docker.io docker-compose >> "$APT_LOG" 2>&1 || {
-            log_error "Docker 安装失败，请查看 $APT_LOG"
-            return 1
-        }
+    # 使用官方 APT 仓库安装 Docker，避免 curl|bash 安全风险
+    log_info "安装 Docker 依赖..."
+    apt-get install -y ca-certificates curl gnupg lsb-release >> "$APT_LOG" 2>&1 || {
+        log_error "Docker 依赖安装失败"
+        return 1
+    }
+
+    log_info "添加 Docker GPG 密钥..."
+    mkdir -p /etc/apt/keyrings
+    local gpg_tmp; gpg_tmp=$(mktemp)
+    local gpg_stderr; gpg_stderr=$(mktemp)
+    trap 'rm -f "$gpg_tmp" "$gpg_stderr"' RETURN INT
+
+    # 先下载到临时文件，避免 TOCTOU 漏洞
+    if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then
+        log_error "Docker GPG 密钥下载失败"
+        cat "$gpg_stderr" >> "$APT_LOG" 2>/dev/null
+        return 1
     fi
+
+    # 转换为 gpg 格式（dearmor）到另一个临时文件
+    local gpg_dearmored; gpg_dearmored=$(mktemp)
+    if ! gpg --dearmor -o "$gpg_dearmored" "$gpg_tmp" 2>"$gpg_stderr"; then
+        log_error "Docker GPG 密钥格式转换失败"
+        cat "$gpg_stderr" >> "$APT_LOG" 2>/dev/null
+        return 1
+    fi
+
+    # 在写入目标位置之前验证指纹，防止 TOCTOU 攻击
+    local key_fingerprint; key_fingerprint=$(gpg --show-keys --with-colons "$gpg_dearmored" 2>/dev/null | awk -F: '/^fpr:/ {print $10; exit}')
+    local expected_fingerprint="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+    if [[ -z "$key_fingerprint" ]]; then
+        log_error "无法读取 GPG 密钥指纹"
+        return 1
+    fi
+    if [[ "$key_fingerprint" != "$expected_fingerprint" ]]; then
+        log_error "GPG 密钥指纹校验失败！疑似供应链污染。"
+        log_error "预期: $expected_fingerprint"
+        log_error "实际: $key_fingerprint"
+        return 1
+    fi
+    log_info "Docker GPG 密钥指纹校验通过"
+
+    # 验证通过后，原子性移动到目标位置
+    chmod 644 "$gpg_dearmored"
+    mv -f "$gpg_dearmored" /etc/apt/keyrings/docker.gpg
+
+    log_info "添加 Docker APT 仓库..."
+    local codename; codename=$(lsb_release -cs 2>/dev/null || echo "bookworm")
+    local mirror_url="download.docker.com"
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://${mirror_url}/linux/debian ${codename} stable" > /etc/apt/sources.list.d/docker.list 2>/dev/null || \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://${mirror_url}/linux/ubuntu ${codename} stable" > /etc/apt/sources.list.d/docker.list 2>/dev/null || true
+
+    log_info "安装 Docker..."
+    apt-get update -qq >> "$APT_LOG" 2>&1
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >> "$APT_LOG" 2>&1 || {
+        log_error "Docker 安装失败，请查看 $APT_LOG"
+        return 1
+    }
 
     if ! command -v docker &>/dev/null; then
         log_error "Docker 安装后仍未找到 docker 命令"
