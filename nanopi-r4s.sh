@@ -116,11 +116,16 @@ cleanup_legacy_tmpfs() {
 
     if mount | grep -q "tmpfs on /tmp"; then
         log_warn "检测到残留 tmpfs /tmp 挂载，检查进程占用..."
-        # 检查是否有进程正在使用 /tmp
-        if lsof /tmp 2>/dev/null | grep -q /tmp; then
-            log_error "清理失败: /tmp 被进程占用，请先停止相关进程后手动执行: umount /tmp"
-            flock -u 200
-            return 1
+        # Round 10 Fix: 检查 lsof 是否安装
+        if command -v lsof >/dev/null 2>&1; then
+            # 检查是否有进程正在使用 /tmp
+            if lsof /tmp 2>/dev/null | grep -q /tmp; then
+                log_error "清理失败: /tmp 被进程占用，请先停止相关进程后手动执行: umount /tmp"
+                flock -u 200
+                return 1
+            fi
+        else
+            log_warn "lsof 未安装，跳过进程占用检查（建议安装: apt-get install lsof）"
         fi
         umount /tmp 2>/dev/null && rm -f /var/run/vps-youhua-tmpfs-mount || {
             log_error "清理残留 tmpfs /tmp 失败，请手动执行: umount /tmp && rm -f /var/run/vps-youhua-tmpfs-mount"
@@ -466,6 +471,12 @@ configure_conntrack_hashsize_r4s() {
 
     # 加载 nf_conntrack 模块
     modprobe nf_conntrack 2>/dev/null || true
+
+    # Round 10 Fix: 验证 conntrack_max 非零，防止除零错误
+    if [[ -z "$conntrack_max" || "$conntrack_max" -le 0 ]]; then
+        log_warn "conntrack_max 无效（${conntrack_max:-未定义}），跳过 hashsize 配置"
+        return 0
+    fi
 
     # 计算 hashsize（通常为 conntrack_max 的 1/4）
     local hashsize=$((conntrack_max / 4))

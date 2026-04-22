@@ -316,6 +316,11 @@ configure_conntrack_hashsize_t6() {
         # 计算 hashsize（conntrack_max / 4，上限为 CT_HASH_SIZE）
         local calc_conntrack_max
         calc_conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
+        # Round 10 Fix: 验证 calc_conntrack_max 非零
+        if [[ -z "$calc_conntrack_max" || "$calc_conntrack_max" -le 0 ]]; then
+            log_warn "conntrack_max 无效，使用默认值 262144"
+            calc_conntrack_max=262144
+        fi
         local hashsize=$(( calc_conntrack_max / 4 ))
         # CT_HASH_SIZE 作为上限保护
         if [[ $hashsize -gt $CT_HASH_SIZE ]]; then
