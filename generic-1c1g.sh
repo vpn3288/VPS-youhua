@@ -48,7 +48,7 @@ readonly JOURNALD_MAX_USE="30M"
 readonly TMPFS_SIZE="256M"
 
 # 1C1G TCP 缓冲（极保守：内存 3%，上限 8MB，下限 4MB）
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2/1024/1024;t=m*3145728;if(t>8388608)t=8388608;else if(t<4194304)t=4194304;printf "%.0f",t}' /proc/meminfo)
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*3/100; if(buf>8388608) buf=8388608; if(buf<4194304) buf=4194304; printf "%d", buf}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512       # 1C1G 低资源限制
