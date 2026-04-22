@@ -91,6 +91,12 @@ load_common_optimize
 
 # N5105 内存分级
 _detect_n5105_memory_profile() {
+    # 验证 SYS_MEM_MB 是否已初始化
+    if [[ -z "${SYS_MEM_MB}" || "${SYS_MEM_MB}" -eq 0 ]]; then
+        echo -e "${RED}[✗] 错误: SYS_MEM_MB 未初始化，请先调用 detect_system()${NC}" >&2
+        return 1
+    fi
+    
     # 内存档位策略说明：
     # - 高内存(≥16GB): 无需zram, swappiness=10, 大TCP缓冲
     # - 中等内存(4-16GB): 无需zram, swappiness=15, 中TCP缓冲
