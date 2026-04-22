@@ -84,7 +84,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
 
     local dest="${tmpdir}/common-optimize.sh"
-    local sha256_expected="6209227a2ff933be3e33f3e7af0a29f8daf2ad6f7a4f223110a7458f3137de38"
+    local sha256_expected="79158823c9b3f891fc81b5d1f0b269ed8fe701fb35dfd56cfac4e2e8c163f27e"
     local sha256_actual=""
 
     # 主站下载（带 SHA256 验证）
@@ -723,14 +723,14 @@ main() {
         systemctl enable haveged 2>/dev/null || true
         systemctl restart haveged 2>/dev/null || true
         log_info "haveged 熵服务运行中"
-    elif command -v rng-tools >/dev/null 2>&1; then
+    elif command -v rngd >/dev/null 2>&1; then
         systemctl enable rng-tools 2>/dev/null || true
         systemctl restart rng-tools 2>/dev/null || true
         log_info "rng-tools 熵服务运行中"
     else
         # M5 FIX: 使用 install_if_missing + 统一日志路径
         DEBIAN_FRONTEND=noninteractive install_if_missing rng-tools
-        if command -v rng-tools >/dev/null 2>&1; then
+        if command -v rngd >/dev/null 2>&1; then
             systemctl enable rng-tools 2>/dev/null || true
             systemctl restart rng-tools 2>/dev/null || true
             log_info "rng-tools 已安装并运行（TLS 熵池充足）"

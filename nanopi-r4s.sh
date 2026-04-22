@@ -80,7 +80,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         # HIGH FIX: SHA256 校验供应链安全
-        local sha256_expected="9cf79b63c3a2cce7caa20fd37e85953c9d9fdcf20c4b95d151b90879b69b8347"
+        local sha256_expected="79158823c9b3f891fc81b5d1f0b269ed8fe701fb35dfd56cfac4e2e8c163f27e"
         local sha256_actual
         sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
         if [[ "$sha256_actual" != "$sha256_expected" ]]; then
@@ -571,7 +571,7 @@ install_docker() {
     # Docker 官方安装脚本
     # R6-A1 FIX: 先下载到临时文件，校验 SHA256 后执行（供应链安全）
     local docker_install_script="/tmp/get-docker.sh"
-    local sha256_expected="9cf79b63c3a2cce7caa20fd37e85953c9d9fdcf20c4b95d151b90879b69b8347"
+    local sha256_expected="79158823c9b3f891fc81b5d1f0b269ed8fe701fb35dfd56cfac4e2e8c163f27e"
     if curl -fsSL https://get.docker.com -o "$docker_install_script"; then
         local sha256_actual
         sha256_actual=$(sha256sum "$docker_install_script" | awk '{print $1}')

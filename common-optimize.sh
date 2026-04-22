@@ -1046,12 +1046,26 @@ write_common_sysctl() {
         modprobe -q tcp_bbr2 2>/dev/null || true
         if grep -q "bbr2" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
             BBR_CC="bbr"
-            log_info "TCP 拥塞控制: bbr（BBRv3 已激活）"
+            # 持久化 BBR 模块加载
+            mkdir -p /etc/modules-load.d
+            if ! grep -q "^tcp_bbr$" /etc/modules-load.d/bbr.conf 2>/dev/null; then
+                echo "tcp_bbr" > /etc/modules-load.d/bbr.conf
+                log_info "TCP 拥塞控制: bbr（BBRv3 已激活并持久化）"
+            else
+                log_info "TCP 拥塞控制: bbr（BBRv3 已激活）"
+            fi
         else
             modprobe -q tcp_bbr 2>/dev/null || true
             if grep -q "bbr " /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
                 BBR_CC="bbr"
-                log_info "TCP 拥塞控制: bbr（BBRv1 已激活）"
+                # 持久化 BBR 模块加载
+                mkdir -p /etc/modules-load.d
+                if ! grep -q "^tcp_bbr$" /etc/modules-load.d/bbr.conf 2>/dev/null; then
+                    echo "tcp_bbr" > /etc/modules-load.d/bbr.conf
+                    log_info "TCP 拥塞控制: bbr（BBRv1 已激活并持久化）"
+                else
+                    log_info "TCP 拥塞控制: bbr（BBRv1 已激活）"
+                fi
             else
                 BBR_CC="cubic"
                 log_info "TCP 拥塞控制: cubic（BBR 不可用，降级）"
@@ -1360,13 +1374,13 @@ configure_entropy() {
         systemctl enable haveged 2>/dev/null || true
         systemctl restart haveged 2>/dev/null || true
         log_info "haveged 熵服务已启动"
-    elif command -v rng-tools >/dev/null 2>&1; then
+    elif command -v rngd >/dev/null 2>&1; then
         systemctl enable rng-tools 2>/dev/null || true
         systemctl restart rng-tools 2>/dev/null || true
         log_info "rng-tools 熵服务已启动"
     else
         DEBIAN_FRONTEND=noninteractive apt-get install -y rng-tools 2>/dev/null || true
-        if command -v rng-tools >/dev/null 2>&1; then
+        if command -v rngd >/dev/null 2>&1; then
             systemctl enable rng-tools 2>/dev/null || true
             systemctl restart rng-tools 2>/dev/null || true
             log_info "rng-tools 已安装并运行（TLS 熵池充足）"
