@@ -71,7 +71,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/gene
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-1c1g.sh)
 ```
- ### Geoogl Cloud e2-micro
+ ### Google Cloud e2-micro
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/google-cloud-e2.sh)
 ```
