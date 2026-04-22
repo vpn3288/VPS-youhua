@@ -770,7 +770,8 @@ configure_fail2ban() {
         }
     fi
 
-    cat > /etc/fail2ban/jail.local << 'EOF'
+    mkdir -p /etc/fail2ban/jail.d
+    cat > /etc/fail2ban/jail.d/99-vps-youhua-sshd.conf << 'EOF'
 [sshd]
 enabled   = true
 port      = ssh

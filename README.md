@@ -8,8 +8,7 @@
 [![Debian 12](https://img.shields.io/badge/Debian-12-AA0000?logo=debian)](https://www.debian.org/)
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v3.3](https://img.shields.io/badge/版本-v3.3-green.svg)](https://github.com/vpn3288/VPS-youhua)
-[![审查](https://img.shields.io/badge/审查-8轮0bug-blue.svg)](https://github.com/vpn3288/VPS-youhua)
+[![v3.4](https://img.shields.io/badge/版本-v3.4-green.svg)](https://github.com/vpn3288/VPS-youhua)
 [![8平台](https://img.shields.io/badge/平台-8个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
 
 </div>

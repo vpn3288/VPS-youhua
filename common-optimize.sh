@@ -1321,7 +1321,8 @@ configure_fail2ban() {
         [[ -n "$detected_port" ]] && ssh_port="$detected_port"
     fi
 
-    cat > /etc/fail2ban/jail.local <<EOF
+    mkdir -p /etc/fail2ban/jail.d
+    cat > /etc/fail2ban/jail.d/99-vps-youhua-sshd.conf <<EOF
 [DEFAULT]
 bantime = 3600
 findtime = 600
