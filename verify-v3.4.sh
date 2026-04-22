@@ -236,6 +236,7 @@ check_locale_chain() {
     # Layer 2: /etc/default/locale
     echo -e "  ${DIM}Layer 2 - /etc/default/locale:${RESET}"
     if [[ -f /etc/default/locale ]]; then
+        # Round 10 Fix: 避免子shell导致issues计数失效，先显示内容再检查
         grep -v "^#" /etc/default/locale 2>/dev/null | grep -v "^$" | while read -r line; do
             echo -e "    ${line}"
         done
@@ -249,10 +250,6 @@ check_locale_chain() {
         echo -e "    ${RED}✗${RESET} 文件不存在"
         ((issues++))
     fi
-
-    # Round 10 Fix: Add filesystem overhead to available_mb check (reserve 200MB)
-    local fs_overhead_mb=200
-    local available_with_overhead=$((available_mb - fs_overhead_mb))
 
     # Layer 3: /etc/environment.d/90-chinese.conf (systemd/PAM)
     echo -e "  ${DIM}Layer 3 - /etc/environment.d/90-chinese.conf:${RESET}"

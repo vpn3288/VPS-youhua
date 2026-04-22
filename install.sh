@@ -457,7 +457,7 @@ show_quick_start_menu() {
     echo -e "       4步引导: 选平台 → 选套餐 → 选功能 → 确认"
     echo ""
     echo -n "请输入选项 [1/2/3/4/5/6，默认 1]: "
-    read -r quick_choice
+    read -r -t 30 quick_choice || quick_choice="1"
     quick_choice="${quick_choice:-1}"
 
     # Sanitize input: only accept 1-6
@@ -585,7 +585,7 @@ step2_choose_subplatform() {
             echo -e "       RK3588 ARM64 | 3网口 | eMMC存储 | 16GB RAM"
             echo ""
             echo -n "请输入选项 [1/2]: "
-            read -r choice
+            read -r -t 30 choice || choice="1"
             case "$choice" in
                 1) SELECTED_PLATFORM="nanopi-r4s" ;;
                 2) SELECTED_PLATFORM="nanopc-t6" ;;
@@ -600,7 +600,7 @@ step2_choose_subplatform() {
             echo -e "       Ampere Altra | 1核 4GB | Oracle 促销机型（仅环境优化）"
             echo ""
             echo -n "请输入选项 [1/2]: "
-            read -r choice
+            read -r -t 30 choice || choice="1"
             # Sanitize: only accept 1 or 2
             if [[ ! "$choice" =~ ^[12]$ ]]; then
                 echo -e "${YELLOW}无效选项 '$choice'${NC}"
@@ -617,7 +617,7 @@ step2_choose_subplatform() {
             echo -e "       1vCPU 共享 | 1GB RAM | 30GB SSD | Always Free（仅环境优化）"
             echo ""
             echo -n "请输入选项 [1]: "
-            read -r choice
+            read -r -t 30 choice || choice="1"
             case "$choice" in
                 1) SELECTED_PLATFORM="google-cloud-e2" ;;
                 *) echo -e "${YELLOW}无效选项${NC}"; step2_choose_subplatform; return ;;
@@ -628,7 +628,7 @@ step2_choose_subplatform() {
             echo -e "       x86_64 | 低功耗 | 有风扇 | SSD存储"
             echo ""
             echo -n "请输入选项 [1]: "
-            read -r choice
+            read -r -t 30 choice || choice="1"
             SELECTED_PLATFORM="n5105"
             ;;
         generic)
@@ -639,7 +639,7 @@ step2_choose_subplatform() {
             echo -e "       最低配套餐 | 1GB 内存 | 仅环境优化，不安装重软件"
             echo ""
             echo -n "请输入选项 [1/2]: "
-            read -r choice
+            read -r -t 30 choice || choice="1"
             case "$choice" in
                 1) SELECTED_PLATFORM="generic-x86" ;;
                 2) SELECTED_PLATFORM="generic-1c1g" ;;
@@ -675,7 +675,7 @@ step3_choose_mode() {
     echo -e "  ${GREEN}[0]${NC}  退出"
     echo ""
     echo -n "请输入选项 [1/2/0，默认 1]: "
-    read -r choice
+    read -r -t 30 choice || choice="1"
     choice="${choice:-1}"
     # Sanitize: only accept 0, 1, or 2
     if [[ ! "$choice" =~ ^[012]$ ]]; then
@@ -749,7 +749,7 @@ step4_choose_features() {
                 echo -e "  ${GREEN}[2]${NC} 引导配置（生成密钥对，显示公钥，提示添加到 ~/.ssh/authorized_keys）"
                 echo ""
                 echo -n "请输入选项 [1/2，默认 1]: "
-                read -r ssh_key_choice
+                read -r -t 30 ssh_key_choice || ssh_key_choice="1"
                 ssh_key_choice="${ssh_key_choice:-1}"
                 case "$ssh_key_choice" in
                     2)
@@ -790,7 +790,7 @@ resolve_full_extras() {
         echo -e "  ${GREEN}[✓]${NC} ${BOLD}Docker${NC}（容器引擎，用于运行容器化应用等）"
         echo -e "      ${CYAN}建议安装，输入 y 或直接回车${NC}"
         echo -n "  是否安装 Docker？[y/n，默认 y]: "
-        read -r yn
+        read -r -t 30 yn || yn="y"
         yn="${yn:-y}"
         # Sanitize: only accept y/Y/n/N
         yn="${yn,,}"  # lowercase
@@ -809,7 +809,7 @@ resolve_full_extras() {
         echo ""
         echo -e "  ${GREEN}[✓]${NC} ${BOLD}Node.js${NC}（运行环境，用于全局安装 npm 包）"
         echo -n "  是否安装 Node.js？[y/n，默认 y]: "
-        read -r yn
+        read -r -t 30 yn || yn="y"
         yn="${yn:-y}"
         # Sanitize: only accept y/Y/n/N
         yn="${yn,,}"  # lowercase
@@ -850,7 +850,7 @@ resolve_full_extras() {
     echo ""
     echo -e "${YELLOW}即将开始执行，是否继续？${NC}"
     echo -n "按回车继续，或 Ctrl+C 取消: "
-    if [[ "$INTERACTIVE" == "true" ]]; then read -r dummy; fi
+    if [[ "$INTERACTIVE" == "true" ]]; then read -r -t 30 dummy || true; fi
     echo ""
 }
 
@@ -1101,7 +1101,7 @@ main() {
         echo -e "${YELLOW}   重复运行将重新应用所有优化项，请确认是否继续？${NC}"
         if [[ "$*" != *"-y"* && "$*" != *"--yes"* ]]; then
             echo -e "   按 ${BOLD}Enter${NC} 继续，或 ${BOLD}Ctrl+C${NC} 退出..."
-            read -r </dev/tty || true
+            read -r -t 30 </dev/tty || true
         fi
     fi
 
@@ -1256,7 +1256,7 @@ fi
         # 非交互模式跳过重启询问
         if [[ "$INTERACTIVE" == "true" ]]; then
             echo -n "  是否立即重启？[y/N]: "
-            read -r yn
+            read -r -t 30 yn || yn="N"
             if [[ "$yn" =~ ^[yY]$ ]]; then
                 echo "正在重启..."
                 reboot

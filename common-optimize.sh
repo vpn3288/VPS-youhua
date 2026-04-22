@@ -763,64 +763,79 @@ configure_fstab() {
 
     [[ ! -f /etc/fstab ]] && log_warn "/etc/fstab 不存在，跳过" && return 0
 
-    local fstab_changed=false
-
     # 备份
     cp -a /etc/fstab /etc/fstab.vps-youhua-bak 2>/dev/null || true
 
-    # 遍历所有 ext4/xfs 分区，添加 noatime,nodiratime
-    # fstab格式: <device> <mount> <type> <options> <dump> <pass>
-    # 规则: 第5列(dump)保持不变，第6列(pass)改为 1(root) 或 2(其他)
-    while IFS= read -r line; do
+    # Round 10 Fix: 一次性处理整个文件，避免边读边写导致的数据损坏
+    # 使用 awk 一次性处理所有行，更安全且高效
+    local temp_fstab="/etc/fstab.vps-youhua-tmp.$$"
+    
+    # 使用 trap 确保临时文件被清理
+    trap "rm -f '$temp_fstab'" RETURN
+
+    # 使用 awk 一次性处理整个 fstab
+    awk '
         # 跳过注释和空行
-        [[ "$line" =~ ^#.*$ ]] && continue
-        [[ -z "$line" ]] && continue
+        /^#/ || /^[[:space:]]*$/ { print; next }
+        
+        # 处理 ext4/xfs/btrfs 分区
+        $3 == "ext4" || $3 == "xfs" || $3 == "btrfs" {
+            dev = $1
+            mnt = $2
+            fs_type = $3
+            opts = $4
+            dump = $5
+            pass = $6
+            
+            # 设置 fsck pass: root 为 1，其他为 2
+            if (mnt == "/") {
+                pass = 1
+            } else {
+                pass = 2
+            }
+            
+            # 添加 noatime 和 nodiratime（如果不存在）
+            if (opts !~ /noatime/) {
+                opts = opts ",noatime"
+            }
+            if (opts !~ /nodiratime/) {
+                opts = opts ",nodiratime"
+            }
+            
+            # 清理多余的逗号
+            gsub(/,,+/, ",", opts)
+            gsub(/^,|,$/, "", opts)
+            
+            # 输出修改后的行
+            printf "%s %s %s %s %s %s\n", dev, mnt, fs_type, opts, dump, pass
+            next
+        }
+        
+        # 其他行保持不变
+        { print }
+    ' /etc/fstab > "$temp_fstab"
 
-        # 解析: LABEL=/ /dev/sda1 UUID=xxx 等
-        local dev mnt fs_type opts dump pass
-        dev=$(echo "$line" | awk '{print $1}')
-        mnt=$(echo "$line" | awk '{print $2}')
-        fs_type=$(echo "$line" | awk '{print $3}')
-        opts=$(echo "$line" | awk '{print $4}')
-        dump=$(echo "$line" | awk '{print $5}')
-        pass=$(echo "$line" | awk '{print $6}')
+    # 验证 awk 是否成功
+    if [[ $? -ne 0 || ! -s "$temp_fstab" ]]; then
+        log_warn "fstab 处理失败，保持原配置"
+        rm -f "$temp_fstab"
+        return 1
+    fi
 
-        # 仅处理 ext4/xfs/btrfs
-        [[ "$fs_type" != "ext4" && "$fs_type" != "xfs" && "$fs_type" != "btrfs" ]] && continue
+    # 检查是否有变化
+    if cmp -s /etc/fstab "$temp_fstab" 2>/dev/null; then
+        log_info "fstab 无需更改（已是最优配置）"
+        rm -f "$temp_fstab"
+        return 0
+    fi
 
-        # 如果是 / (root)，pass 改为 1（开机 fsck）
-        # 其他分区 pass 改为 2
-        [[ "$mnt" == "/" ]] && pass="1" || pass="2"
-
-        # 添加 noatime,nodiratime（如果尚未存在）
-        if [[ "$opts" != *"noatime"* ]]; then
-            opts="${opts},noatime"
-        fi
-        if [[ "$opts" != *"nodiratime"* ]]; then
-            opts="${opts},nodiratime"
-        fi
-        # 去重逗号
-        opts=$(echo "$opts" | sed 's/,,/,/g; s/^,//; s/,$//')
-
-        # 重建行
-        local new_line="${dev} ${mnt} ${fs_type} ${opts} ${dump} ${pass}"
-        # 替换原行（转义设备路径中的正则元字符，避免误匹配）
-        local escaped_dev
-        # 修复: 使用 awk 代替有问题的 sed 避免字符类解析问题
-        if grep -qF "$dev " /etc/fstab 2>/dev/null; then
-            awk -v dev="$dev" -v newline="$new_line" '
-                BEGIN { found=0 }
-                $1 == dev { print newline; found=1; next }
-                { print }
-            ' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab && test -f /etc/fstab && chmod 644 /etc/fstab
-            fstab_changed=true
-        fi
-    done < /etc/fstab
-
-    if [[ "$fstab_changed" == "true" ]]; then
+    # 原子替换（使用 mv 的原子性）
+    if mv "$temp_fstab" /etc/fstab && chmod 644 /etc/fstab; then
         log_info "fstab 已更新: noatime,nodiratime 已添加，fsck pass 已配置"
     else
-        log_info "fstab 无需更改（已是最优配置）"
+        log_warn "fstab 更新失败，已恢复备份"
+        cp -a /etc/fstab.vps-youhua-bak /etc/fstab 2>/dev/null || true
+        return 1
     fi
 }
 

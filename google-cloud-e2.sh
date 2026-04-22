@@ -199,7 +199,19 @@ optimize_memory_gcp() {
 
     local mem_kb
     mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+    # Round 10 Fix: 验证 mem_kb 有效性，防止除零错误
+    if [[ -z "$mem_kb" || "$mem_kb" -le 0 ]]; then
+        log_warn "无法读取内存信息，跳过 zram"
+        return 0
+    fi
     local zram_size_bytes=$((mem_kb * 1024 / 2))
+
+    # Round 10 Fix: 等待 zram 设备就绪（竞态条件修复）
+    local retry=0
+    while [[ $retry -lt 20 ]] && [[ ! -b /dev/zram0 ]]; do
+        sleep 0.1
+        retry=$((retry + 1))
+    done
 
     local zram_dev="/dev/zram0"
     if [[ -f /sys/block/zram0/disksize ]]; then
@@ -228,6 +240,8 @@ optimize_memory_gcp() {
         mkswap "${zram_dev}" >/dev/null 2>&1 || true
         swapon "${zram_dev}" -p 32767 2>/dev/null || true
         log_info "zram 开启，约 +$((zram_size_bytes / 1024 / 1024))MB 等效内存（lz4 压缩）"
+    else
+        log_warn "zram0 设备未就绪，跳过内存扩展"
     fi
 
     log_info "内存优化完成"
