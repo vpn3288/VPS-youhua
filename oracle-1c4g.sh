@@ -369,8 +369,13 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 configure_journald() {
     log_step "配置 journald 日志..."
+    local journald_conf="/etc/systemd/journald.conf.d/99-vps-youhua.conf"
+    
+    # 备份现有配置
+    [[ -f "$journald_conf" ]] && backup_file "$journald_conf"
+    
     mkdir -p /etc/systemd/journald.conf.d
-    cat > /etc/systemd/journald.conf.d/99-vps-youhua.conf <<EOF
+    cat > "$journald_conf" <<EOF
 [Journal]
 Storage=${JOURNALD_STORAGE}
 SystemMaxUse=${JOURNALD_MAX_USE}

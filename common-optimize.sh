@@ -26,7 +26,7 @@ log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局常量（可被调用者 override）
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="3.4.2"
+readonly SCRIPT_VERSION="3.4.3"
 readonly APT_LOG="/var/log/vps-youhua.log"         # 统一日志路径（所有平台共用）
 readonly LOCK_FILE="/var/lock/vps-youhua.lock"      # 统一锁文件
 
@@ -769,7 +769,7 @@ configure_fstab() {
     [[ ! -f /etc/fstab ]] && log_warn "/etc/fstab 不存在，跳过" && return 0
 
     # 备份
-    cp -a /etc/fstab /etc/fstab.vps-youhua-bak 2>/dev/null || true
+    backup_file /etc/fstab
 
     # Round 10 Fix: 一次性处理整个文件，避免边读边写导致的数据损坏
     # 使用 awk 一次性处理所有行，更安全且高效
