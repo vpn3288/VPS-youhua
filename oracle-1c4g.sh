@@ -108,7 +108,10 @@ load_common_optimize() {
             return 0
         else
             echo -e "\033[31m[✗] 错误: common-optimize.sh SHA256 校验失败\033[0m" >&2
+            echo -e "\033[31m  期望: $sha256_expected\033[0m" >&2
+            echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
             rm -f "$dest"
+            rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
             exit 1
         fi
     fi

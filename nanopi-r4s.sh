@@ -88,6 +88,7 @@ load_common_optimize() {
             echo -e "\033[31m  期望: $sha256_expected\033[0m" >&2
             echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
             rm -f "${tmpdir}/common-optimize.sh"
+            rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
             exit 1
         fi
         source "${tmpdir}/common-optimize.sh"
