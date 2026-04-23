@@ -557,6 +557,12 @@ configure_conntrack_hashsize_r4s() {
     # 计算 hashsize（通常为 conntrack_max 的 1/4）
     local hashsize=$((conntrack_max / 4))
     
+    # Round 3 Fix H1: 最小值保护
+    if [[ $hashsize -lt 16384 ]]; then
+        log_warn "hashsize 过小（$hashsize），使用最小值 16384"
+        hashsize=16384
+    fi
+    
     # 通过 /sys/module 设置（只读参数，不能用 sysctl）
     if [[ -f /sys/module/nf_conntrack/parameters/hashsize ]]; then
         echo "$hashsize" > /sys/module/nf_conntrack/parameters/hashsize 2>/dev/null || {
@@ -590,7 +596,11 @@ configure_journald() {
     log_step "配置 journald..."
     mkdir -p /etc/systemd/journald.conf.d
 
-    # 根据 STORAGE_TYPE 设置 journald 配置
+    # Round 3 Fix H2: 添加备份
+    local journald_conf="/etc/systemd/journald.conf.d/99-vps-youhua.conf"
+    [[ -f "$journald_conf" ]] && backup_file "$journald_conf"
+
+    # 根据存储类型设置不同的 journald 策略
     local journald_storage
     local journald_max_use
     

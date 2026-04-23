@@ -129,6 +129,8 @@ optimize_memory_t6() {
     log_step "配置内存 (T6 16GB 平衡模式)..."
 
     # 禁用物理 swap（eMMC 也尽量不用）
+    # Round 3 Fix M2: 添加循环变量 local 声明
+    local sw
     for sw in /swapfile /swap.img; do
         swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
@@ -320,12 +322,27 @@ configure_conntrack_hashsize_t6() {
         # 计算 hashsize（conntrack_max / 4，上限为 CT_HASH_SIZE）
         local calc_conntrack_max
         calc_conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
-        # Round 10 Fix: 验证 calc_conntrack_max 非零
+        
+        # Round 3 Fix H1: 增强参数验证
         if [[ -z "$calc_conntrack_max" || "$calc_conntrack_max" -le 0 ]]; then
-            log_warn "conntrack_max 无效，使用默认值 262144"
+            log_warn "conntrack_max 无效（${calc_conntrack_max:-未定义}），使用默认值"
             calc_conntrack_max=262144
         fi
+        
+        # 验证是否为有效数字
+        if ! [[ "$calc_conntrack_max" =~ ^[0-9]+$ ]]; then
+            log_warn "conntrack_max 不是有效数字（${calc_conntrack_max}），使用默认值 262144"
+            calc_conntrack_max=262144
+        fi
+        
         local hashsize=$(( calc_conntrack_max / 4 ))
+        
+        # 最小值保护
+        if [[ $hashsize -lt 16384 ]]; then
+            log_warn "hashsize 过小（$hashsize），使用最小值 16384"
+            hashsize=16384
+        fi
+        
         # CT_HASH_SIZE 作为上限保护
         if [[ $hashsize -gt $CT_HASH_SIZE ]]; then
             hashsize=$CT_HASH_SIZE
@@ -366,6 +383,10 @@ EOF
 configure_journald() {
     log_step "配置 journald..."
     mkdir -p /etc/systemd/journald.conf.d
+
+    # Round 3 Fix H2: 添加备份
+    local journald_conf="/etc/systemd/journald.conf.d/99-vps-youhua.conf"
+    [[ -f "$journald_conf" ]] && backup_file "$journald_conf"
 
     cat > /etc/systemd/journald.conf.d/99-vps-youhua.conf <<EOF
 [Journal]

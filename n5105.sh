@@ -148,8 +148,10 @@ detect_storage_type() {
 # 内存优化（N5105）
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_memory_n5105() {
-    log_step "配置内存 (N5105: ${PROFILE_DESC})..."
+    log_step "配置内存优化..."
 
+    # Round 3 Fix M2: 添加循环变量 local 声明
+    local sw
     for sw in /swapfile /swap.img; do
         swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
@@ -272,11 +274,26 @@ EOF
 configure_conntrack_hashsize() {
     log_step "配置 nf_conntrack_hashsize..."
     
+    # Round 3 Fix H1: 参数验证
+    local conntrack_max=${CT_MAX:-0}
+    
+    if [[ -z "$conntrack_max" || "$conntrack_max" -le 0 ]]; then
+        log_warn "conntrack_max 无效（${conntrack_max:-未定义}），使用默认值"
+        conntrack_max=131072
+    fi
+    
+    local hashsize=$((conntrack_max / 4))
+    
+    # 最小值保护
+    if [[ $hashsize -lt 16384 ]]; then
+        log_warn "hashsize 过小（$hashsize），使用最小值 16384"
+        hashsize=16384
+    fi
+    
     modprobe nf_conntrack 2>/dev/null || true
     
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
-        local hashsize=$((CT_MAX / 4))
         echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
             log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
             mkdir -p /etc/modprobe.d
@@ -311,6 +328,10 @@ EOF
 configure_journald() {
     log_step "配置 journald..."
     mkdir -p /etc/systemd/journald.conf.d
+
+    # Round 3 Fix H2: 添加备份
+    local journald_conf="/etc/systemd/journald.conf.d/99-vps-youhua.conf"
+    [[ -f "$journald_conf" ]] && backup_file "$journald_conf"
 
     cat > /etc/systemd/journald.conf.d/99-vps-youhua.conf <<EOF
 [Journal]

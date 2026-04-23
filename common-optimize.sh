@@ -26,7 +26,7 @@ log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局常量（可被调用者 override）
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="3.4.1"
+readonly SCRIPT_VERSION="3.4.2"
 readonly APT_LOG="/var/log/vps-youhua.log"         # 统一日志路径（所有平台共用）
 readonly LOCK_FILE="/var/lock/vps-youhua.lock"      # 统一锁文件
 
@@ -718,6 +718,8 @@ configure_limits() {
     if [[ -f "$limits_conf" ]] && grep -q "vps-youhua" "$limits_conf" 2>/dev/null; then
         log_info "资源限制已配置，跳过"
     else
+        # Round 3 Fix H2: 添加备份
+        [[ -f "$limits_conf" ]] && backup_file "$limits_conf"
         cat > "$limits_conf" <<EOF
 root soft nofile ${NOFILE_VAL}
 root hard nofile ${NOFILE_VAL}
@@ -1328,6 +1330,9 @@ optimize_ssh() {
     mkdir -p /etc/ssh/sshd_config.d
 
     local dropin_file="/etc/ssh/sshd_config.d/99-vps-youhua.conf"
+    # Round 3 Fix H2: 添加备份
+    [[ -f "$dropin_file" ]] && backup_file "$dropin_file"
+    
     cat > "$dropin_file" <<'EOF'
 # VPS-youhua SSH 安全配置 — 由脚本维护，请勿手动修改
 PermitEmptyPasswords no
