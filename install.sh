@@ -232,6 +232,9 @@ wait_for_apt_lock() {
 
     # 确保 dpkg 状态正常
     dpkg --configure -a 2>/dev/null || true
+    
+    # 清理 mask 状态，恢复服务
+    cleanup_apt_mask
     return 0
 }
 
@@ -1078,7 +1081,7 @@ main() {
         return
     fi
 
-    trap 'rm -f /tmp/vps-youhua-*.sh' EXIT
+    trap 'cleanup_apt_mask; rm -f /tmp/vps-youhua-*.sh' EXIT
 
     # ── 抢占 APT 锁（防止 unattended-upgrades 阻塞脚本）────────────────────────
     if ! wait_for_apt_lock; then
