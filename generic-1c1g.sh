@@ -235,7 +235,7 @@ configure_conntrack_hashsize_1c1g() {
     modprobe nf_conntrack 2>/dev/null || true
 
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
-    local ct_max="${CT_MAX:-16384}"
+    local ct_max="$CT_MAX"
     # Round 10 Fix: hashsize 应该是 conntrack_max 的 1/4，不是直接使用 ct_max
     local hashsize=$((ct_max / 4))
     if [[ -f "$hashsize_file" ]]; then
@@ -281,7 +281,7 @@ configure_tmp_tmpfs() {
     fi
     mkdir -p /tmp
     mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null || true
-    if ! awk '$2=="/tmp" && $3=="tmpfs"' /etc/fstab > /dev/null 2>&1; then
+    if ! grep -q "^tmpfs[[:space:]]/tmp[[:space:]]tmpfs" /etc/fstab 2>/dev/null; then
         echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
     fi
     log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"
@@ -450,8 +450,9 @@ uninstall_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 软件安装桩函数（generic-1c1g 调用 install_docker / install_nodejs）
-# BUG#15+17: 编译依赖（python3-venv/cmake/pkg-config/libssl-dev）
+# 软件安装桩函数（低配平台不支持 Docker/Node.js）
+# 由于内存限制（1C1G），这些平台不安装 Docker 和 Node.js 以避免资源耗尽
+# ─────────────────────────────────────────────────────────────────────────────
 install_build_deps() {
     log_step "安装编译依赖..."
     install_if_missing build-essential cmake pkg-config libssl-dev \
@@ -461,11 +462,11 @@ install_build_deps() {
 }
 
 install_docker() {
-    log_warn "Docker 安装未对此平台实现，跳过"
+    log_warn "Docker 安装在此低配平台跳过（内存限制）"
     return 0
 }
 install_nodejs() {
-    log_warn "Node.js 安装未对此平台实现，跳过"
+    log_warn "Node.js 安装在此低配平台跳过（内存限制）"
     return 0
 }
 

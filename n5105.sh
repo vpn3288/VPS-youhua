@@ -609,8 +609,6 @@ uninstall_all() {
     # M6 FIX: 非交互卸载confirm兜底（SSH远程/cron场景）
     # 非交互卸载时跳过确认提示
     if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
-        echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
-        echo ""
         echo -n "确认卸载？(输入 'yes' 继续): "
         read -r -t 30 confirm || confirm=""
         confirm="${confirm,,}"

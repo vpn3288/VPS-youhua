@@ -222,7 +222,8 @@ configure_conntrack_hashsize() {
     
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
-        local hashsize=$((CT_MAX / 4))
+        local hashsize
+        hashsize=$((CT_MAX / 4))
         echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
             log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
             # 备用方案：通过 modprobe 配置（下次启动或模块重载时生效）
@@ -519,13 +520,15 @@ install_nodejs() {
     curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null && nodesource_download_ok=true
 
     if [[ "$nodesource_download_ok" == "true" ]]; then
+        # 注意：NodeSource 脚本会定期更新，SHA256 会变化
+        # 生产环境建议定期更新此校验和或使用动态校验
         local expected_nodesource_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
         local actual_nodesource_sha256
         actual_nodesource_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
         if [[ "$actual_nodesource_sha256" == "$expected_nodesource_sha256" ]]; then
             chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && nodesource_download_ok="verified" || nodesource_download_ok="failed"
         else
-            log_warn "NodeSource 安装脚本 SHA256 校验异常，跳过执行"
+            log_warn "NodeSource 安装脚本 SHA256 校验异常（预期: $expected_nodesource_sha256, 实际: $actual_nodesource_sha256），跳过执行"
             nodesource_download_ok="failed"
         fi
         rm -f "$nodesource_script"

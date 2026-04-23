@@ -448,7 +448,7 @@ install_docker() {
 
     # [H12] FIX: 在写入目标位置之前验证指纹，防止 TOCTOU 攻击
     local key_fingerprint; key_fingerprint=$(gpg --show-keys --with-colons "$gpg_dearmored" 2>/dev/null | awk -F: '/^fpr:/ {print $10; exit}')
-    local expected_fingerprint="0EBFCD88"
+    local expected_fingerprint="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
     if [[ -z "$key_fingerprint" ]]; then
         log_error "无法读取 GPG 密钥指纹"
         return 1
@@ -770,7 +770,8 @@ main() {
     init_script
     check_idempotent
     detect_memory_profile
-    # BUG#6 FIX: optimize_memory_generic 需要 detect_memory_profile 先运行（决定是否需要 swap），configure_swap 后判断
+    # 函数调用顺序说明：optimize_memory_generic 依赖 detect_memory_profile 的结果来决定内存优化策略
+    # configure_swap 在 optimize_memory_generic 之后执行，确保 swap 配置基于已优化的内存参数
     optimize_memory_generic
     configure_swap
     # BUG#5: IPv6 黑洞检测

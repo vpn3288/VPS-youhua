@@ -80,6 +80,7 @@ load_common_optimize() {
     # 下载到临时目录（SHA256 完整性验证）
     local tmpdir="/tmp/vps-youhua"
     local sha256_expected="79158823c9b3f891fc81b5d1f0b269ed8fe701fb35dfd56cfac4e2e8c163f27e"
+    mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         # SHA256 校验供应链安全
@@ -633,8 +634,9 @@ uninstall_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 软件安装桩函数（google-cloud-e2 调用 install_docker / install_nodejs）
-# BUG#15+17: 编译依赖（python3-venv/cmake/pkg-config/libssl-dev）
+# 软件安装桩函数（低配平台不支持 Docker/Node.js）
+# 由于内存限制（e2-micro 0.5C1G），这些平台不安装 Docker 和 Node.js 以避免资源耗尽
+# ─────────────────────────────────────────────────────────────────────────────
 install_build_deps() {
     log_step "安装编译依赖..."
     log_info "正在安装编译依赖..."
@@ -645,11 +647,11 @@ install_build_deps() {
 }
 
 install_docker() {
-    log_warn "Docker 安装未对此平台实现，跳过"
+    log_warn "Docker 安装在此低配平台跳过（内存限制）"
     return 0
 }
 install_nodejs() {
-    log_warn "Node.js 安装未对此平台实现，跳过"
+    log_warn "Node.js 安装在此低配平台跳过（内存限制）"
     return 0
 }
 

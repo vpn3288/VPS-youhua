@@ -212,7 +212,7 @@ detect_storage_type() {
 # ─────────────────────────────────────────────────────────────────────────────
 
 configure_tf_card_protection() {
-    [[ "$SYS_IS_TF_CARD" != "true" ]] && return 0
+    [[ "$STORAGE_TYPE" != "tf_card" ]] && return 0
     log_step "配置 TF 卡写入保护..."
 
     # ext4 挂载参数（减少随机写入）
@@ -273,17 +273,22 @@ configure_tf_card_protection() {
     fi
 
     # ── TF 卡每周 fstrim 定时任务 ─────────────────────────────────────────────
-    if [[ "$SYS_IS_TF_CARD" == "true" ]]; then
+    # 根据 STORAGE_TYPE 配置 fstrim
+    if [[ "$STORAGE_TYPE" == "tf_card" || "$STORAGE_TYPE" == "usb_ssd" || "$STORAGE_TYPE" == "emmc" ]]; then
         mkdir -p /etc/cron.weekly
-        cat > /etc/cron.weekly/fstrim-tf <<'EOF'
+        cat > /etc/cron.weekly/fstrim-storage <<'EOF'
 #!/bin/sh
-# NanoPi R4S TF 卡每周 fstrim（延长卡寿命）
+# 每周 fstrim（延长存储寿命）
 for d in / /var; do
     fstrim -v "$d" 2>/dev/null || true
 done
 EOF
-        chmod +x /etc/cron.weekly/fstrim-tf
-        log_info "已创建 TF 卡每周 fstrim 定时任务"
+        chmod +x /etc/cron.weekly/fstrim-storage
+        log_info "已创建 ${STORAGE_TYPE} 每周 fstrim 定时任务"
+    elif [[ "$STORAGE_TYPE" == "usb_hdd" ]]; then
+        # HDD 不需要 fstrim，删除可能存在的 fstrim 任务
+        rm -f /etc/cron.weekly/fstrim-storage /etc/cron.weekly/fstrim-tf 2>/dev/null || true
+        log_info "HDD 存储，已禁用 fstrim"
     fi
 }
 
@@ -359,7 +364,7 @@ optimize_memory_r4s() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# R4S sysctl（TF 卡保护 + 网络优化）
+# R4S sysctl（存储类型感知 + 网络优化）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_sysctl_r4s() {
     local conntrack_max=$(( ${SYS_MEM_MB:-0} * 32 ))
@@ -370,14 +375,54 @@ configure_sysctl_r4s() {
     # 共享通用加固参数
     write_common_sysctl "$SYSCTL_FILE"
 
+    # 根据 STORAGE_TYPE 设置不同的 dirty 参数
+    local dirty_ratio dirty_bg_ratio dirty_writeback dirty_expire
+    case "$STORAGE_TYPE" in
+        tf_card)
+            # TF 卡：最激进的写入保护
+            dirty_ratio=8
+            dirty_bg_ratio=3
+            dirty_writeback=6000
+            dirty_expire=30000
+            ;;
+        usb_hdd)
+            # USB HDD：平衡性能和保护
+            dirty_ratio=20
+            dirty_bg_ratio=10
+            dirty_writeback=3000
+            dirty_expire=30000
+            ;;
+        usb_ssd)
+            # USB SSD：适度保护
+            dirty_ratio=15
+            dirty_bg_ratio=5
+            dirty_writeback=1500
+            dirty_expire=30000
+            ;;
+        emmc)
+            # eMMC：类似 T6 的设置
+            dirty_ratio=20
+            dirty_bg_ratio=10
+            dirty_writeback=6000
+            dirty_expire=30000
+            ;;
+        *)
+            # unknown：使用保守的 TF 卡设置
+            dirty_ratio=8
+            dirty_bg_ratio=3
+            dirty_writeback=6000
+            dirty_expire=30000
+            ;;
+    esac
+
     # R4S 专属（追加）
     cat >> "$SYSCTL_FILE" <<EOF
 
-# ── R4S TF 卡保护 ───────────────────────────────────────────────────────────
-vm.dirty_ratio = 8
-vm.dirty_background_ratio = 3
-vm.dirty_writeback_centisecs = 6000
-vm.dirty_expire_centisecs = 30000
+# ── R4S 存储保护 (${STORAGE_TYPE}) ──────────────────────────────────────────
+vm.dirty_ratio = ${dirty_ratio}
+vm.dirty_background_ratio = ${dirty_bg_ratio}
+vm.dirty_writeback_centisecs = ${dirty_writeback}
+vm.dirty_expire_centisecs = ${dirty_expire}
 vm.swappiness = 10
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = 50
@@ -419,14 +464,24 @@ EOF
 optimize_arm() {
     log_step "ARM 专项优化..."
 
-    # CPU governor（Armbian 默认 schedutil，R4S 4核，设 performance 也可以）
+    # CPU governor 根据存储类型设置
+    local cpu_governor
+    if [[ "$STORAGE_TYPE" == "usb_hdd" || "$STORAGE_TYPE" == "usb_ssd" ]]; then
+        # USB 存储：使用 performance 以减少延迟
+        cpu_governor="performance"
+    else
+        # TF 卡、eMMC、unknown：使用 schedutil（Armbian 默认，节能）
+        cpu_governor="schedutil"
+    fi
+    
     mkdir -p /etc/default
-    cat > /etc/default/cpufrequtils <<'EOF'
-GOVERNOR=schedutil
+    cat > /etc/default/cpufrequtils <<EOF
+GOVERNOR=${cpu_governor}
 MIN_SPEED=408000
 MAX_SPEED=2016000
 EOF
     systemctl restart cpufrequtils 2>/dev/null || true
+    log_info "CPU governor: ${cpu_governor}"
 
     # irqbalance（多核 ARM 提升中断均衡）
     if ! command -v irqbalance &>/dev/null; then
@@ -515,18 +570,41 @@ configure_journald() {
     log_step "配置 journald..."
     mkdir -p /etc/systemd/journald.conf.d
 
+    # 根据 STORAGE_TYPE 设置 journald 配置
+    local journald_storage
+    local journald_max_use
+    
+    # 根据存储类型设置不同的 journald 策略
+    if [[ "$STORAGE_TYPE" == "tf_card" || "$STORAGE_TYPE" == "usb_ssd" ]]; then
+        # TF 卡和 USB SSD：volatile 模式（内存日志，减少写入）
+        journald_storage="volatile"
+        journald_max_use="50M"
+    elif [[ "$STORAGE_TYPE" == "usb_hdd" ]]; then
+        # USB HDD：persistent 但限制大小
+        journald_storage="persistent"
+        journald_max_use="100M"
+    elif [[ "$STORAGE_TYPE" == "emmc" ]]; then
+        # eMMC：persistent 模式，适度限制
+        journald_storage="persistent"
+        journald_max_use="100M"
+    else
+        # unknown：使用保守的 volatile 模式
+        journald_storage="volatile"
+        journald_max_use="50M"
+    fi
+
     cat > /etc/systemd/journald.conf.d/99-vps-youhua.conf <<EOF
 [Journal]
-SystemMaxUse=${JOURNALD_MAX_USE}
+SystemMaxUse=${journald_max_use}
 SystemMaxFileSize=50M
 MaxRetentionSec=7day
 Compress=yes
-Storage=${JOURNALD_STORAGE}
+Storage=${journald_storage}
 RuntimeMaxUse=50M
 Seal=yes
 EOF
     systemctl restart systemd-journald 2>/dev/null || true
-    log_info "journald 配置完成（Storage=${JOURNALD_STORAGE}）"
+    log_info "journald 配置完成（Storage=${journald_storage}）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -539,21 +617,27 @@ optimize_io_scheduler() {
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    if [[ "$root_dev" == mmcblk* ]]; then
+    # 根据 STORAGE_TYPE 设置 I/O scheduler
+    if [[ "$STORAGE_TYPE" == "tf_card" ]]; then
         # TF 卡：none（noop 简化调度，减少卡顿）
-        # BUG 修复: TF 卡使用 mq-deadline/cfq 等调度器会引发高并发卡顿
         local sched_file="/sys/block/${root_dev}/queue/scheduler"
         if [[ -f "$sched_file" ]]; then
             echo "none" > "$sched_file" 2>/dev/null || true
             log_info "TF 卡 $root_dev I/O Scheduler → none"
         fi
-    elif [[ -f "/sys/block/${root_dev}/queue/rotational" ]] && \
-         [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]]; then
+    elif [[ "$STORAGE_TYPE" == "usb_ssd" || "$STORAGE_TYPE" == "emmc" ]]; then
         # SSD / eMMC：none
         local sched_file="/sys/block/${root_dev}/queue/scheduler"
         if [[ -f "$sched_file" ]]; then
             echo "none" > "$sched_file" 2>/dev/null || true
-            log_info "SSD $root_dev I/O Scheduler → none"
+            log_info "SSD/eMMC $root_dev I/O Scheduler → none"
+        fi
+    elif [[ "$STORAGE_TYPE" == "usb_hdd" ]]; then
+        # HDD：mq-deadline
+        local sched_file="/sys/block/${root_dev}/queue/scheduler"
+        if [[ -f "$sched_file" ]]; then
+            echo "mq-deadline" > "$sched_file" 2>/dev/null || true
+            log_info "HDD $root_dev I/O Scheduler → mq-deadline"
         fi
     fi
 }
@@ -687,7 +771,7 @@ install_nodejs() {
     # 避免 npm 百万级小文件写坏 TF 卡
     # M1 FIX: 固定1G是经验值（足够node_modules编译），过低会导致/tmp溢出，过高会挤压系统内存
     local tmpfs_mounted=false
-    if [[ "$SYS_IS_TF_CARD" == "true" ]] && ! mount | grep -q "tmpfs on /tmp"; then
+    if [[ "$STORAGE_TYPE" == "tf_card" ]] && ! mount | grep -q "tmpfs on /tmp"; then
         mount -t tmpfs -o size=1G tmpfs /tmp && tmpfs_mounted=true
         log_info "已挂载 tmpfs 1G 到 /tmp（TF 卡保护）"
     fi
@@ -765,8 +849,8 @@ run_doctor() {
     echo "   CPU: $SYS_CPU_CORES 核"
     echo "   内存: ${SYS_MEM_MB}MB"
     echo ""
-    echo "2. TF卡保护:"
-    echo "   TF卡存储: $([ "$SYS_IS_TF_CARD" == "true" ] && echo 是 || echo 否)"
+    echo "2. 存储保护:"
+    echo "   存储类型: ${STORAGE_TYPE}"
     echo "   journald: $(grep SystemMaxUse /etc/systemd/journald.conf.d/99-vps-youhua.conf 2>/dev/null | cut -d= -f2)"
     echo "   swap状态: $(swapon --show 2>/dev/null | grep -v Filename | wc -l) 个"
     echo ""
@@ -1059,9 +1143,14 @@ main() {
     configure_tf_card_protection
     optimize_memory_r4s
     # R4S TF 卡保护：跳过 configure_swap（swapfile 会缩短 TF 卡寿命）
-    log_info "R4S: skip configure_swap (TF card protection — zram active)"
+    # 只有在 TF 卡、USB SSD 或 USB HDD 时才跳过 swap
+    if [[ "$STORAGE_TYPE" == "tf_card" || "$STORAGE_TYPE" == "usb_ssd" || "$STORAGE_TYPE" == "usb_hdd" ]]; then
+        log_info "R4S: skip configure_swap (${STORAGE_TYPE} protection — zram active)"
+    else
+        configure_swap
+    fi
     # M2 FIX: conntrack hashsize 必须在 sysctl 之前设置，避免运行时冲突
-    configure_conntrack_hashsize_r4s "$((${SYS_MEM_MB:-0} * 32))"
+    configure_conntrack_hashsize_r4s "$(( SYS_MEM_MB * 32 ))"
     configure_sysctl_r4s
     configure_limits
     configure_fstab

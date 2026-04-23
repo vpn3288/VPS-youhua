@@ -613,15 +613,15 @@ uninstall_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 软件安装桩函数（oracle-1c4g 调用 install_docker / install_nodejs）
-# 这些函数在 source common-optimize.sh 时若未定义，则在此提供空实现
+# 软件安装桩函数（低配平台不支持 Docker/Node.js）
+# 由于内存限制（1C4G），这些平台不安装 Docker 和 Node.js 以避免资源耗尽
 # ─────────────────────────────────────────────────────────────────────────────
 install_docker() {
-    log_warn "Docker 安装未对此平台实现，跳过"
+    log_warn "Docker 安装在此低配平台跳过（内存限制）"
     return 0
 }
 install_nodejs() {
-    log_warn "Node.js 安装未对此平台实现，跳过"
+    log_warn "Node.js 安装在此低配平台跳过（内存限制）"
     return 0
 }
 

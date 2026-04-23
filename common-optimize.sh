@@ -818,9 +818,16 @@ configure_fstab() {
         { print }
     ' /etc/fstab > "$temp_fstab"
 
-    # 验证 awk 是否成功
-    if [[ $? -ne 0 || ! -s "$temp_fstab" ]]; then
-        log_warn "fstab 处理失败，保持原配置"
+    # 验证 awk 是否成功 - 检查临时文件是否有有效内容
+    if [[ ! -s "$temp_fstab" ]]; then
+        log_warn "fstab 处理失败（临时文件为空），保持原配置"
+        rm -f "$temp_fstab"
+        return 1
+    fi
+    
+    # 验证临时文件至少有一个非注释行
+    if ! grep -qE '^[^#[:space:]]' "$temp_fstab" 2>/dev/null; then
+        log_warn "fstab 处理失败（无有效条目），保持原配置"
         rm -f "$temp_fstab"
         return 1
     fi
@@ -977,6 +984,12 @@ configure_conntrack_hashsize() {
 configure_swap() {
     log_step "配置 Swap（低内存防护）..."
 
+    # 检查平台是否禁止 swap（基于 STORAGE_TYPE）
+    if [[ "$STORAGE_TYPE" == "tf_card" || "$STORAGE_TYPE" == "usb_ssd" || "$STORAGE_TYPE" == "usb_hdd" ]]; then
+        log_info "存储类型 ${STORAGE_TYPE} 禁止创建 swap，跳过"
+        return 0
+    fi
+
     # 幂等性检查：如果已有活跃 swap，跳过（不论来源）
     local swap_active
     swap_active=$(swapon --show 2>/dev/null | tail -n +2 | wc -l)
@@ -1085,9 +1098,9 @@ write_common_sysctl() {
             mkdir -p /etc/modules-load.d
             if ! grep -q "^tcp_bbr$" /etc/modules-load.d/bbr.conf 2>/dev/null; then
                 echo "tcp_bbr" > /etc/modules-load.d/bbr.conf
-                log_info "TCP 拥塞控制: bbr（BBRv3 已激活并持久化）"
+                log_info "TCP 拥塞控制: bbr（BBRv2 已激活并持久化）"
             else
-                log_info "TCP 拥塞控制: bbr（BBRv3 已激活）"
+                log_info "TCP 拥塞控制: bbr（BBRv2 已激活）"
             fi
         else
             modprobe -q tcp_bbr 2>/dev/null || true
@@ -1186,12 +1199,12 @@ configure_tmp_tmpfs() {
     local tmpfs_size="${TMPFS_SIZE:-512M}"
 
     # P1-1 FIX: Validate existing tmpfs size before skipping
-    if grep -qE "^tmpfs\s+/tmp\s+" /etc/fstab 2>/dev/null; then
+    if grep -qE "^tmpfs[[:space:]]+/tmp[[:space:]]+" /etc/fstab 2>/dev/null; then
         local existing_size
-        existing_size=$(grep -E "^tmpfs\s+/tmp\s+" /etc/fstab | grep -oP 'size=\K[^,\s]+' || echo "")
+        existing_size=$(grep -E "^tmpfs[[:space:]]+/tmp[[:space:]]+" /etc/fstab | grep -oP 'size=\K[^,\s]+' || echo "")
         if [[ -n "$existing_size" && "$existing_size" != "$tmpfs_size" ]]; then
             log_warn "/tmp tmpfs 已存在但大小不匹配（当前: ${existing_size}, 期望: ${tmpfs_size}），更新配置"
-            sed -i "s|^tmpfs\s\+/tmp\s\+tmpfs.*|tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=${tmpfs_size} 0 0|" /etc/fstab
+            sed -i "s|^tmpfs[[:space:]]\+/tmp[[:space:]]\+tmpfs.*|tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=${tmpfs_size} 0 0|" /etc/fstab
             mount -o remount /tmp 2>/dev/null || log_warn "/tmp tmpfs 重新挂载失败"
         else
             log_info "/tmp 已配置 tmpfs（跳过）"

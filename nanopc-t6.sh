@@ -109,6 +109,8 @@ load_common_optimize
 # T6 eMMC 存储检测
 # ─────────────────────────────────────────────────────────────────────────────
 detect_storage_type() {
+    # T6 专用 eMMC，始终返回 emmc
+    STORAGE_TYPE="emmc"
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
@@ -540,13 +542,15 @@ install_nodejs() {
 
     if [[ "$nodesource_download_ok" == "true" ]]; then
         # SHA256 完整性校验（防止供应链污染）
+        # 注意：NodeSource 脚本会定期更新，SHA256 会变化
+        # 生产环境建议定期更新此校验和或使用动态校验
         local expected_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
         local actual_sha256
         actual_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
         if [[ "$actual_sha256" == "$expected_sha256" ]]; then
             chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && log_info "Node.js 安装完成" || nodesource_download_ok="failed"
         else
-            log_warn "NodeSource SHA256 校验异常，跳过执行"
+            log_warn "NodeSource SHA256 校验异常（预期: $expected_sha256, 实际: $actual_sha256），跳过执行"
             nodesource_download_ok="failed"
         fi
         rm -f "$nodesource_script"

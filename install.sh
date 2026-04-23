@@ -1117,12 +1117,13 @@ main() {
 # 自动设置默认选项，防止 read 永久挂起
 # BUG#12 FIX: Sanitize positional parameter $1 before use
 # Only allow known-safe values: empty, -y, or --yes
+_sanitized_arg1=""
 case "${1:-}" in
-    ''|-y|--yes) _sanitized_arg1="${1:-}" ;;
-    *)  log_error "不支持的参数: $1"; echo "用法: $0 [--platform=xxx] [--mode=optimize|status|uninstall] [-y|--yes]"; exit 1 ;;
+    ''|-y|--yes) _sanitized_arg1="${1:-}" ;;\
+    *)  log_error "不支持的参数: $1"; echo "用法: $0 [--platform=xxx] [--mode=optimize|status|uninstall] [-y|--yes]"; exit 1 ;;\
 esac
 
-if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${_sanitized_arg1:-}" == "-y" ]]; then
+if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${_sanitized_arg1}" == "-y" ]]; then
     export INTERACTIVE=false
     log_info "非交互模式（NONINTERACTIVE=1 / -y）: 使用默认选项"
 fi

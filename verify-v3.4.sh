@@ -778,10 +778,81 @@ check_vs_targets() {
     echo ""
     if [[ "$platform" == "nanopi-r4s" ]]; then
         echo -e "  ${BOLD}[nanopi-r4s 专用]${RESET}"
+        
+        # 检测存储类型以验证正确的参数
+        local storage_type="unknown"
+        local root_dev root_base
+        root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
+        if [[ -n "$root_dev" ]]; then
+            root_base=$(basename "$root_dev" 2>/dev/null)
+            if [[ "$root_base" =~ ^sd[a-z][0-9]+$ ]]; then
+                root_base="${root_base%[0-9]*}"
+            elif [[ "$root_base" =~ ^mmcblk[0-9]+p[0-9]+$ ]]; then
+                root_base="${root_base%p[0-9]*}"
+            fi
+            
+            if [[ "$root_base" =~ ^sd[a-z]$ ]]; then
+                local device_path="/sys/block/${root_base}/device"
+                if [[ -L "$device_path" ]]; then
+                    local real_path
+                    real_path=$(readlink -f "$device_path" 2>/dev/null || echo "")
+                    if [[ "$real_path" == *"/usb"* ]]; then
+                        local rotational
+                        rotational=$(cat "/sys/block/${root_base}/queue/rotational" 2>/dev/null || echo "1")
+                        if [[ "$rotational" == "1" ]]; then
+                            storage_type="usb_hdd"
+                        else
+                            storage_type="usb_ssd"
+                        fi
+                    fi
+                fi
+            elif [[ "$root_base" =~ ^mmcblk[0-9]+$ ]]; then
+                local has_emmc=false
+                for dev_type in /sys/class/block/mmcblk*/device/type; do
+                    [[ -f "$dev_type" ]] || continue
+                    local type_val
+                    type_val=$(cat "$dev_type" 2>/dev/null || echo "")
+                    if [[ "$type_val" == "MMC" ]]; then
+                        has_emmc=true
+                        break
+                    fi
+                done
+                if [[ "$has_emmc" == "true" ]]; then
+                    storage_type="emmc"
+                else
+                    storage_type="tf_card"
+                fi
+            fi
+        fi
+        
+        echo -e "  ${CYAN}存储类型: ${storage_type}${RESET}"
+        
         check_eq "net.core.netdev_max_backlog"                                 "65535" "网卡队列"
-        check_eq "vm.dirty_ratio"                                               "8"     "dirty比例(TF卡)"
-        check_eq "vm.dirty_background_ratio"                                    "3"     "dirty后台比例"
-        check_eq "vm.dirty_expire_centisecs"                                   "30000" "dirty过期时间(TF卡)"
+        
+        # 根据存储类型验证不同的 dirty 参数
+        if [[ "$storage_type" == "tf_card" ]]; then
+            check_eq "vm.dirty_ratio"                                               "8"     "dirty比例(TF卡)"
+            check_eq "vm.dirty_background_ratio"                                    "3"     "dirty后台比例"
+            check_eq "vm.dirty_writeback_centisecs"                                "6000"  "dirty_writeback(TF卡)"
+            check_eq "vm.dirty_expire_centisecs"                                   "30000" "dirty过期时间(TF卡)"
+        elif [[ "$storage_type" == "usb_hdd" ]]; then
+            check_eq "vm.dirty_ratio"                                               "20"    "dirty比例(HDD)"
+            check_eq "vm.dirty_background_ratio"                                    "10"    "dirty后台比例"
+            check_eq "vm.dirty_writeback_centisecs"                                "3000"  "dirty_writeback(HDD)"
+        elif [[ "$storage_type" == "usb_ssd" ]]; then
+            check_eq "vm.dirty_ratio"                                               "15"    "dirty比例(SSD)"
+            check_eq "vm.dirty_background_ratio"                                    "5"     "dirty后台比例"
+            check_eq "vm.dirty_writeback_centisecs"                                "1500"  "dirty_writeback(SSD)"
+        elif [[ "$storage_type" == "emmc" ]]; then
+            check_eq "vm.dirty_ratio"                                               "20"    "dirty比例(eMMC)"
+            check_eq "vm.dirty_background_ratio"                                    "10"    "dirty后台比例"
+            check_eq "vm.dirty_writeback_centisecs"                                "6000"  "dirty_writeback(eMMC)"
+        else
+            # unknown - 使用 TF 卡保守值
+            check_eq "vm.dirty_ratio"                                               "8"     "dirty比例(unknown)"
+            check_eq "vm.dirty_background_ratio"                                    "3"     "dirty后台比例"
+        fi
+        
         check_eq "vm.min_free_kbytes"                                          "65536" "min_free_kbytes(防OOM)"
         check_eq "net.netfilter.nf_conntrack_tcp_timeout_established"         "900"   "ESTABLISHED超时(收紧)"
     elif [[ "$platform" == "oracle-arm" ]]; then
