@@ -727,7 +727,10 @@ main() {
     check_network
     preflight_check
     # BUG#6 FIX: 必须先检测内存profile，才能正确配置zram/swap
-    _detect_n5105_memory_profile
+    _detect_n5105_memory_profile || {
+        log_error "内存profile检测失败，无法继续"
+        exit 1
+    }
     optimize_memory_n5105
     # BUG#5 FIX: configure_swap 幂等调用（防止 common-optimize.sh 未加载时崩溃）
     if declare -f configure_swap > /dev/null 2>&1; then
