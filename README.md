@@ -85,8 +85,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/goog
 ### 第二步：验证优化效果
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.1.sh -o /tmp/verify-v3.1.sh
-bash /tmp/verify-v3.1.sh
+curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.4.sh -o /tmp/verify-v3.4.sh
+bash /tmp/verify-v3.4.sh
 ```
 
 ### 第三步：安装 AIagent
@@ -316,15 +316,15 @@ GCP免费套餐，共享vCPU 1核1GB，针对资源共享优化：
 
 ---
 
-## 验证脚本（verify-v3.1.sh）
+## 验证脚本（verify-v3.4.sh）
 
 下载并运行验证脚本，检查所有优化参数是否生效：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.1.sh -o /tmp/verify-v3.1.sh
-bash /tmp/verify-v3.1.sh                    # 本机验证
-sudo bash /tmp/verify-v3.1.sh               # 带root权限验证（完整检查）
-bash /tmp/verify-v3.1.sh --remote root@IP  # 远程SSH验证
+curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.4.sh -o /tmp/verify-v3.4.sh
+bash /tmp/verify-v3.4.sh                    # 本机验证
+sudo bash /tmp/verify-v3.4.sh               # 带root权限验证（完整检查）
+bash /tmp/verify-v3.4.sh --remote root@IP  # 远程SSH验证
 ```
 
 验证范围（14个维度）：
@@ -431,11 +431,11 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 
 ### v3.2 R61
 - 新增：11个平台脚本完整支持（新增 oracle-1c4g、generic-1c1g、google-cloud-e2）
-- 新增：`--status` 参数直接调用 verify-v3.1.sh 健康检查（install.sh），并更新帮助文档
+- 新增：`--status` 参数直接调用 verify-v3.4.sh 健康检查（install.sh），并更新帮助文档
 - 新增：R4S `install_nodejs()` 编译前临时挂载 1G tmpfs 到 /tmp（TF 卡保护），编译完自动卸载
 - 新增：fail2ban 选项 B 增加新手警告"请确保已配置 SSH 密钥登录，否则可能锁死"
 - 新增：Oracle Cloud ARM 增加 `check_oracle_metadata()` 元数据健康检查（非 Oracle 环境自动跳过）
-- 修复：verify-v3.1.sh 删除残留 `99-openclaw.conf`（替换为 `99-vps-youhua-*.conf`）
+- 修复：verify-v3.4.sh 删除残留 `99-openclaw.conf`（替换为 `99-vps-youhua-*.conf`）
 - 修复：Oracle ARM TCP 缓冲从固定 32MB 改为动态自适应（内存 5%，上限 64MB，下限 16MB）
 - 新增：所有平台添加 `vm.oom_kill_allocating_task=1`（sysctl 配置 + 运行时立即生效）
 - 新增：幂等性检测，重复运行时提示"系统已完成过优化"（检测 /etc/vps-youhua-optimized 标记文件，-y 参数跳过确认）
@@ -460,7 +460,7 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 - 统一 tcp_early_retrans=3、tcp_orphan_retries=1
 - n5105 补全 vm.zone_reclaim_mode=0 NUMA优化
 - generic-x86 补全 conntrack close_wait/fin_wait
-- 新增 verify-v3.1.sh 完整验证脚本
+- 新增 verify-v3.4.sh 完整验证脚本
 - oracle-arm TCP缓冲从 64MB 调整为 32MB（更合理）
 - nanopi-r4s 移除不可靠的外部 log2ram 源，改为 journald volatile 替代
 
