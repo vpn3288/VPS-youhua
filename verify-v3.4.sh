@@ -25,6 +25,19 @@ readonly SEP="══════════════════════
 #------------------------------------------------# -------------------------------
 # 检测平台
 #------------------------------------------------# -------------------------------
+# Round 10 Fix: 提取 Oracle Cloud 检测为独立函数，避免重复逻辑
+is_oracle_cloud() {
+    # 方法1: 元数据端点检测
+    if curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+        return 0
+    fi
+    # 方法2: 标记文件或 hostname 检测
+    if [[ -f /etc/oracle-auto-detect ]] || hostnamectl 2>/dev/null | grep -qi "oracle"; then
+        return 0
+    fi
+    return 1
+}
+
 detect_platform() {
     local cpu_info
     cpu_info=$(cat /proc/cpuinfo 2>/dev/null | grep -m1 "model name" | cut -d: -f2 | tr -d '\0' | xargs)
@@ -44,8 +57,7 @@ detect_platform() {
         echo "nanopc-t6"
     elif [[ "$cpu_info" == *"Ampere"* ]]; then
         # Oracle Cloud 检测（通过元数据端点）
-        # BUG FIX: curl -o /dev/null 成功时无输出，需加 -w "%{http_code}" 才能抓到 HTTP 状态码
-        if curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+        if is_oracle_cloud; then
             # Oracle 1C4G vs 2C16G：通过内存判断
             local mem_kb
             mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
@@ -60,7 +72,8 @@ detect_platform() {
         fi
     elif grep -qi "n5105\|n5095\|jasper lake" /proc/cpuinfo 2>/dev/null; then
         echo "n5105"
-    elif [[ -f /etc/oracle-auto-detect ]] || hostnamectl 2>/dev/null | grep -qi "oracle"; then
+    elif is_oracle_cloud; then
+        # Round 10 Fix: 使用统一的 is_oracle_cloud() 函数
         local mem_kb
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
         local mem_mb=$((mem_kb / 1024))
@@ -77,8 +90,8 @@ detect_platform() {
 }
 
 detect_cloud() {
-    # BUG#7 FIX: Oracle Cloud 使用 169.254.169.254（不是 169.254.0.23，那是错误的IP）
-    if curl -s --connect-timeout 2 -o /dev/null -w "%{http_code}" http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+    # Round 10 Fix: 使用统一的 is_oracle_cloud() 函数
+    if is_oracle_cloud; then
         echo "oracle-cloud"
     elif [[ -d /sys/block/vda/device ]] || lsblk -d -n -o NAME 2>/dev/null | grep -q "^vda"; then
         echo "cloud-virtio"
