@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.4
+# NanoPi R4S 专用优化安装脚本 v3.4.1
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -117,7 +117,7 @@ cleanup_legacy_tmpfs() {
 
     if mount | grep -q "tmpfs on /tmp"; then
         log_warn "检测到残留 tmpfs /tmp 挂载，检查进程占用..."
-        # Round 10 Fix: 检查 lsof 是否安装
+        # HIGH FIX: 检查 lsof 是否安装
         if command -v lsof >/dev/null 2>&1; then
             # 检查是否有进程正在使用 /tmp
             if lsof /tmp 2>/dev/null | grep -q /tmp; then
@@ -217,6 +217,8 @@ configure_tf_card_protection() {
 
     # ext4 挂载参数（减少随机写入）
     # 使用 awk 精确匹配 root 挂载点，避免 sed 正则误匹配
+    # HIGH FIX: 添加 fstab 备份
+    backup_file /etc/fstab
     if grep -q "^UUID=.*[[:space:]]/[[:space:]]" /etc/fstab 2>/dev/null; then
         awk '
         /^[^#]/ && ($2 == "/") && ($3 == "ext4") {
@@ -303,8 +305,9 @@ optimize_memory_r4s() {
         swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
-    sed -i '/swapfile/d' /etc/fstab 2>/dev/null || true
-    sed -i '/swap.img/d' /etc/fstab 2>/dev/null || true
+    # HIGH FIX: 使用精确锚点匹配 fstab swap 条目
+    sed -i '\|^[^#]*[[:space:]]/swapfile[[:space:]]|d' /etc/fstab 2>/dev/null || true
+    sed -i '\|^[^#]*[[:space:]]/swap.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
 
     # ── zram 内存扩展（R4S 4GB TF，50% mem = ~1.9GB 等效）────────────
     if ! modprobe zram 2>/dev/null; then
@@ -356,9 +359,8 @@ optimize_memory_r4s() {
         log_info "Armbian zram-config 保持原状"
     fi
 
-    # swappiness 保守（4G 内存，避免 OOM）
-    sysctl -w vm.swappiness=10 2>/dev/null || true
-    sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
+    # CRITICAL FIX: 删除重复的 sysctl 设置（已在 configure_sysctl_r4s 中配置）
+    # swappiness 和 oom_kill_allocating_task 由 sysctl 文件统一管理
 
     log_info "内存优化完成（物理 swap 已禁用，zram 保留）"
 }
@@ -528,10 +530,28 @@ configure_conntrack_hashsize_r4s() {
     # 加载 nf_conntrack 模块
     modprobe nf_conntrack 2>/dev/null || true
 
-    # Round 10 Fix: 验证 conntrack_max 非零，防止除零错误
-    if [[ -z "$conntrack_max" || "$conntrack_max" -le 0 ]]; then
-        log_warn "conntrack_max 无效（${conntrack_max:-未定义}），跳过 hashsize 配置"
+    # HIGH FIX: 验证 conntrack_max 参数有效性
+    if [[ -z "$conntrack_max" ]]; then
+        log_warn "conntrack_max 参数未提供，跳过 hashsize 配置"
         return 0
+    fi
+    
+    # 验证是否为有效数字
+    if ! [[ "$conntrack_max" =~ ^[0-9]+$ ]]; then
+        log_warn "conntrack_max 不是有效数字（${conntrack_max}），跳过 hashsize 配置"
+        return 0
+    fi
+    
+    # 验证非零且大于最小值
+    if [[ "$conntrack_max" -le 0 ]]; then
+        log_warn "conntrack_max 无效（${conntrack_max} <= 0），跳过 hashsize 配置"
+        return 0
+    fi
+    
+    # 设置最小值保护（至少 4096）
+    if [[ "$conntrack_max" -lt 4096 ]]; then
+        log_warn "conntrack_max 过小（${conntrack_max} < 4096），使用最小值 4096"
+        conntrack_max=4096
     fi
 
     # 计算 hashsize（通常为 conntrack_max 的 1/4）
@@ -1114,17 +1134,22 @@ main() {
 
     init_script
     detect_system
-    # BUG#5: IPv6 黑洞检测
-    configure_ipv6_health
-    # BUG#7: DNS 锁定防篡改
-    configure_dns_lock
+    # CRITICAL FIX: 检查函数是否存在后再调用
+    if declare -f configure_ipv6_health > /dev/null 2>&1; then
+        configure_ipv6_health
+    fi
+    if declare -f configure_dns_lock > /dev/null 2>&1; then
+        configure_dns_lock
+    fi
     detect_storage_type
     check_network
     preflight_check
     # HERMES-14 FIX: 清理遗留 tmpfs 挂载
     cleanup_legacy_tmpfs
 
-    show_platform_summary
+    if declare -f show_platform_summary > /dev/null 2>&1; then
+        show_platform_summary
+    fi
 
     if [[ -t 0 ]]; then
         echo -n "继续执行？(y/n，默认 y): "

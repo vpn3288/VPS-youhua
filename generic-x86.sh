@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# 通用 x86_64 VPS 优化安装脚本 v3.4
+# 通用 x86_64 VPS 优化安装脚本 v3.4.1
 # 硬件: 通用 x86_64 架构
 # 特点: 自适应内存配置（内存分级），通用性最强
 # =============================================================================
@@ -150,9 +150,9 @@ optimize_memory_generic() {
         swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
-    # 清理 fstab 中的 swap 条目（BUG FIX: 原来缺失）
-    sed -i '/swapfile/d' /etc/fstab 2>/dev/null || true
-    sed -i '/swap.img/d' /etc/fstab 2>/dev/null || true
+    # HIGH FIX: 使用精确锚点匹配 fstab swap 条目
+    sed -i '\|^[^#]*[[:space:]]/swapfile[[:space:]]|d' /etc/fstab 2>/dev/null || true
+    sed -i '\|^[^#]*[[:space:]]/swap.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
 
     if [[ -f /sys/module/zswap/parameters/enabled ]]; then
         echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true

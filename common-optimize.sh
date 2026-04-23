@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPS-youhua 通用函数库 v3.4
+# VPS-youhua 通用函数库 v3.4.1
 # 所有平台共享的函数和变量（各平台脚本 source 此文件）
 # =============================================================================
 
@@ -26,7 +26,7 @@ log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局常量（可被调用者 override）
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="3.4"
+readonly SCRIPT_VERSION="3.4.1"
 readonly APT_LOG="/var/log/vps-youhua.log"         # 统一日志路径（所有平台共用）
 readonly LOCK_FILE="/var/lock/vps-youhua.lock"      # 统一锁文件
 
@@ -857,9 +857,17 @@ configure_fstab() {
 configure_ipv6_health() {
     log_step "IPv6 连通性检测..."
 
+    # HIGH FIX: 幂等性检查 - 使用标记文件
+    local ipv6_marker="/etc/vps-youhua-ipv6-configured"
+    if [[ -f "$ipv6_marker" ]]; then
+        log_info "IPv6 配置已完成，跳过"
+        return 0
+    fi
+
     # 先检查 IPv6 是否已禁用
     if grep -q "net.ipv6.conf.all.disable_ipv6 = 1" /etc/sysctl.d/99-vps-youhua*.conf 2>/dev/null; then
         log_info "IPv6 已禁用，跳过"
+        touch "$ipv6_marker"
         return 0
     fi
 
@@ -886,6 +894,9 @@ EOF
         sysctl -w net.ipv6.conf.default.disable_ipv6=1 2>/dev/null || true
         sysctl -w net.ipv6.conf.lo.disable_ipv6=1 2>/dev/null || true
     fi
+    
+    # 标记已配置
+    touch "$ipv6_marker"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -894,9 +905,17 @@ EOF
 configure_dns_lock() {
     log_step "加固 DNS 配置（防篡改）..."
 
+    # HIGH FIX: 幂等性检查 - 使用标记文件
+    local dns_marker="/etc/vps-youhua-dns-configured"
+    if [[ -f "$dns_marker" ]]; then
+        log_info "DNS 配置已完成，跳过"
+        return 0
+    fi
+
     # 检查是否已被锁定（幂等性）
     if lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
         log_info "DNS 已锁定（chattr +i），跳过"
+        touch "$dns_marker"
         return 0
     fi
 
@@ -907,6 +926,7 @@ configure_dns_lock() {
     fi
     if [[ "$resolved_active" == "true" ]]; then
         log_info "DNS 由 systemd-resolved 管理，跳过 chattr +i 和 resolv.conf 覆盖"
+        touch "$dns_marker"
         return 0
     fi
 
@@ -924,6 +944,9 @@ EOF
     chattr +i /etc/resolv.conf 2>/dev/null || true
     log_info "DNS 已锁定（1.1.1.1 + 8.8.8.8），chattr +i 保护"
     log_info "提示：卸载时需要 chattr -i /etc/resolv.conf 解锁"
+    
+    # 标记已配置
+    touch "$dns_marker"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -983,6 +1006,9 @@ configure_conntrack_hashsize() {
 # ─────────────────────────────────────────────────────────────────────────────
 configure_swap() {
     log_step "配置 Swap（低内存防护）..."
+
+    # CRITICAL FIX: 防御性初始化 STORAGE_TYPE
+    STORAGE_TYPE="${STORAGE_TYPE:-unknown}"
 
     # 检查平台是否禁止 swap（基于 STORAGE_TYPE）
     if [[ "$STORAGE_TYPE" == "tf_card" || "$STORAGE_TYPE" == "usb_ssd" || "$STORAGE_TYPE" == "usb_hdd" ]]; then
@@ -1070,11 +1096,12 @@ write_common_sysctl() {
     fi
     backup_file "$file"
 
+    # MEDIUM FIX: 添加 local 声明，限制变量作用域
     # BUG#4: BBR 自适应检测（先运行，再写文件）
-    BBR_CC="cubic"
+    local BBR_CC="cubic"
     
     # 智能选择 qdisc：优先 CAKE（为 BBR 优化），回退到 fq
-    BBR_QDISC="fq"
+    local BBR_QDISC="fq"
     modprobe -q sch_cake 2>/dev/null || true
     if lsmod | grep -qw sch_cake 2>/dev/null; then
         BBR_QDISC="cake"

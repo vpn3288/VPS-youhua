@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.4
+# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.4.1
 # 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
 # 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
 # =============================================================================
@@ -133,8 +133,9 @@ optimize_memory_t6() {
         swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
-    sed -i '/swapfile/d' /etc/fstab 2>/dev/null || true
-    sed -i '/swap.img/d' /etc/fstab 2>/dev/null || true
+    # HIGH FIX: 使用精确锚点匹配 fstab swap 条目
+    sed -i '\|^[^#]*[[:space:]]/swapfile[[:space:]]|d' /etc/fstab 2>/dev/null || true
+    sed -i '\|^[^#]*[[:space:]]/swap.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
 
     # Armbian zram-config 保留（zram 是压缩内存，零磁盘写入）
     if systemctl is-active armbian-zram-config &>/dev/null; then
