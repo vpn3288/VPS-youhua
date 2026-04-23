@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Oracle Cloud ARM 1核4G 专用优化安装脚本 v3.4
+# Oracle Cloud ARM 1核4G 专用优化安装脚本 v3.4.4
 # 硬件: Ampere Altra, 1核 4GB, Oracle Cloud
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，元数据检查）
 #       针对 1C4G 资源精简优化（比 2C16G 更保守）
