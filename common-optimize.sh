@@ -591,7 +591,10 @@ configure_firewall_lo() {
 configure_npm_cache_tmpfs() {
     log_step "配置 npm/pip 缓存到 tmpfs..."
     local cache_dir="/tmp/agent_cache"
-    mkdir -p "$cache_dir"
+    if ! mkdir -p "$cache_dir"; then
+        log_error "无法创建缓存目录: $cache_dir"
+        return 1
+    fi
     chmod 1777 "$cache_dir"
 
     local profile_file="/etc/profile.d/99-agent-cache.sh"
