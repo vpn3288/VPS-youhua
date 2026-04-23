@@ -346,7 +346,8 @@ run_doctor() {
     echo "   qdisc: $(sysctl -n net.core.default_qdisc 2>/dev/null || echo '未知')"
     echo ""
     echo "4. 存储:"
-    echo "   /tmp: $(df -h /tmp 2>/dev/null | awk 'NR==2 {print $2}' || echo 'tmpfs')"
+    # Round 10 Fix: 使用 tail -1 而不是 NR==2，避免文件系统名称过长导致换行时解析失败
+    echo "   /tmp: $(df -h /tmp 2>/dev/null | tail -1 | awk '{print $2}' || echo 'tmpfs')"
     echo "   journald: $(journalctl --disk-usage 2>/dev/null | awk '{print $1,$2}' || echo '正常')"
     echo ""
 }
