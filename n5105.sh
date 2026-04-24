@@ -36,7 +36,7 @@ set -euo pipefail
 # 平台信息
 # ─────────────────────────────────────────────────────────────────────────────
 readonly PLATFORM_NAME="N5105/N5095 小主机"
-PLATFORM_DESC="Intel N5105 | x86_64 | SSD | 有风扇"
+readonly PLATFORM_DESC="Intel N5105 | x86_64 | SSD | 有风扇"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 平台差异变量
@@ -394,6 +394,7 @@ install_build_deps() {
 # Docker
 # ─────────────────────────────────────────────────────────────────────────────
 install_docker() {
+    # TODO: 提取到 common-optimize.sh（完整 Docker 安装逻辑，避免跨文件重复）
     [[ "$INSTALL_DOCKER" != "true" ]] && return 0
     log_step "安装 Docker..."
 

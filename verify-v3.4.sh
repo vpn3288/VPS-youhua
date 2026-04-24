@@ -249,10 +249,10 @@ check_locale_chain() {
     # Layer 2: /etc/default/locale
     echo -e "  ${DIM}Layer 2 - /etc/default/locale:${RESET}"
     if [[ -f /etc/default/locale ]]; then
-        # Round 10 Fix: 避免子shell导致issues计数失效，先显示内容再检查
-        grep -v "^#" /etc/default/locale 2>/dev/null | grep -v "^$" | while read -r line; do
+        # Round 10 Fix: 避免子shell导致issues计数失效，使用进程替换
+        while read -r line; do
             echo -e "    ${line}"
-        done
+        done < <(grep -v "^#" /etc/default/locale 2>/dev/null | grep -v "^$")
         if grep -qi "UTF-8\|utf-8" /etc/default/locale 2>/dev/null; then
             echo -e "    ${GREEN}✓${RESET} /etc/default/locale UTF-8"
         else
@@ -267,9 +267,9 @@ check_locale_chain() {
     # Layer 3: /etc/environment.d/90-chinese.conf (systemd/PAM)
     echo -e "  ${DIM}Layer 3 - /etc/environment.d/90-chinese.conf:${RESET}"
     if [[ -f /etc/environment.d/90-chinese.conf ]]; then
-        grep -v "^#" /etc/environment.d/90-chinese.conf 2>/dev/null | grep -v "^$" | while read -r line; do
+        while read -r line; do
             echo -e "    ${line}"
-        done
+        done < <(grep -v "^#" /etc/environment.d/90-chinese.conf 2>/dev/null | grep -v "^$")
         echo -e "    ${GREEN}✓${RESET} systemd环境配置存在"
     else
         echo -e "    ${DIM}  文件不存在（可选，非必须）${RESET}"
@@ -739,7 +739,7 @@ check_vs_targets() {
     check_eq "net.ipv4.tcp_slow_start_after_idle"    "0"  "空闲后慢启动"
     check_eq "net.ipv4.tcp_rfc1337"                   "1"  "TIME_WAIT保护"
     check_eq "net.ipv4.tcp_early_retrans"             "3"  "早期重传"
-    check_eq "net.ipv4.tcp_orphan_retries"           "3"  "孤儿socket清理"
+    check_eq "net.ipv4.tcp_orphan_retries"           "1"  "孤儿socket清理"
     check_eq "net.ipv4.tcp_mtu_probing"              "1"  "MTU探测"
     check_eq "net.ipv4.tcp_notsent_lowat"        "16384"  "未发送低水位"
     check_eq "vm.overcommit_memory"                  "1"  "内存超量分配"

@@ -458,6 +458,7 @@ install_build_deps() {
 # Docker
 # ─────────────────────────────────────────────────────────────────────────────
 install_docker() {
+    # TODO: 提取到 common-optimize.sh（完整 Docker 安装逻辑，避免跨文件重复）
     [[ "$INSTALL_DOCKER" != "true" ]] && return 0
     log_step "安装 Docker..."
 
@@ -577,8 +578,11 @@ install_nodejs() {
 
     if [[ "$nodesource_download_ok" == "true" ]]; then
         # SHA256 完整性校验（防止供应链污染）
-        # 注意：NodeSource 脚本会定期更新，SHA256 会变化
-        # 生产环境建议定期更新此校验和或使用动态校验
+        # ⚠️  警告：NodeSource 脚本会定期更新，SHA256 会变化
+        # 生产环境建议：
+        #   1. 定期更新此校验和（每月检查 https://deb.nodesource.com/setup_lts.x）
+        #   2. 或使用动态校验（curl + 官方签名验证）
+        #   3. 或固定 Node.js 版本号避免自动更新
         local expected_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
         local actual_sha256
         actual_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')

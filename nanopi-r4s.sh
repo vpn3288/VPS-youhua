@@ -700,6 +700,7 @@ install_build_deps() {
 # Docker（R4S）
 # ─────────────────────────────────────────────────────────────────────────────
 install_docker() {
+    # TODO: 提取到 common-optimize.sh（完整 Docker 安装逻辑，避免跨文件重复）
     log_step "安装 Docker..."
 
     if command -v docker &>/dev/null; then

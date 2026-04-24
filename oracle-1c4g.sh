@@ -49,7 +49,7 @@ readonly TMPFS_SIZE="256M"
 
 # Oracle Cloud 1C4G TCP 缓冲（内存 4%，上限 16MB，下限 4MB）
 # 内存 4% 自适应（1C4G proxy 专用，省内存+够用）
-# BUG FIX: 原公式单位混滑（KB级cap/floor应用于KB结果再*1024），改为字节级正确计算
+# 计算逻辑：MemTotal(KB) * 1024 转字节，取 4%，限制在 4MB-16MB 范围内（单位：字节）
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*4/100; if(buf>16777216) buf=16777216; if(buf<4194304) buf=4194304; printf "%.0f", buf}' /proc/meminfo)
 readonly TCP_BUF_MAX
 readonly CT_MAX=8192  # 1C4G 精简资源限制
@@ -445,10 +445,15 @@ configure_tmp_tmpfs() {
     mkdir -p /tmp
     # H5 FIX: 仅在 mount 成功时才写入 fstab
     if mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null; then
-        if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
-            echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
+        # 验证 mount 是否真正生效
+        if mount | grep -q "tmpfs on /tmp"; then
+            if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
+                echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
+            fi
+            log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"
+        else
+            log_warn "mount tmpfs 成功但验证失败，跳过 fstab 写入"
         fi
-        log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"
     else
         log_warn "mount tmpfs 失败，跳过 fstab 写入"
     fi
@@ -639,6 +644,7 @@ uninstall_all() {
 # 由于内存限制（1C4G），这些平台不安装 Docker 和 Node.js 以避免资源耗尽
 # ─────────────────────────────────────────────────────────────────────────────
 install_docker() {
+    # TODO: 提取到 common-optimize.sh（低配平台统一跳过逻辑）
     log_warn "Docker 安装在此低配平台跳过（内存限制）"
     return 0
 }

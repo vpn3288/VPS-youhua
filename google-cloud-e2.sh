@@ -114,8 +114,6 @@ load_common_optimize() {
     exit 1
 }
 
-# Test comment from Claude Code acceptEdits mode
-
 load_common_optimize
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -301,7 +299,7 @@ net.ipv4.tcp_keepalive_probes = 3
 # SYN cookies for DDoS protection on proxy servers
 net.ipv4.tcp_syncookies = 1
 
-    # ── TCP 缓冲（内存 3%，上限 8MB）──────────────────────────────────────────────
+# ── TCP 缓冲（内存 3%，上限 8MB）──────────────────────────────────────────────
 net.core.rmem_max = ${TCP_BUF_MAX}
 net.core.wmem_max = ${TCP_BUF_MAX}
 net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
@@ -682,6 +680,7 @@ install_build_deps() {
 }
 
 install_docker() {
+    # TODO: 提取到 common-optimize.sh（低配平台统一跳过逻辑）
     log_warn "Docker 安装在此低配平台跳过（内存限制）"
     return 0
 }

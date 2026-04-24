@@ -443,7 +443,11 @@ install_build_deps() {
 # ─────────────────────────────────────────────────────────────────────────────
 # Docker
 # ─────────────────────────────────────────────────────────────────────────────
+# TODO: 此函数与其他脚本中的 install_docker 高度重复
+#       建议提取到 common-optimize.sh 作为通用函数
+#       重复文件: oracle-1c4g.sh, oracle-arm.sh, nanopc-t6.sh, nanopi-r4s.sh, n5105.sh, generic-1c1g.sh
 install_docker() {
+    # TODO: 提取到 common-optimize.sh（完整 Docker 安装逻辑，避免跨文件重复）
     [[ "$INSTALL_DOCKER" != "true" ]] && return 0
     log_step "安装 Docker..."
 
@@ -549,13 +553,18 @@ EOF
 
     # 尝试合并用户原有的顶层配置（如 storage-driver, live-restore 等）
     if [[ -n "$daemon_backup" ]]; then
-        local merged_json
-        merged_json=$(jq -s '.[0] * .[1]' "$daemon_json" <(echo "$daemon_backup") 2>/dev/null) || true
-        if [[ -n "$merged_json" && "$merged_json" != "null" ]]; then
-            echo "$merged_json" > "$daemon_json"
-            log_info "Docker daemon.json 已合并（保留原有配置）"
+        # 检查 jq 是否可用
+        if command -v jq >/dev/null 2>&1; then
+            local merged_json
+            merged_json=$(jq -s '.[0] * .[1]' "$daemon_json" <(echo "$daemon_backup") 2>/dev/null) || true
+            if [[ -n "$merged_json" && "$merged_json" != "null" ]]; then
+                echo "$merged_json" > "$daemon_json"
+                log_info "Docker daemon.json 已合并（保留原有配置）"
+            else
+                log_warn "daemon.json 合并失败，使用默认配置"
+            fi
         else
-            log_warn "daemon.json 合并失败，使用默认配置"
+            log_warn "jq 未安装，无法合并 daemon.json，使用默认配置（原配置已备份）"
         fi
     else
         log_info "Docker daemon.json 已创建（新配置）"

@@ -481,6 +481,7 @@ install_build_deps() {
 }
 
 install_docker() {
+    # TODO: 提取到 common-optimize.sh（低配平台统一跳过逻辑）
     log_warn "Docker 安装在此低配平台跳过（内存限制）"
     return 0
 }
@@ -493,10 +494,19 @@ install_nodejs() {
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
+    # 处理 --uninstall 参数
+    for arg in "$@"; do
+        case "$arg" in
+            --uninstall)
+                uninstall_all "$@"
+                exit 0
+                ;;
+        esac
+    done
+
     for arg in "$@"; do
         case "$arg" in
             --optimize-only) export SKIP_SOFTWARE_SCRIPT="true" ;;
-            --uninstall) ;;
         esac
     done
 
