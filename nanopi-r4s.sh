@@ -332,7 +332,11 @@ optimize_memory_r4s() {
 
     # ── zram 内存扩展（R4S 4GB TF，50% mem = ~1.9GB 等效）────────────
     if ! modprobe zram 2>/dev/null; then
-        log_warn "zram 模块不可用，跳过"
+        log_warn "zram 模块加载失败，跳过"
+        return 0
+    elif ! lsmod | grep -q "^zram "; then
+        log_warn "zram 模块未加载，跳过"
+        return 0
     else
         local mem_kb
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
@@ -737,7 +741,8 @@ install_docker() {
     mkdir -p /etc/apt/keyrings
     local gpg_tmp; gpg_tmp=$(mktemp)
     local gpg_stderr; gpg_stderr=$(mktemp)
-    trap 'rm -f "$gpg_tmp" "$gpg_stderr"' RETURN INT
+    local gpg_dearmored; gpg_dearmored=$(mktemp)
+    trap 'rm -f "$gpg_tmp" "$gpg_stderr" "$gpg_dearmored"' RETURN INT
 
     # 先下载到临时文件，避免 TOCTOU 漏洞
     if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then

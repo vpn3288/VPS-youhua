@@ -338,10 +338,10 @@ check_network() {
     fi
 
     # MEDIUM FIX: 添加 curl 返回值验证
-    if ! curl --silent --head --fail --connect-timeout 5 \
+    if ! curl --silent --head --fail --connect-timeout 5 --max-time 10 \
         -H "Host: www.cloudflare.com" https://104.16.123.96 >/dev/null 2>&1; then
         local curl_exit=$?
-        if ! curl --silent --head --fail --connect-timeout 5 \
+        if ! curl --silent --head --fail --connect-timeout 5 --max-time 10 \
             https://github.com >/dev/null 2>&1; then
             log_warn "HTTPS 不可达（可能存在防火墙限制），尝试 ping..."
             if ! ping -c 2 -W 4 1.1.1.1 >/dev/null 2>&1; then
@@ -873,10 +873,11 @@ download_and_run() {
 
     # 在临时目录下载平台脚本 + common-optimize.sh（确保 source 路径有效）
     local tmpdir
-    if ! tmpdir=$(mktemp -d 2>/dev/null); then
+    tmpdir=$(mktemp -d 2>/dev/null) || {
         log_error "无法创建临时目录，请检查磁盘空间和权限"
         return 1
-    fi
+    }
+    trap "rm -rf '$tmpdir'" RETURN EXIT
     
     if [[ ! -d "$tmpdir" ]]; then
         log_error "临时目录创建失败: $tmpdir"
@@ -1125,8 +1126,8 @@ main() {
 # Only allow known-safe values: empty, -y, or --yes
 _sanitized_arg1=""
 case "${1:-}" in
-    ''|-y|--yes) _sanitized_arg1="${1:-}" ;;\
-    *)  log_error "不支持的参数: $1"; echo "用法: $0 [--platform=xxx] [--mode=optimize|status|uninstall] [-y|--yes]"; exit 1 ;;\
+    ''|-y|--yes) _sanitized_arg1="${1:-}" ;;
+    *)  log_error "不支持的参数: ${1:-unknown}"; echo "用法: ${0} [--platform=xxx] [--mode=optimize|status|uninstall] [-y|--yes]"; exit 1 ;;
 esac
 
 if [[ "${NONINTERACTIVE:-0}" == "1" ]] || [[ "${_sanitized_arg1}" == "-y" ]]; then

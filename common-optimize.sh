@@ -334,10 +334,11 @@ EOF
         for m in ${mirrors//,/ }; do
             local name="${m%%:*}"
             local host="${m#*:}"
-            local ms; ms=$(curl --connect-timeout 3 -s -o /dev/null -w "%{time_total}" "http://${host}/debian/" 2>/dev/null | awk '{printf "%.0f", $1*1000}')
-            # MEDIUM FIX: 防御：确保 ms 是有效数字（curl 失败或 awk 无输出时跳过）
-            [[ -n "$ms" && "$ms" =~ ^[0-9]+$ && "$ms" -gt 0 ]] || continue
-            [[ $ms -lt $fastest_ms ]] && fastest_ms=$ms && fastest=$name
+            local ms
+            ms=$(curl --connect-timeout 3 --max-time 5 -s -o /dev/null -w "%{time_total}" "http://${host}/debian/" 2>/dev/null | awk '{if($1>0) printf "%.0f", $1*1000; else print ""}')
+            if [[ -n "$ms" && "$ms" =~ ^[0-9]+$ && "$ms" -gt 0 ]]; then
+                [[ $ms -lt $fastest_ms ]] && fastest_ms=$ms && fastest=$name
+            fi
         done
 
         if [[ -n "$fastest" ]]; then
@@ -512,13 +513,18 @@ install_base_tools() {
 # ─────────────────────────────────────────────────────────────────────────────
 install_if_missing() {
     local to_install=()
-    for tool in "$@"; do
-        command -v "$tool" &>/dev/null || to_install+=("$tool")
+    for pkg in "$@"; do
+        if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "install ok installed"; then
+            to_install+=("$pkg")
+        fi
     done
-    [[ ${#to_install[@]} -gt 0 ]] && {
-        apt-get install -y --no-install-recommends "${to_install[@]}" >> "$APT_LOG" 2>&1
-        log_info "已安装 ${#to_install[@]} 个缺失工具"
-    }
+    if [[ ${#to_install[@]} -gt 0 ]]; then
+        apt-get install -y --no-install-recommends "${to_install[@]}" >> "$APT_LOG" 2>&1 || {
+            log_warn "部分包安装失败: ${to_install[*]}"
+            return 1
+        }
+        log_info "已安装 ${#to_install[@]} 个缺失包"
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -549,9 +555,12 @@ EOF
         fi
         if [[ "$resolved_active" == "true" ]]; then
             log_info "DNS 由 systemd-resolved 管理，跳过 chattr +i"
+            if lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
+                chattr -i /etc/resolv.conf 2>/dev/null || true
+                log_info "已解锁 resolv.conf（systemd-resolved 需要写入权限）"
+            fi
         else
             if ! lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
-                chattr -i /etc/resolv.conf 2>/dev/null || true
                 chattr +i /etc/resolv.conf 2>/dev/null || log_warn "chattr +i 失败（权限不足）"
                 log_info "DNS 配置已锁定（chattr +i）"
             fi
@@ -707,9 +716,8 @@ configure_limits() {
     fi
 
     # 立即生效
-    ulimit -n ${NOFILE_VAL}
-    ulimit -u ${NPROC_VAL}
-    ulimit -m unlimited
+    ulimit -n "${NOFILE_VAL}" 2>/dev/null || log_warn "ulimit -n 设置失败"
+    ulimit -u "${NPROC_VAL}" 2>/dev/null || log_warn "ulimit -u 设置失败"
     [[ -f /proc/sys/fs/inotify/max_user_watches ]] && echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true
 
     # 持久化（幂等性检查）

@@ -51,7 +51,7 @@ readonly TMPFS_SIZE="256M"
 # 内存 4% 自适应（1C4G proxy 专用，省内存+够用）
 # 计算逻辑：MemTotal(KB) * 1024 转字节，取 4%，限制在 4MB-16MB 范围内（单位：字节）
 # MEDIUM FIX: 添加空值检查
-TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*4/100; if(buf>16777216) buf=16777216; if(buf<4194304) buf=4194304; printf "%.0f", buf}' /proc/meminfo)
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*4/100; if(buf>16777216) buf=16777216; if(buf<4194304) buf=4194304; printf "%d", buf}' /proc/meminfo)
 if [[ -z "$TCP_BUF_MAX" || ! "$TCP_BUF_MAX" =~ ^[0-9]+$ || "$TCP_BUF_MAX" -le 0 ]]; then
     TCP_BUF_MAX=8388608  # 默认 8MB
 fi

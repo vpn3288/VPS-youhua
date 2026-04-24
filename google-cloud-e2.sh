@@ -124,9 +124,9 @@ detect_gcp_cloud() {
     gcp_meta=$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
         "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null || echo "")
 
-    if echo "$gcp_meta" | grep -q "e2-micro\|e2-small\|e2-medium\|f1-micro\|g1-small"; then
+    if echo "$gcp_meta" | grep -qE "e2-micro|e2-small|e2-medium|f1-micro|g1-small"; then
         SYS_IS_GCP_CLOUD=true
-        SYS_GCP_MACHINE_TYPE=$(echo "$gcp_meta" | grep -o 'e2-micro\|e2-small\|e2-medium\|f1-micro\|g1-small' | head -1)
+        SYS_GCP_MACHINE_TYPE=$(echo "$gcp_meta" | grep -oE 'e2-micro|e2-small|e2-medium|f1-micro|g1-small' | head -1)
         log_info "GCP Cloud 检测通过（机型: ${SYS_GCP_MACHINE_TYPE}）"
     else
         SYS_IS_GCP_CLOUD=false
@@ -211,10 +211,9 @@ optimize_memory_gcp() {
     fi
 
     local mem_kb
-    mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-    # Round 10 Fix: 验证 mem_kb 有效性，防止除零错误
-    if [[ -z "$mem_kb" || "$mem_kb" -le 0 ]]; then
-        log_warn "无法读取内存信息，跳过 zram"
+    mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+    if [[ ! "$mem_kb" =~ ^[0-9]+$ ]] || [[ "$mem_kb" -le 0 ]]; then
+        log_warn "无法读取有效内存信息（mem_kb=${mem_kb}），跳过 zram"
         return 0
     fi
     local zram_size_bytes=$((mem_kb * 1024 / 2))
