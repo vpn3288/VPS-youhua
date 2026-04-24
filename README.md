@@ -85,8 +85,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/goog
 ### 第二步：验证优化效果
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.4.sh -o /tmp/verify-v3.4.sh
-bash /tmp/verify-v3.4.sh
+curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.4.sh -o /tmp/verify-v3.4.sh && bash /tmp/verify-v3.4.sh
+
 ```
 
 ### 第三步：安装 AIagent
