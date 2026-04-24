@@ -288,11 +288,7 @@ net.ipv4.tcp_keepalive_probes = 3
 # SYN cookies for DDoS protection on proxy servers
 net.ipv4.tcp_syncookies = 1
 
-# ── conntrack（1GB 保守，仅基础 NAT）────────────────────────────────────────
-net.netfilter.nf_conntrack_max = ${CT_MAX}
-net.netfilter.nf_conntrack_tcp_timeout_established = 1200
-
-# ── TCP 缓冲（内存 3%，上限 8MB）──────────────────────────────────────────────
+    # ── TCP 缓冲（内存 3%，上限 8MB）──────────────────────────────────────────────
 net.core.rmem_max = ${TCP_BUF_MAX}
 net.core.wmem_max = ${TCP_BUF_MAX}
 net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
@@ -313,23 +309,43 @@ net.ipv4.conf.all.arp_announce = 2
 # GCP e2-micro 实际可 burst 到 2vCPU，但基线仅 0.2vCPU
 # 以下参数减少单进程 CPU 占用，让 burst 更平滑
 kernel.sched_child_runs_first = 0
+EOF
+
+    # 应用基础 sysctl 参数（忽略不支持的参数）
+    sysctl -p "$SYSCTL_FILE" 2>&1 | grep -v "cannot stat" || true
+    
+    # ── 可选参数：conntrack（需要 nf_conntrack 模块）────────────────────────────
+    # GCP 内核可能未加载 nf_conntrack，尝试配置但不强制要求
+    if [[ -f /proc/sys/net/netfilter/nf_conntrack_max ]]; then
+        log_info "检测到 nf_conntrack 支持，配置连接跟踪参数..."
+        cat >> "$SYSCTL_FILE" <<EOF
+
+# ── conntrack（1GB 保守，仅基础 NAT）────────────────────────────────────────
+net.netfilter.nf_conntrack_max = ${CT_MAX}
+net.netfilter.nf_conntrack_tcp_timeout_established = 1200
+EOF
+        sysctl -p "$SYSCTL_FILE" 2>&1 | grep "net.netfilter" || true
+    else
+        log_warn "nf_conntrack 模块未加载，跳过连接跟踪配置（不影响基础功能）"
+    fi
+    
+    # ── 可选参数：调度器参数（GCP 内核可能不支持）──────────────────────────────
+    # 尝试配置但不强制要求
+    if [[ -f /proc/sys/kernel/sched_latency_ns ]]; then
+        log_info "配置 CPU 调度器参数..."
+        cat >> "$SYSCTL_FILE" <<EOF
+
+# ── 调度器优化（共享 CPU 环境）────────────────────────────────────────────
 kernel.sched_latency_ns = 10000000
 kernel.sched_min_granularity_ns = 1000000
 kernel.sched_wakeup_granularity_ns = 2000000
 EOF
-
-    # 检查返回码：关键参数错误降为 warn 但仍记录，其他错误报 error
-    if sysctl -p "$SYSCTL_FILE" 2>&1; then
-        log_info "sysctl 参数已应用（$SYSCTL_FILE）"
+        sysctl -p "$SYSCTL_FILE" 2>&1 | grep "kernel.sched" || true
     else
-        local sysctl_output
-        sysctl_output=$(sysctl -p "$SYSCTL_FILE" 2>&1 || true)
-        if echo "$sysctl_output" | grep -qiE "error|invalid|permission|readonly"; then
-            log_error "sysctl 应用失败：$(echo "$sysctl_output" | head -3)"
-        else
-            log_warn "sysctl 部分参数不支持当前内核：$(echo "$sysctl_output" | head -3)"
-        fi
+        log_warn "内核不支持调度器参数配置（GCP 限制，不影响基础功能）"
     fi
+    
+    log_info "sysctl 参数配置完成（已跳过不支持的参数）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
