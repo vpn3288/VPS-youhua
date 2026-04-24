@@ -246,12 +246,25 @@ configure_zram_1c1g() {
 configure_conntrack_hashsize_1c1g() {
     log_step "配置 nf_conntrack_hashsize（1C1G）..."
 
+    # MEDIUM FIX: 添加参数验证
+    local ct_max="${CT_MAX:-0}"
+    if [[ -z "$ct_max" || ! "$ct_max" =~ ^[0-9]+$ || "$ct_max" -le 0 ]]; then
+        log_warn "CT_MAX 无效（${ct_max}），使用默认值 32768"
+        ct_max=32768
+    fi
+
     modprobe nf_conntrack 2>/dev/null || true
 
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
-    local ct_max="$CT_MAX"
     # Round 10 Fix: hashsize 应该是 conntrack_max 的 1/4，不是直接使用 ct_max
     local hashsize=$((ct_max / 4))
+    
+    # 最小值保护
+    if [[ $hashsize -lt 4096 ]]; then
+        log_warn "hashsize 过小（$hashsize），使用最小值 4096"
+        hashsize=4096
+    fi
+    
     if [[ -f "$hashsize_file" ]]; then
         echo "${hashsize}" > "$hashsize_file" 2>/dev/null || {
             log_warn "nf_conntrack_hashsize 设置失败，尝试 modprobe 配置"
@@ -300,7 +313,8 @@ configure_tmp_tmpfs() {
     fi
     mkdir -p /tmp
     mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null || true
-    if ! grep -q "^tmpfs[[:space:]]/tmp[[:space:]]tmpfs" /etc/fstab 2>/dev/null; then
+    # MEDIUM FIX: 改进 grep 模式，避免匹配注释行
+    if ! grep -q "^[^#]*tmpfs[[:space:]]/tmp[[:space:]]tmpfs" /etc/fstab 2>/dev/null; then
         echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
     fi
     log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"
@@ -558,6 +572,7 @@ main() {
     configure_locale
     configure_firewall_lo
     configure_tmp_tmpfs
+    # MEDIUM FIX: zram 必须在 sysctl 之后配置，确保内核参数已生效
     configure_zram_1c1g
     # BUG#FIX: 补充通用函数调用
     configure_npm_cache_tmpfs

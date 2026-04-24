@@ -26,15 +26,25 @@ readonly SEP="══════════════════════
 # 检测平台
 #------------------------------------------------# -------------------------------
 # Round 10 Fix: 提取 Oracle Cloud 检测为独立函数，避免重复逻辑
+# LOW FIX: 添加结果缓存，避免重复网络请求
+_ORACLE_CLOUD_CACHE=""
 is_oracle_cloud() {
+    # 使用缓存结果
+    if [[ -n "$_ORACLE_CLOUD_CACHE" ]]; then
+        [[ "$_ORACLE_CLOUD_CACHE" == "true" ]] && return 0 || return 1
+    fi
+    
     # 方法1: 元数据端点检测
     if curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" http://169.254.169.254/latest/meta-data/ 2>/dev/null | grep -q "200"; then
+        _ORACLE_CLOUD_CACHE="true"
         return 0
     fi
     # 方法2: 标记文件或 hostname 检测
     if [[ -f /etc/oracle-auto-detect ]] || hostnamectl 2>/dev/null | grep -qi "oracle"; then
+        _ORACLE_CLOUD_CACHE="true"
         return 0
     fi
+    _ORACLE_CLOUD_CACHE="false"
     return 1
 }
 
@@ -278,7 +288,10 @@ check_locale_chain() {
     # Layer 4: zh_CN.UTF-8 locale 已生成
     echo -e "  ${DIM}Layer 4 - 可用的中文locale:${RESET}"
     if locale -a 2>/dev/null | grep -qi "zh_CN"; then
-        echo -e "    $(locale -a 2>/dev/null | grep -i zh_CN | tr '\n' ' ')"
+        # LOW FIX: 统一使用进程替换，避免子shell导致变量作用域问题
+        while read -r locale_line; do
+            echo -e "    ${locale_line}"
+        done < <(locale -a 2>/dev/null | grep -i zh_CN)
         echo -e "    ${GREEN}✓${RESET} 中文locale已生成"
     else
         echo -e "    ${RED}✗${RESET} 系统中未生成zh_CN.UTF-8"

@@ -278,7 +278,9 @@ detect_platform() {
                 echo "nanopc-t6"
             elif grep -qiE "oracle|oraclecloud" /sys/class/dmi/id/sys_vendor 2>/dev/null || \
                  echo "$cpu_model" | grep -qiE "Ampere|Altra"; then
-                # Oracle Cloud：根据内存自动选择规格
+                # LOW FIX: 平台检测注释说明
+                # Oracle Cloud：通过 DMI 供应商信息或 Ampere CPU 型号识别
+                # 根据内存自动选择规格（<8GB=1核4G，>=8GB=2核16G）
                 if [[ $sys_mem_mb -gt 0 ]] && [[ $sys_mem_mb -lt 8192 ]]; then
                     log_info "Oracle Cloud 检测到内存 ${sys_mem_mb}MB，自动选择 1核4G 配置"
                     echo "oracle-1c4g"
@@ -298,10 +300,11 @@ detect_platform() {
             ;;
         x86_64)
             # ── Google Cloud 检测（优先于内存路由）─────────────────────────────
+            # LOW FIX: 添加 --max-time 限制，防止元数据请求挂起
             local gcp_meta
-            gcp_meta="$(curl -s --connect-timeout 3 -H "Metadata-Flavor: Google" \
+            gcp_meta="$(curl -s --connect-timeout 3 --max-time 5 -H "Metadata-Flavor: Google" \
                 "http://metadata.google.internal/computeMetadata/v1/instance/machine-type" 2>/dev/null || echo "")"
-            if echo "$gcp_meta" | grep -q "e2-micro\|e2-small\|e2-medium\|f1-micro\|g1-small"; then
+            if echo "$gcp_meta" | grep -q "e2-micro\\|e2-small\\|e2-medium\\|f1-micro\\|g1-small"; then
                 log_info "Google Cloud 检测通过（${gcp_meta}），使用 GCP e2 优化"
                 echo "google-cloud-e2"
             elif echo "$cpu_model" | grep -qiE "N5105|N5095|J6412|J6413"; then
@@ -334,16 +337,19 @@ check_network() {
         exit 1
     fi
 
+    # MEDIUM FIX: 添加 curl 返回值验证
     if ! curl --silent --head --fail --connect-timeout 5 \
-        -H "Host: www.cloudflare.com" https://104.16.123.96 >/dev/null 2>&1 && \
-       ! curl --silent --head --fail --connect-timeout 5 \
-        https://github.com >/dev/null 2>&1; then
-        log_warn "HTTPS 不可达（可能存在防火墙限制），尝试 ping..."
-        if ! ping -c 2 -W 4 1.1.1.1 >/dev/null 2>&1; then
-            log_error "网络完全不可达，请检查网络连接"
-            exit 1
+        -H "Host: www.cloudflare.com" https://104.16.123.96 >/dev/null 2>&1; then
+        local curl_exit=$?
+        if ! curl --silent --head --fail --connect-timeout 5 \
+            https://github.com >/dev/null 2>&1; then
+            log_warn "HTTPS 不可达（可能存在防火墙限制），尝试 ping..."
+            if ! ping -c 2 -W 4 1.1.1.1 >/dev/null 2>&1; then
+                log_error "网络完全不可达，请检查网络连接"
+                exit 1
+            fi
+            log_warn "网络检测降级为 ping 模式（部分云环境 ICMP 被限速）"
         fi
-        log_warn "网络检测降级为 ping 模式（部分云环境 ICMP 被限速）"
     fi
 
     log_info "网络检测通过"

@@ -241,7 +241,15 @@ configure_tf_card_protection() {
             gsub(/,,+/, ",", $4)
         }
         { print }
-        ' /etc/fstab > /etc/fstab.tmp && mv /etc/fstab.tmp /etc/fstab
+        ' /etc/fstab > /etc/fstab.tmp
+        
+        # 验证 fstab 语法
+        if awk 'NF > 0 && !/^#/ {if (NF < 4) exit 1}' /etc/fstab.tmp; then
+            mv /etc/fstab.tmp /etc/fstab
+        else
+            log_warn "fstab 编辑验证失败，保留原文件"
+            rm -f /etc/fstab.tmp
+        fi
     fi
 
     log_info "TF 卡 ext4 优化完成"
@@ -333,9 +341,9 @@ optimize_memory_r4s() {
             log_warn "无法读取内存信息，跳过 zram"
         else
             local zram_size=$((mem_kb * 50 / 100))
-            # MEDIUM FIX: Wait for zram device to be ready (race condition)
+            # MEDIUM FIX: Wait for zram device to be ready (增加到 3 秒)
             local retry=0
-            while [[ $retry -lt 10 ]] && [[ ! -b /dev/zram0 ]]; do
+            while [[ $retry -lt 30 ]] && [[ ! -b /dev/zram0 ]]; do
                 sleep 0.1
                 retry=$((retry + 1))
             done
@@ -382,7 +390,17 @@ optimize_memory_r4s() {
 # R4S sysctl（存储类型感知 + 网络优化）
 # ─────────────────────────────────────────────────────────────────────────────
 configure_sysctl_r4s() {
-    local conntrack_max=$(( ${SYS_MEM_MB:-0} * 32 ))
+    # HIGH FIX: 验证 SYS_MEM_MB 并设置 conntrack_max 最小值
+    if [[ -z "${SYS_MEM_MB:-}" || ! "${SYS_MEM_MB}" =~ ^[0-9]+$ || "${SYS_MEM_MB}" -le 0 ]]; then
+        log_warn "SYS_MEM_MB 无效（${SYS_MEM_MB:-未设置}），使用默认值 4096MB"
+        SYS_MEM_MB=4096
+    fi
+    local conntrack_max=$(( SYS_MEM_MB * 32 ))
+    # 设置最小值保护（至少 65536）
+    if [[ "$conntrack_max" -lt 65536 ]]; then
+        log_warn "conntrack_max 过小（${conntrack_max}），使用最小值 65536"
+        conntrack_max=65536
+    fi
     log_step "配置 sysctl (NanoPi R4S)..."
 
     backup_file "$SYSCTL_FILE"

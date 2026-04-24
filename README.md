@@ -224,7 +224,7 @@ eMMC 写入寿命比 TF 卡好得多，但仍需优化随机写入：
 | netdev_max_backlog | 16384 | 适度队列 |
 | conntrack_max | 65536 | 有限并发 |
 | vm.swappiness | 60 | 较高swap倾向 |
-| swap | 1GB文件swap | 低内存防护 |
+| swap | 512MB zram | 低内存防护（压缩内存） |
 | dirty_ratio | 10 | 保守回写 |
 | inotify watches | 262144 | 有限但够用 |
 

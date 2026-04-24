@@ -159,10 +159,10 @@ optimize_memory_t6() {
 
     # ── Armbian 原生 zram-config 强化（T6 16GB）────────────────────────────────
     if [[ -f /etc/default/armbian-zram-config ]]; then
-        # HERMES-P1 FIX: 添加 $ 锚点确保 sed 幂等性（避免重复追加）
+        # LOW FIX: sed 幂等性检查改进，处理末尾空格
         if grep -q "^ENABLED=" /etc/default/armbian-zram-config 2>/dev/null; then
-            # 只在值不是 true 时才修改
-            if ! grep -q "^ENABLED=true$" /etc/default/armbian-zram-config 2>/dev/null; then
+            # 只在值不是 true 时才修改（忽略末尾空格）
+            if ! grep -qE "^ENABLED=true[[:space:]]*$" /etc/default/armbian-zram-config 2>/dev/null; then
                 sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-zram-config
             fi
         else
@@ -170,8 +170,8 @@ optimize_memory_t6() {
         fi
         # 16GB 内存下 zram SIZE=30%（T6 eMMC 耐久好，不强制压缩内存）
         if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
-            # 只在值不是 30% 时才修改
-            if ! grep -q "^SIZE=30%$" /etc/default/armbian-zram-config 2>/dev/null; then
+            # 只在值不是 30% 时才修改（忽略末尾空格）
+            if ! grep -qE "^SIZE=30%[[:space:]]*$" /etc/default/armbian-zram-config 2>/dev/null; then
                 sed -i 's/^SIZE=.*$/SIZE=30%/' /etc/default/armbian-zram-config
             fi
         else

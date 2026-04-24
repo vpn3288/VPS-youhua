@@ -166,9 +166,9 @@ optimize_memory_n5105() {
         swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
-    # HIGH FIX: 使用精确锚点匹配 fstab swap 条目
+    # LOW FIX: 统一 fstab sed 模式，使用一致的锚点语法
     sed -i '\|^[^#]*[[:space:]]/swapfile[[:space:]]|d' /etc/fstab 2>/dev/null || true
-    sed -i '\|^[^#]*[[:space:]]/swap.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
+    sed -i '\|^[^#]*[[:space:]]/swap\.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
 
     if [[ -f /sys/module/zswap/parameters/enabled ]]; then
         echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true

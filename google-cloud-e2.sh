@@ -322,9 +322,6 @@ net.ipv4.conf.all.arp_announce = 2
 kernel.sched_child_runs_first = 0
 EOF
 
-    # 应用基础 sysctl 参数（忽略不支持的参数）
-    sysctl -p "$SYSCTL_FILE" 2>&1 | grep -v "cannot stat" || true
-    
     # ── 可选参数：conntrack（需要 nf_conntrack 模块）────────────────────────────
     # GCP 内核可能未加载 nf_conntrack，尝试配置但不强制要求
     if [[ -f /proc/sys/net/netfilter/nf_conntrack_max ]]; then
@@ -335,7 +332,6 @@ EOF
 net.netfilter.nf_conntrack_max = ${CT_MAX}
 net.netfilter.nf_conntrack_tcp_timeout_established = 1200
 EOF
-        sysctl -p "$SYSCTL_FILE" 2>&1 | grep "net.netfilter" || true
     else
         log_warn "nf_conntrack 模块未加载，跳过连接跟踪配置（不影响基础功能）"
     fi
@@ -351,10 +347,12 @@ kernel.sched_latency_ns = 10000000
 kernel.sched_min_granularity_ns = 1000000
 kernel.sched_wakeup_granularity_ns = 2000000
 EOF
-        sysctl -p "$SYSCTL_FILE" 2>&1 | grep "kernel.sched" || true
     else
         log_warn "内核不支持调度器参数配置（GCP 限制，不影响基础功能）"
     fi
+    
+    # 应用所有 sysctl 参数（忽略不支持的参数）
+    sysctl -p "$SYSCTL_FILE" 2>&1 | grep -v "cannot stat" || true
     
     log_info "sysctl 参数配置完成（已跳过不支持的参数）"
 }
@@ -508,7 +506,8 @@ configure_tmp_tmpfs() {
     fi
     mkdir -p /tmp
     if mount -t tmpfs -o size=${TMPFS_SIZE},mode=1777,nosuid,nodev tmpfs /tmp 2>/dev/null; then
-        if ! grep -q "tmpfs /tmp" /etc/fstab 2>/dev/null; then
+        # MEDIUM FIX: 改进 grep 模式，避免匹配注释行
+        if ! grep -q "^[^#]*tmpfs[[:space:]]/tmp[[:space:]]tmpfs" /etc/fstab 2>/dev/null; then
             echo "tmpfs /tmp tmpfs size=${TMPFS_SIZE},mode=1777,nosuid,nodev 0 0" >> /etc/fstab
         fi
         log_info "/tmp tmpfs 已配置（${TMPFS_SIZE}）"

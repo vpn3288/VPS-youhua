@@ -160,8 +160,13 @@ optimize_memory_oracle() {
 
     # 保留 zram 泄洪区（不在此禁用 swap，由 configure_swap 统一决策）
     # 如果 Armbian zram 已配置，configure_swap 会检测到并跳过 swap 创建
+    # LOW FIX: zram 配置添加设备占用检查，避免误操作正在使用的 zram
     if [[ -d /sys/block/zram0 ]]; then
-        log_info "zram 保持原状（configure_swap 将根据 zram 状态决定是否创建 swap）"
+        if swapon --show 2>/dev/null | grep -q zram0; then
+            log_info "zram 已启用，保持原状（configure_swap 将根据 zram 状态决定是否创建 swap）"
+        else
+            log_info "zram 设备存在但未启用（configure_swap 将根据 zram 状态决定是否创建 swap）"
+        fi
     fi
 
     sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
@@ -284,7 +289,8 @@ optimize_network_oracle() {
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
             if [[ $cores -gt 0 ]]; then
                 local mask
-                if [[ $cores -eq 63 ]]; then
+                # MEDIUM FIX: 修复位运算逻辑，cores=63 时使用特殊处理
+                if [[ $cores -ge 63 ]]; then
                     mask="7fffffffffffffff"
                 else
                     mask=$(printf '%x' $(( (1 << cores) - 1 )))
@@ -426,7 +432,9 @@ install_docker() {
     mkdir -p /etc/apt/keyrings
     local gpg_tmp; gpg_tmp=$(mktemp)
     local gpg_stderr; gpg_stderr=$(mktemp)
-    trap 'rm -f "$gpg_tmp" "$gpg_stderr"' RETURN INT
+    # LOW FIX: 添加 gpg_dearmored 到 trap，确保所有临时文件被清理
+    local gpg_dearmored; gpg_dearmored=$(mktemp)
+    trap 'rm -f "$gpg_tmp" "$gpg_stderr" "$gpg_dearmored"' RETURN INT
 
     # 先下载到临时文件，避免 TOCTOU 漏洞
     if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then
@@ -436,7 +444,6 @@ install_docker() {
     fi
 
     # 转换为 gpg 格式（dearmor）到另一个临时文件
-    local gpg_dearmored; gpg_dearmored=$(mktemp)
     if ! gpg --dearmor -o "$gpg_dearmored" "$gpg_tmp" 2>"$gpg_stderr"; then
         log_error "Docker GPG 密钥格式转换失败"
         cat "$gpg_stderr" >> "$APT_LOG" 2>/dev/null

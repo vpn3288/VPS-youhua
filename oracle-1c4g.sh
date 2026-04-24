@@ -50,7 +50,11 @@ readonly TMPFS_SIZE="256M"
 # Oracle Cloud 1C4G TCP 缓冲（内存 4%，上限 16MB，下限 4MB）
 # 内存 4% 自适应（1C4G proxy 专用，省内存+够用）
 # 计算逻辑：MemTotal(KB) * 1024 转字节，取 4%，限制在 4MB-16MB 范围内（单位：字节）
+# MEDIUM FIX: 添加空值检查
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*4/100; if(buf>16777216) buf=16777216; if(buf<4194304) buf=4194304; printf "%.0f", buf}' /proc/meminfo)
+if [[ -z "$TCP_BUF_MAX" || ! "$TCP_BUF_MAX" =~ ^[0-9]+$ || "$TCP_BUF_MAX" -le 0 ]]; then
+    TCP_BUF_MAX=8388608  # 默认 8MB
+fi
 readonly TCP_BUF_MAX
 readonly CT_MAX=8192  # 1C4G 精简资源限制
 readonly SOMAXCONN=1024
@@ -491,7 +495,10 @@ run_doctor() {
     echo ""
     echo "5. 存储:"
     # Round 10 Fix: 使用 tail -1 而不是 NR==2，避免文件系统名称过长导致换行时解析失败
-    echo "   /tmp: $(df -h /tmp 2>/dev/null | tail -1 | awk '{print $2}' || echo 'tmpfs')"
+    # LOW FIX: df 解析添加错误处理，避免解析失败时输出空值
+    local tmp_size
+    tmp_size=$(df -h /tmp 2>/dev/null | tail -1 | awk '{print $2}' 2>/dev/null)
+    echo "   /tmp: ${tmp_size:-未知}"
     echo "   journald: $(journalctl --disk-usage 2>/dev/null | awk '{print $1,$2}' || echo '正常')"
     echo ""
 }

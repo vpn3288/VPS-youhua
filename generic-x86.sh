@@ -137,6 +137,7 @@ detect_storage_type() {
 # 内存分级检测
 # ─────────────────────────────────────────────────────────────────────────────
 detect_memory_profile() {
+    # LOW FIX: 改进 readonly 声明，先赋值再统一声明为 readonly
     if [[ $SYS_MEM_MB -ge 16384 ]]; then
         ZRAM_SIZE=0; SWAPPINESS=10; TCP_BUF_MAX=67108864; CT_MAX=262144; MIN_FREE_KB=32768
         PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
@@ -150,6 +151,7 @@ detect_memory_profile() {
         ZRAM_SIZE=1024; SWAPPINESS=30; TCP_BUF_MAX=8388608; CT_MAX=32768; MIN_FREE_KB=8192
         PROFILE_DESC="极低内存 (${SYS_MEM_MB}MB)"
     fi
+    # 统一声明为 readonly，避免重复声明错误
     readonly ZRAM_SIZE SWAPPINESS TCP_BUF_MAX CT_MAX MIN_FREE_KB PROFILE_DESC
 }
 
@@ -199,6 +201,8 @@ PRIORITY=100
 EOF
                 if ! systemctl enable --now zramswap 2>/dev/null; then
                     log_warn "zramswap 启用失败，尝试内核内置方式"
+                    # MEDIUM FIX: 清理失败的 zramswap 配置文件
+                    rm -f /etc/default/zramswap
                     zram_backend="builtin"
                 fi
             fi

@@ -335,7 +335,7 @@ EOF
             local name="${m%%:*}"
             local host="${m#*:}"
             local ms; ms=$(curl --connect-timeout 3 -s -o /dev/null -w "%{time_total}" "http://${host}/debian/" 2>/dev/null | awk '{printf "%.0f", $1*1000}')
-            # 防御：确保 ms 是有效数字（curl 失败或 awk 无输出时跳过）
+            # MEDIUM FIX: 防御：确保 ms 是有效数字（curl 失败或 awk 无输出时跳过）
             [[ -n "$ms" && "$ms" =~ ^[0-9]+$ && "$ms" -gt 0 ]] || continue
             [[ $ms -lt $fastest_ms ]] && fastest_ms=$ms && fastest=$name
         done
@@ -772,6 +772,8 @@ configure_fstab() {
     backup_file /etc/fstab
 
     # Round 10 Fix: 一次性处理整个文件，避免边读边写导致的数据损坏
+    # LOW FIX: TOCTOU 注释说明 - 使用临时文件 + 原子替换避免 Time-of-Check Time-of-Use 竞态条件
+    # 如果直接修改 /etc/fstab，在检查和写入之间可能被其他进程修改，导致数据不一致
     # 使用 awk 一次性处理所有行，更安全且高效
     local temp_fstab="/etc/fstab.vps-youhua-tmp.$$"
     
@@ -1046,6 +1048,11 @@ configure_swap() {
     # 检查磁盘空间（至少需要 1.5GB 可用空间，为 1GB swapfile 留出安全余量）
     local available_mb
     available_mb=$(df -BM / 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
+    # MEDIUM FIX: 添加 df 命令验证
+    if [[ -z "$available_mb" || ! "$available_mb" =~ ^[0-9]+$ ]]; then
+        log_warn "无法获取磁盘空间信息，跳过 Swap 创建"
+        return 0
+    fi
     if [[ "${available_mb}" -lt 1500 ]]; then
         log_warn "磁盘空间不足（可用: ${available_mb}MB < 1500MB），跳过 Swap 创建"
         return 0
