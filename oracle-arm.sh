@@ -65,24 +65,33 @@ load_common_optimize() {
     # 优先从本地加载
     if [[ -f "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh" ]]; then
         source "$(dirname "${BASH_SOURCE[0]}")/common-optimize.sh"
-        return 0
+        if declare -f log_step >/dev/null 2>&1; then
+            return 0
+        fi
+        echo -e "\033[33m[!] 警告: 本地 common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
     if [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
         source /tmp/vps-youhua-tmp/common-optimize.sh
-        return 0
+        if declare -f log_step >/dev/null 2>&1; then
+            return 0
+        fi
+        echo -e "\033[33m[!] 警告: /tmp/vps-youhua-tmp/common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
     if [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
         source /tmp/vps-youhua/common-optimize.sh
-        return 0
+        if declare -f log_step >/dev/null 2>&1; then
+            return 0
+        fi
+        echo -e "\033[33m[!] 警告: /tmp/vps-youhua/common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
     
-    # 下载到临时目录
+    # 下载到临时目录（SHA256 完整性验证）
     local tmpdir="/tmp/vps-youhua"
     local sha256_expected="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
-        # HIGH FIX: SHA256 校验供应链安全
+        # SHA256 校验供应链安全
         local sha256_actual
         sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
         if [[ "$sha256_actual" != "$sha256_expected" ]]; then
@@ -94,7 +103,11 @@ load_common_optimize() {
             exit 1
         fi
         source "${tmpdir}/common-optimize.sh"
-        return 0
+        if declare -f log_step >/dev/null 2>&1; then
+            return 0
+        fi
+        echo -e "\033[31m[✗] 错误: common-optimize.sh 下载成功但加载失败\033[0m" >&2
+        exit 1
     fi
     echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh\033[0m" >&2
     exit 1
