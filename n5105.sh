@@ -85,7 +85,7 @@ load_common_optimize() {
             echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
             rm -f "${tmpdir}/common-optimize.sh"
             rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
-            exit 1
+            exit 2
         fi
         source "${tmpdir}/common-optimize.sh"
         if declare -f log_step >/dev/null 2>&1; then
@@ -167,8 +167,8 @@ optimize_memory_n5105() {
         [[ -f "$sw" ]] && rm -f "$sw"
     done
     # LOW FIX: 统一 fstab sed 模式，使用一致的锚点语法
-    sed -i '\|^[^#]*[[:space:]]/swapfile[[:space:]]|d' /etc/fstab 2>/dev/null || true
-    sed -i '\|^[^#]*[[:space:]]/swap\.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
+    sed -i '/^[^#].*[[:space:]]\/swapfile[[:space:]]/d' /etc/fstab 2>/dev/null || true
+    sed -i '/^[^#].*[[:space:]]\/swap\.img[[:space:]]/d' /etc/fstab 2>/dev/null || true
 
     if [[ -f /sys/module/zswap/parameters/enabled ]]; then
         echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
@@ -194,7 +194,7 @@ EOF
                 break
             fi
             sleep 1
-            ((retry++))
+            ((retry++)) || true
         done
 
         if swapon --show 2>/dev/null | grep -q zram; then
@@ -414,7 +414,7 @@ install_docker() {
     mkdir -p /etc/apt/keyrings
     local gpg_tmp; gpg_tmp=$(mktemp)
     local gpg_stderr; gpg_stderr=$(mktemp)
-    trap 'rm -f "$gpg_tmp" "$gpg_stderr"' RETURN INT
+    trap 'rm -f "$gpg_tmp" "$gpg_stderr"' EXIT INT TERM ERR
 
     # 先下载到临时文件，避免 TOCTOU 漏洞
     if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then
@@ -493,7 +493,7 @@ EOF
     local max_retries=30
     while ! docker ps >/dev/null 2>&1 && [[ $retry -lt $max_retries ]]; do
         sleep 1
-        ((retry++))
+        ((retry++)) || true
     done
 
     # Docker 健康检查

@@ -98,7 +98,7 @@ load_common_optimize() {
             echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
             rm -f "${tmpdir}/common-optimize.sh"
             rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
-            exit 2
+            exit 1
         fi
         source "${tmpdir}/common-optimize.sh"
         if declare -f log_step >/dev/null 2>&1; then
@@ -327,8 +327,8 @@ optimize_memory_r4s() {
         [[ -f "$sw" ]] && rm -f "$sw"
     done
     # HIGH FIX: 使用精确锚点匹配 fstab swap 条目
-    sed -i '/^[^#].*[[:space:]]\/swapfile[[:space:]]/d' /etc/fstab 2>/dev/null || true
-    sed -i '/^[^#].*[[:space:]]\/swap\.img[[:space:]]/d' /etc/fstab 2>/dev/null || true
+    sed -i '\|^[^#]*[[:space:]]/swapfile[[:space:]]|d' /etc/fstab 2>/dev/null || true
+    sed -i '\|^[^#]*[[:space:]]/swap.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
 
     # ── zram 内存扩展（R4S 4GB TF，50% mem = ~1.9GB 等效）────────────
     if ! modprobe zram 2>/dev/null; then
@@ -742,7 +742,7 @@ install_docker() {
     local gpg_tmp; gpg_tmp=$(mktemp)
     local gpg_stderr; gpg_stderr=$(mktemp)
     local gpg_dearmored; gpg_dearmored=$(mktemp)
-    trap 'rm -f "$gpg_tmp" "$gpg_stderr" "$gpg_dearmored"' EXIT INT TERM ERR
+    trap 'rm -f "$gpg_tmp" "$gpg_stderr" "$gpg_dearmored"' RETURN INT
 
     # 先下载到临时文件，避免 TOCTOU 漏洞
     if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then

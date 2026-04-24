@@ -129,7 +129,7 @@ run_verify_status() {
         log_error "预期: ${EXPECTED_SHA256[verify-v3.4]}"
         log_error "实际: $actual_sha256"
         rm -f "$verify_file"
-        exit 2
+        return 1
     fi
 
     bash "$verify_file"
@@ -224,7 +224,7 @@ wait_for_apt_lock() {
             log_error "  2. sudo kill <PID>"
             log_error "  3. sudo dpkg --configure -a"
             log_error "  4. 重新运行本脚本"
-            exit 5
+            return 1
         fi
         sleep 2
         waited=$((waited + 2))

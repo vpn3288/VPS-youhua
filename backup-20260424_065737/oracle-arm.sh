@@ -2,12 +2,12 @@
 #
 # 修复: 非交互式环境(如SSH远程执行)需要 TERM 变量
 : "${TERM:=xterm}"
-# VPS 优化脚本 - NanoPC T6 (Armbian)
+# VPS 优化脚本 - Oracle Cloud ARM
 #
 # 用法:
-#   sudo bash nanopc-t6.sh                    # 完整安装（底层优化 + 软件依赖）
-#   sudo bash nanopc-t6.sh --optimize-only    # 仅底层优化
-#   sudo bash nanopc-t6.sh --uninstall        # 卸载所有优化
+#   sudo bash oracle-arm.sh                    # 完整安装（底层优化 + 软件依赖）
+#   sudo bash oracle-arm.sh --optimize-only    # 仅底层优化
+#   sudo bash oracle-arm.sh --uninstall        # 卸载所有优化
 #
 # 功能:
 #   - 系统内核参数优化（网络、内存、文件系统）
@@ -19,12 +19,12 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.4.1
-# 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
-# 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
+# Oracle Cloud ARM 专用优化安装脚本 v3.4.4
+# 硬件: Ampere Altra, 2核16GB, 100GB 云盘
+# 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
 #
-# 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopc-t6.sh)
+# 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)
 #
 # 模式说明:
 #   --optimize-only   纯环境优化（不安装 Docker/Node.js）
@@ -34,30 +34,27 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────────────────────────
 # 平台信息
 # ─────────────────────────────────────────────────────────────────────────────
-readonly PLATFORM_NAME="NanoPC T6 (Armbian)"
-readonly PLATFORM_DESC="RK3588S ARM64 | 16GB RAM | eMMC | Armbian 24.04"
+readonly PLATFORM_NAME="Oracle Cloud ARM"
+readonly PLATFORM_DESC="Ampere Altra ($(awk '/MemTotal/{printf "%.0fGB", $2/1024/1024}' /proc/meminfo), Oracle Cloud)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 平台差异变量（T6 专项）
+# 平台差异变量（Oracle ARM 专项）
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-t6.conf"
-# journald persistent for eMMC
+readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-oracle-arm.conf"
+# journald persistent for cloud server
 readonly JOURNALD_STORAGE="persistent"
-readonly JOURNALD_MAX_USE="100M"             # eMMC 可以用更多日志
-readonly TMPFS_SIZE="1024M"                  # 16GB 机器 /tmp 可以更大
+readonly JOURNALD_MAX_USE="100M"
+readonly TMPFS_SIZE="512M"
 
-# T6 使用 Armbian 原生 zram-config（SIZE=30%），不使用 ZRAM_SIZE 变量
-readonly ZRAM_ALGO="lz4"
-readonly SWAPPINESS=20                        # 16GB 积极回收 page cache
-readonly MIN_FREE_KB=65536                     # 16GB OOM 防线
-
-# T6 网络（2.5GbE × 2）
-readonly NETDEV_BACKLOG=131072
+# Oracle Cloud ARM Ampere 带宽：每核 1Gbps（1C=1G，2C=2G，4C=4G），远高于 X86 免费小户型 50Mbps
+# 内存 5% 作为 TCP 缓冲，上限 64MB（2C16G），下限 16MB（1C4G）
+TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*5/100; if(buf>67108864) buf=67108864; if(buf<16777216) buf=16777216; printf "%d", buf}' /proc/meminfo)
+readonly TCP_BUF_MAX
+readonly CT_MAX=131072
 readonly SOMAXCONN=65535
-# BUG 修复: T6 16GB 机器使用动态 conntrack 公式
-# 动态: RAM_MB * 32，范围 [16384, 1048576]
-# 公式: RAM_MB * 32 提供足够连接数同时不耗尽内存
-readonly CT_HASH_SIZE=131072
+readonly NETDEV_BACKLOG=65535
+readonly SWAPPINESS=10
+readonly MIN_FREE_KB=32768
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 加载通用函数库（必须在所有函数定义之前，让平台专属函数正确 override）
@@ -88,13 +85,13 @@ load_common_optimize() {
         echo -e "\033[33m[!] 警告: /tmp/vps-youhua/common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
     
-    # 下载到临时目录
+    # 下载到临时目录（SHA256 完整性验证）
     local tmpdir="/tmp/vps-youhua"
+    local sha256_expected="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         # SHA256 校验供应链安全
-        local sha256_expected="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
         local sha256_actual
         sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
         if [[ "$sha256_actual" != "$sha256_expected" ]]; then
@@ -103,7 +100,7 @@ load_common_optimize() {
             echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
             rm -f "${tmpdir}/common-optimize.sh"
             rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
-            exit 2
+            exit 1
         fi
         source "${tmpdir}/common-optimize.sh"
         if declare -f log_step >/dev/null 2>&1; then
@@ -119,108 +116,70 @@ load_common_optimize() {
 load_common_optimize
 
 # ─────────────────────────────────────────────────────────────────────────────
-# T6 eMMC 存储检测
+# Oracle Cloud 检测
 # ─────────────────────────────────────────────────────────────────────────────
-detect_storage_type() {
-    # T6 专用 eMMC，始终返回 emmc
-    STORAGE_TYPE="emmc"
-    local root_dev
-    root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    root_dev=$(basename "$root_dev" 2>/dev/null)
-
-    if [[ "$root_dev" == mmcblk* ]]; then
-        log_info "检测到 eMMC 存储（$root_dev）"
+detect_oracle_cloud() {
+    if grep -qi "oracle" /sys/class/dmi/id/sys_vendor 2>/dev/null || \
+       grep -qi "oracle" /sys/class/dmi/id/product_name 2>/dev/null; then
+        SYS_IS_ORACLE_CLOUD=true
+        log_info "Oracle Cloud 环境检测通过"
     else
-        log_info "系统盘: $root_dev"
+        SYS_IS_ORACLE_CLOUD=false
     fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 内存优化（T6 16GB 平衡模式：保留 ZRAM）
+# Oracle Cloud 专属清理（云监控组件）
 # ─────────────────────────────────────────────────────────────────────────────
-optimize_memory_t6() {
-    log_step "配置内存 (T6 16GB 平衡模式)..."
+oracle_cloud_cleanup() {
+    [[ "$SYS_IS_ORACLE_CLOUD" != "true" ]] && return 0
+    log_step "Oracle Cloud 专属清理..."
 
-    # 禁用物理 swap（eMMC 也尽量不用）
-    # Round 3 Fix M2: 添加循环变量 local 声明
-    local sw
-    for sw in /swapfile /swap.img; do
-        swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
-        [[ -f "$sw" ]] && rm -f "$sw"
-    done
-    # HIGH FIX: 使用精确锚点匹配 fstab swap 条目
-    sed -i '\|^[^#]*[[:space:]]/swapfile[[:space:]]|d' /etc/fstab 2>/dev/null || true
-    sed -i '\|^[^#]*[[:space:]]/swap.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
-
-    # Armbian zram-config 保留（zram 是压缩内存，零磁盘写入）
-    if systemctl is-active armbian-zram-config &>/dev/null; then
-        log_info "Armbian zram-config 保持原状"
+    # 禁用 Oracle 云监控 agent（节省资源 + 减少磁盘写入）
+    if systemctl is-active oracle-cloud-agent &>/dev/null; then
+        systemctl disable --now oracle-cloud-agent oracle-cloud-agent-updater 2>/dev/null || true
+        systemctl mask oracle-cloud-agent oracle-cloud-agent-updater 2>/dev/null || true
+        log_info "oracle-cloud-agent 已禁用"
     fi
 
-    # ── Armbian 原生 zram-config 强化（T6 16GB）────────────────────────────────
-    if [[ -f /etc/default/armbian-zram-config ]]; then
-        # LOW FIX: sed 幂等性检查改进，处理末尾空格
-        if grep -q "^ENABLED=" /etc/default/armbian-zram-config 2>/dev/null; then
-            # 只在值不是 true 时才修改（忽略末尾空格）
-            if ! grep -qE "^ENABLED=true[[:space:]]*$" /etc/default/armbian-zram-config 2>/dev/null; then
-                sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-zram-config
-            fi
-        else
-            echo "ENABLED=true" >> /etc/default/armbian-zram-config
-        fi
-        # 16GB 内存下 zram SIZE=30%（T6 eMMC 耐久好，不强制压缩内存）
-        if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
-            # 只在值不是 30% 时才修改（忽略末尾空格）
-            if ! grep -qE "^SIZE=30%[[:space:]]*$" /etc/default/armbian-zram-config 2>/dev/null; then
-                sed -i 's/^SIZE=.*$/SIZE=30%/' /etc/default/armbian-zram-config
-            fi
-        else
-            echo "SIZE=30%" >> /etc/default/armbian-zram-config
-        fi
-        log_info "Armbian zram-config 已强化（SIZE=30%）"
-    fi
-
-    # ── Armbian 原生 ramlog 强化（T6）──────────────────────────────────────────
-    if [[ -f /etc/default/armbian-ramlog ]]; then
-        if grep -q "^ENABLED=" /etc/default/armbian-ramlog 2>/dev/null; then
-            sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-ramlog
-        else
-            echo "ENABLED=true" >> /etc/default/armbian-ramlog
-        fi
-        if grep -q "^SIZE=" /etc/default/armbian-ramlog 2>/dev/null; then
-            sed -i 's/^SIZE=.*$/SIZE=256M/' /etc/default/armbian-ramlog
-        else
-            echo "SIZE=256M" >> /etc/default/armbian-ramlog
-        fi
-        log_info "Armbian ramlog 已强化（SIZE=256M）"
-    fi
-
-    # ── eMMC 每周 fstrim 定时任务（保持长期性能）────────────────────────────
-    mkdir -p /etc/cron.weekly
-    cat > /etc/cron.weekly/fstrim-emmc <<'EOF'
-#!/bin/sh
-# NanoPC T6 eMMC 每周 fstrim（保持长期 IO 性能）
-for d in / /var; do
-    fstrim -v "$d" 2>/dev/null || true
-done
+    # cloud-init 保留配置但禁用网络探测（避免每次启动执行脚本）
+    mkdir -p /etc/cloud/cloud.cfg.d
+    cat > /etc/cloud/cloud.cfg.d/99-disable-net.cfg <<'EOF'
+network:
+  config: disabled
 EOF
-    chmod +x /etc/cron.weekly/fstrim-emmc
-    log_info "已创建 eMMC 每周 fstrim 定时任务"
 
-    sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
-    log_info "内存优化完成（zram 保留，swappiness=$SWAPPINESS）"
+    log_info "Oracle Cloud 专属清理完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# T6 sysctl（高性能网络 + 平衡内存）
+# 内存优化（Oracle 16GB：保留 zram 泄洪）
 # ─────────────────────────────────────────────────────────────────────────────
-configure_sysctl_t6() {
-    log_step "配置 sysctl (NanoPC T6)..."
+optimize_memory_oracle() {
+    log_step "配置内存 (Oracle Cloud ARM)..."
 
-    # 计算 conntrack_max（使用 RAM_MB * 32 公式，范围 [16384, 1048576]）
-    local calc_conntrack_max=$(( SYS_MEM_MB * 32 ))
-    [[ $calc_conntrack_max -lt 16384 ]] && calc_conntrack_max=16384
-    [[ $calc_conntrack_max -gt 1048576 ]] && calc_conntrack_max=1048576
+    # 保留 zram 泄洪区（不在此禁用 swap，由 configure_swap 统一决策）
+    # 如果 Armbian zram 已配置，configure_swap 会检测到并跳过 swap 创建
+    # LOW FIX: zram 配置添加设备占用检查，避免误操作正在使用的 zram
+    if [[ -d /sys/block/zram0 ]]; then
+        if swapon --show 2>/dev/null | grep -q zram0; then
+            log_info "zram 已启用，保持原状（configure_swap 将根据 zram 状态决定是否创建 swap）"
+        else
+            log_info "zram 设备存在但未启用（configure_swap 将根据 zram 状态决定是否创建 swap）"
+        fi
+    fi
+
+    sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
+    sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
+    log_info "内存优化完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Oracle Cloud sysctl（高缓冲 + 连接追踪）
+# ─────────────────────────────────────────────────────────────────────────────
+
+configure_sysctl_oracle() {
+    log_step "配置 sysctl (Oracle Cloud ARM)..."
 
     backup_file "$SYSCTL_FILE"
 
@@ -228,32 +187,36 @@ configure_sysctl_t6() {
 
     cat >> "$SYSCTL_FILE" <<EOF
 
-# ── T6 内存（16GB 平衡）──────────────────────────────────────────────────────
+# ── Oracle Cloud 内存 ───────────────────────────────────────────────────────
 vm.swappiness = ${SWAPPINESS}
+vm.min_free_kbytes = ${MIN_FREE_KB}
+vm.vfs_cache_pressure = 50
+vm.oom_kill_allocating_task = 1
 vm.dirty_ratio = 20
-vm.dirty_background_ratio = 5
-vm.dirty_writeback_centisecs = 10000
+vm.dirty_background_ratio = 10
+vm.dirty_writeback_centisecs = 15000
 vm.dirty_expire_centisecs = 60000
 
-# ── T6 网络（2.5GbE × 2，高并发）────────────────────────────────────────────
+# ── Oracle Cloud 网络（高缓冲）───────────────────────────────────────────────
 net.core.netdev_max_backlog = ${NETDEV_BACKLOG}
 net.core.somaxconn = ${SOMAXCONN}
-net.core.rmem_max = 33554432
-net.core.wmem_max = 33554432
-net.ipv4.tcp_rmem = 4096 262144 33554432
-net.ipv4.tcp_wmem = 4096 262144 33554432
+net.core.rmem_max = ${TCP_BUF_MAX}
+net.core.wmem_max = ${TCP_BUF_MAX}
+net.ipv4.tcp_rmem = 4096 262144 ${TCP_BUF_MAX}
+net.ipv4.tcp_wmem = 4096 262144 ${TCP_BUF_MAX}
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_orphan_retries = 1
 net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
-# SYN cookies for DDoS protection on proxy servers
-net.ipv4.tcp_syncookies = 1
 
-# ── 连接追踪 ─────────────────────────────────────────────────────────────────
-net.netfilter.nf_conntrack_max = ${calc_conntrack_max}
-# AUDIT-13 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
-# 将在 configure_conntrack_hashsize_t6() 函数中通过 /sys/module 设置
+# ── Oracle Cloud 连接追踪 ────────────────────────────────────────────────────
+net.netfilter.nf_conntrack_max = ${CT_MAX}
+# AUDIT-2 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# 将在 configure_conntrack_hashsize() 函数中通过 /sys/module 设置
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
 net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30
@@ -263,68 +226,13 @@ net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 EOF
 
     apply_sysctl
-    log_info "T6 sysctl 配置完成"
+    log_info "Oracle sysctl 配置完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ARM 专项优化（T6 RK3588S）
+# AUDIT-2 FIX: 设置 nf_conntrack_hashsize（只读参数，不能通过 sysctl）
 # ─────────────────────────────────────────────────────────────────────────────
-optimize_arm() {
-    log_step "ARM 专项优化..."
-
-    mkdir -p /etc/default
-    cat > /etc/default/cpufrequtils <<'EOF'
-GOVERNOR=schedutil
-MIN_SPEED=408000
-MAX_SPEED=2400000
-EOF
-    systemctl restart cpufrequtils 2>/dev/null || true
-
-    if ! command -v irqbalance &>/dev/null; then
-        apt-get install -y irqbalance >> "$APT_LOG" 2>&1 || true
-    fi
-    systemctl enable irqbalance 2>/dev/null || true
-
-    log_info "ARM 优化完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# T6 网络优化（2.5GbE 高吞吐）
-# ─────────────────────────────────────────────────────────────────────────────
-optimize_network_t6() {
-    log_step "T6 网络优化..."
-
-    for iface in /sys/class/net/en* /sys/class/net/eth*; do
-        [[ -d "$iface" ]] || continue
-        local name; name=$(basename "$iface")
-
-        # 启用 TSO/GSO/GRO
-        ethtool -K "$name" tso on 2>/dev/null || true
-        ethtool -K "$name" gso on 2>/dev/null || true
-        ethtool -K "$name" gro on 2>/dev/null || true
-        ip link set "$name" txqueuelen 10000 2>/dev/null || true
-
-        # RPS（RK3588S 多核）
-        if [[ $SYS_CPU_CORES -gt 1 ]]; then
-            local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            if [[ $cores -gt 0 ]]; then
-                local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
-                for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
-                    [[ -f "$rps_file" ]] || continue
-                    printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
-                done
-            fi
-        fi
-        log_info "网卡 $name 已优化"
-    done
-
-    log_info "T6 网络优化完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# HIGH FIX: 标准化 nf_conntrack_hashsize 配置（只读参数，不能通过 sysctl）
-# ─────────────────────────────────────────────────────────────────────────────
-configure_conntrack_hashsize_t6() {
+configure_conntrack_hashsize() {
     log_step "配置 nf_conntrack_hashsize..."
     
     # 加载 nf_conntrack 模块
@@ -332,35 +240,8 @@ configure_conntrack_hashsize_t6() {
     
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
-        # 计算 hashsize（conntrack_max / 4，上限为 CT_HASH_SIZE）
-        local calc_conntrack_max
-        calc_conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
-        
-        # Round 3 Fix H1: 增强参数验证
-        if [[ -z "$calc_conntrack_max" || "$calc_conntrack_max" -le 0 ]]; then
-            log_warn "conntrack_max 无效（${calc_conntrack_max:-未定义}），使用默认值"
-            calc_conntrack_max=262144
-        fi
-        
-        # 验证是否为有效数字
-        if ! [[ "$calc_conntrack_max" =~ ^[0-9]+$ ]]; then
-            log_warn "conntrack_max 不是有效数字（${calc_conntrack_max}），使用默认值 262144"
-            calc_conntrack_max=262144
-        fi
-        
-        local hashsize=$(( calc_conntrack_max / 4 ))
-        
-        # 最小值保护
-        if [[ $hashsize -lt 16384 ]]; then
-            log_warn "hashsize 过小（$hashsize），使用最小值 16384"
-            hashsize=16384
-        fi
-        
-        # CT_HASH_SIZE 作为上限保护
-        if [[ $hashsize -gt $CT_HASH_SIZE ]]; then
-            hashsize=$CT_HASH_SIZE
-        fi
-        
+        local hashsize
+        hashsize=$((CT_MAX / 4))
         echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
             log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
             # 备用方案：通过 modprobe 配置（下次启动或模块重载时生效）
@@ -376,7 +257,90 @@ configure_conntrack_hashsize_t6() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OOM 配置
+# Oracle Cloud 网卡优化（MTU 感知 / TSO-GRO / RPS）
+# ─────────────────────────────────────────────────────────────────────────────
+optimize_network_oracle() {
+    log_step "Oracle Cloud 网络优化..."
+
+    local primary_iface
+    primary_iface=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}')
+
+    if [[ -n "$primary_iface" ]] && [[ -d "/sys/class/net/$primary_iface" ]]; then
+        local mtu; mtu=$(cat "/sys/class/net/$primary_iface/mtu" 2>/dev/null || echo "unknown")
+        if [[ "$mtu" == "1500" ]]; then
+            log_warn "主网卡 $primary_iface MTU=1500（公网）；Oracle 内部网络 MTU=9001"
+        elif [[ "$mtu" =~ ^[0-9]+$ ]] && [[ $mtu -gt 1500 ]]; then
+            log_info "主网卡 $primary_iface MTU=$mtu（内部网络）"
+        fi
+    fi
+
+    for iface in /sys/class/net/en* /sys/class/net/eth*; do
+        [[ -d "$iface" ]] || continue
+        local name; name=$(basename "$iface")
+
+        ethtool -K "$name" tso on 2>/dev/null || true
+        ethtool -K "$name" gso on 2>/dev/null || true
+        ethtool -K "$name" gro on 2>/dev/null || true
+        ip link set "$name" txqueuelen 10000 2>/dev/null || true
+
+        # RPS
+        # AUDIT-4 FIX: 防御性检查 cores=0 的情况
+        if [[ ${SYS_CPU_CORES:-0} -gt 1 ]]; then
+            local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
+            if [[ $cores -gt 0 ]]; then
+                local mask
+                # MEDIUM FIX: 修复位运算逻辑，cores=63 时使用特殊处理
+                if [[ $cores -ge 63 ]]; then
+                    mask="7fffffffffffffff"
+                else
+                    mask=$(printf '%x' $(( (1 << cores) - 1 )))
+                fi
+                for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
+                    [[ -f "$rps_file" ]] || continue
+                    printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
+                done
+            fi
+        fi
+        log_info "网卡 $name 已优化"
+    done
+
+    log_info "Oracle Cloud 网络优化完成"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CPUFreq Governor（Oracle Cloud ARM 物理机，设置为 performance）
+# ─────────────────────────────────────────────────────────────────────────────
+configure_cpufreq() {
+    log_step "配置 CPUFreq Governor (performance)..."
+
+    # 检查 cpufrequtils 是否可用
+    if ! command -v cpufreq-set &>/dev/null; then
+        log_info "cpufrequtils 未安装，跳过（通常在虚拟化环境中）"
+        return 0
+    fi
+
+    # 设置所有核心为 performance（-r = 全局）
+    cpufreq-set -r -g performance 2>/dev/null || {
+        log_warn "cpufreq-set -r 失败，尝试逐核心设置..."
+        for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+            [[ -f "$cpu/cpufreq/scaling_governor" ]] || continue
+            echo "performance" > "$cpu/cpufreq/scaling_governor" 2>/dev/null || true
+        done
+    }
+
+    # 持久化到 /etc/default/cpufrequtils（系统重启后生效）
+    mkdir -p /etc/default
+    cat > /etc/default/cpufrequtils <<'EOF'
+ENABLE="true"
+GOVERNOR="performance"
+EOF
+
+    local gov; gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
+    log_info "CPUFreq Governor: $gov"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OOM
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_oom() {
     log_step "配置 OOM Killer..."
@@ -384,24 +348,25 @@ optimize_oom() {
     cat > /etc/systemd/system.conf.d/99-oom-policy.conf <<'EOF'
 [Manager]
 OOMPolicy=continue
-OOMScoreAdjust=-300
+OOMScoreAdjust=-900
 EOF
     systemctl daemon-reload 2>/dev/null || true
     log_info "OOM Killer 配置完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# journald（T6 eMMC 模式）
+# journald
 # ─────────────────────────────────────────────────────────────────────────────
 configure_journald() {
     log_step "配置 journald..."
+    local journald_conf="/etc/systemd/journald.conf.d/99-vps-youhua.conf"
+    
+    # 备份现有配置
+    [[ -f "$journald_conf" ]] && backup_file "$journald_conf"
+    
     mkdir -p /etc/systemd/journald.conf.d
 
-    # Round 3 Fix H2: 添加备份
-    local journald_conf="/etc/systemd/journald.conf.d/99-vps-youhua.conf"
-    [[ -f "$journald_conf" ]] && backup_file "$journald_conf"
-
-    cat > /etc/systemd/journald.conf.d/99-vps-youhua.conf <<EOF
+    cat > "$journald_conf" <<EOF
 [Journal]
 SystemMaxUse=${JOURNALD_MAX_USE}
 SystemMaxFileSize=50M
@@ -412,11 +377,11 @@ RuntimeMaxUse=100M
 Seal=yes
 EOF
     systemctl restart systemd-journald 2>/dev/null || true
-    log_info "journald 配置完成（Storage=${JOURNALD_STORAGE}）"
+    log_info "journald 配置完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# I/O Scheduler（eMMC/SSD → none）
+# I/O Scheduler（云盘用 none）
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_io_scheduler() {
     log_step "配置 I/O Scheduler..."
@@ -425,21 +390,10 @@ optimize_io_scheduler() {
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    if [[ "$root_dev" == mmcblk* ]]; then
-        # eMMC 或 TF 卡：none
-        local sched_file="/sys/block/${root_dev}/queue/scheduler"
-        if [[ -f "$sched_file" ]]; then
-            echo "none" > "$sched_file" 2>/dev/null || true
-            log_info "eMMC/TF $root_dev I/O Scheduler → none"
-        fi
-    elif [[ -f "/sys/block/${root_dev}/queue/rotational" ]] && \
-         [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]]; then
-        # SSD：none
-        local sched_file="/sys/block/${root_dev}/queue/scheduler"
-        if [[ -f "$sched_file" ]]; then
-            echo "none" > "$sched_file" 2>/dev/null || true
-            log_info "SSD $root_dev I/O Scheduler → none"
-        fi
+    local sched_file="/sys/block/${root_dev}/queue/scheduler"
+    if [[ -f "$sched_file" ]]; then
+        echo "none" > "$sched_file" 2>/dev/null || true
+        log_info "云盘 $root_dev I/O Scheduler → none"
     fi
 }
 
@@ -478,7 +432,9 @@ install_docker() {
     mkdir -p /etc/apt/keyrings
     local gpg_tmp; gpg_tmp=$(mktemp)
     local gpg_stderr; gpg_stderr=$(mktemp)
-    trap 'rm -f "$gpg_tmp" "$gpg_stderr"' RETURN INT
+    # LOW FIX: 添加 gpg_dearmored 到 trap，确保所有临时文件被清理
+    local gpg_dearmored; gpg_dearmored=$(mktemp)
+    trap 'rm -f "$gpg_tmp" "$gpg_stderr" "$gpg_dearmored"' RETURN INT
 
     # 先下载到临时文件，避免 TOCTOU 漏洞
     if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then
@@ -488,7 +444,6 @@ install_docker() {
     fi
 
     # 转换为 gpg 格式（dearmor）到另一个临时文件
-    local gpg_dearmored; gpg_dearmored=$(mktemp)
     if ! gpg --dearmor -o "$gpg_dearmored" "$gpg_tmp" 2>"$gpg_stderr"; then
         log_error "Docker GPG 密钥格式转换失败"
         cat "$gpg_stderr" >> "$APT_LOG" 2>/dev/null
@@ -541,13 +496,28 @@ install_docker() {
 {
   "registry-mirrors": [
     "https://docker.1ms.run",
-    "https://docker.xuanyuan.me"
+    "https://docker.xuanyuan.me",
+    "https://docker.m.daocloud.io"
   ],
   "log-driver": "json-file",
   "log-opts": {"max-size": "10m", "max-file": "3"}
 }
 EOF
     systemctl restart docker 2>/dev/null || true
+    
+    # AUDIT-7 FIX: 等待 Docker daemon 启动（最多等待 10 秒）
+    local wait_count=0
+    while ! docker info >/dev/null 2>&1; do
+        if [[ $wait_count -ge 10 ]]; then
+            log_warn "Docker daemon 启动超时"
+            break
+        fi
+        sleep 1
+        # M1 FIX: wait_count++ 在 (( )) 中返回 1（当值为0时），导致 set -e 退出
+        # 使用 += 替代 ++ 确保始终返回成功
+        ((wait_count += 1)) || true
+    done
+    
     # Docker 健康检查
     if docker ps >/dev/null 2>&1; then
         log_info "Docker 运行正常: $(docker ps -q | wc -l) 个容器在运行"
@@ -569,33 +539,28 @@ install_nodejs() {
         return 0
     fi
 
-    # [H10] FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
-    local nodesource_script="/tmp/setup_nodesource.sh"
+    # H8 FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
+    # 供应链安全: SHA256 校验（与 n5105.sh 保持一致）
+    local nodesource_script="/tmp/nodesource_setup_22.sh"
     local nodesource_download_ok=false
-    if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null; then
-        nodesource_download_ok=true
-    fi
+    curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null && nodesource_download_ok=true
 
     if [[ "$nodesource_download_ok" == "true" ]]; then
-        # SHA256 完整性校验（防止供应链污染）
-        # ⚠️  警告：NodeSource 脚本会定期更新，SHA256 会变化
-        # 生产环境建议：
-        #   1. 定期更新此校验和（每月检查 https://deb.nodesource.com/setup_lts.x）
-        #   2. 或使用动态校验（curl + 官方签名验证）
-        #   3. 或固定 Node.js 版本号避免自动更新
-        local expected_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
-        local actual_sha256
-        actual_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
-        if [[ "$actual_sha256" == "$expected_sha256" ]]; then
-            chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && log_info "Node.js 安装完成" || nodesource_download_ok="failed"
+        # 注意：NodeSource 脚本会定期更新，SHA256 会变化
+        # 生产环境建议定期更新此校验和或使用动态校验
+        local expected_nodesource_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
+        local actual_nodesource_sha256
+        actual_nodesource_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_nodesource_sha256" == "$expected_nodesource_sha256" ]]; then
+            chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && nodesource_download_ok="verified" || nodesource_download_ok="failed"
         else
-            log_warn "NodeSource SHA256 校验异常（预期: $expected_sha256, 实际: $actual_sha256），跳过执行"
+            log_warn "NodeSource 安装脚本 SHA256 校验异常（预期: $expected_nodesource_sha256, 实际: $actual_nodesource_sha256），跳过执行"
             nodesource_download_ok="failed"
         fi
         rm -f "$nodesource_script"
     fi
 
-    if [[ "$nodesource_download_ok" != "true" ]]; then
+    if [[ "$nodesource_download_ok" != "verified" ]]; then
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
@@ -617,13 +582,14 @@ install_nodejs() {
 run_doctor() {
     log_step "运行诊断..."
     echo ""
-    echo "=== VPS-youhua 环境诊断报告 (NanoPC T6) ==="
+    echo "=== VPS-youhua 环境诊断报告 (Oracle Cloud ARM) ==="
     echo ""
     echo "1. 系统信息:"
     echo "   平台: $PLATFORM_NAME"
     echo "   系统: $(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d'"' -f2)"
     echo "   内核: $(uname -r)"
     echo "   内存: ${SYS_MEM_MB}MB"
+    echo "   Oracle: ${SYS_IS_ORACLE_CLOUD}"
     echo ""
     echo "2. CPU:"
     local gov; gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
@@ -717,9 +683,8 @@ uninstall_all() {
     echo ""
     echo -e "${CYAN}[➜] 开始卸载...${NC}"
 
-
     # 清理所有配置文件
-    rm -f /etc/sysctl.d/99-vps-youhua-t6.conf
+    rm -f /etc/sysctl.d/99-vps-youhua-oracle-arm.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
     rm -f /etc/security/limits.d/99-vps-youhua.conf
     rm -f /etc/systemd/system.conf.d/99-memory-accounting.conf
@@ -733,23 +698,20 @@ uninstall_all() {
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-unattended
     rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
-    rm -f /etc/cron.weekly/fstrim-emmc
-    rm -f /etc/profile.d/nodejs-memory.sh
-    rm -f /etc/docker/daemon.json
+    rm -f /etc/cloud/cloud.cfg.d/99-disable-net.cfg
     rm -f /etc/modprobe.d/nf_conntrack.conf
-    # 恢复 Armbian zram-config 默认值
-    if [[ -f /etc/default/armbian-zram-config ]]; then
-        sed -i 's/^ENABLED=.*/ENABLED=false/' /etc/default/armbian-zram-config 2>/dev/null || true
-        sed -i 's/^SIZE=.*/SIZE=50%/' /etc/default/armbian-zram-config 2>/dev/null || true
+    rm -f /etc/docker/daemon.json
+    rm -f /var/run/vps-youhua-tmpfs-mount
+    rm -f /etc/profile.d/99-agent-cache.sh
+
+    # 停止并卸载 Docker（如果安装了的话）
+    if command -v docker &>/dev/null; then
+        systemctl stop docker 2>/dev/null || true
+        systemctl disable docker 2>/dev/null || true
+        apt-get remove --purge -y docker.io docker-ce docker-ce-cli containerd.io 2>/dev/null || true
+        rm -rf /var/lib/docker 2>/dev/null || true
+        log_info "Docker 已完全卸载"
     fi
-    # 恢复 Armbian ramlog 默认值
-    if [[ -f /etc/default/armbian-ramlog ]]; then
-        sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog 2>/dev/null || true
-        sed -i 's/^SIZE=.*/SIZE=100M/' /etc/default/armbian-ramlog 2>/dev/null || true
-    fi
-    # 恢复 fstab tmpfs 条目（/tmp 和 /var/log）
-    sed -i '/tmpfs.*\/tmp/d' /etc/fstab 2>/dev/null || true
-    sed -i '/tmpfs.*\/var\/log/d' /etc/fstab 2>/dev/null || true
 
     # 停止并卸载 unattended-upgrades（如果安装了的话）
     if command -v unattended-upgrades &>/dev/null; then
@@ -792,6 +754,35 @@ uninstall_all() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Oracle Cloud 元数据健康检查（可选，防云端 kill）
+# ─────────────────────────────────────────────────────────────────────────────
+check_oracle_metadata() {
+    log_step "检查 Oracle Cloud 元数据..."
+
+    # 检测是否在 Oracle Cloud 环境中
+    local meta_status
+    meta_status=$(curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" \
+        http://169.254.169.254/latest/meta-data/ 2>/dev/null || echo "000")
+
+    if [[ "$meta_status" == "200" ]]; then
+        local instance_id
+        instance_id=$(curl -s --connect-timeout 3 http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null || echo "unknown")
+        log_info "Oracle Cloud 元数据正常（实例: $instance_id）"
+
+        # 检测是否启用了 Oracle Cloud Agent（消耗资源）
+        local agent_status
+        agent_status=$(systemctl is-active oracle-cloud-agent 2>/dev/null || echo "inactive")
+        if [[ "$agent_status" == "active" ]]; then
+            log_warn "检测到 Oracle Cloud Agent 运行中（消耗内存/CPU），已安排卸载"
+        else
+            log_info "Oracle Cloud Agent 未运行（已卸载或不存在）"
+        fi
+    else
+        log_info "非 Oracle Cloud 环境或元数据端点不可访问（元数据检查跳过）"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 主函数
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
@@ -801,8 +792,10 @@ main() {
             --uninstall) ;;
         esac
     done
+
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
+    local did_install=false
 
     if [[ "${1:-}" == "--uninstall" ]]; then
         uninstall_all "$@" || exit 1
@@ -810,20 +803,26 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION}${NC}"
+    echo -e "${GREEN}  Oracle Cloud ARM 专用优化安装脚本 v${SCRIPT_VERSION}${NC}"
     echo "========================================================================"
     echo ""
 
     init_script
     check_idempotent
-    # BUG#5: IPv6 黑洞检测
+    detect_system
+    detect_oracle_cloud
+    check_network
+    preflight_check
+
+    # AUDIT-3 FIX: 安装基础工具后再执行需要网络工具的检测
+    configure_apt_sources
+    install_base_tools
+    check_oracle_metadata
+
+    # BUG#5: IPv6 黑洞检测（需要 ping6，需在 install_base_tools 之后）
     configure_ipv6_health
     # BUG#7: DNS 锁定防篡改
     configure_dns_lock
-    detect_system
-    detect_storage_type
-    check_network
-    preflight_check
 
     show_platform_summary
 
@@ -834,18 +833,19 @@ main() {
     fi
 
     echo ""
-    log_step "开始优化..."
+    log_step "[1/12] 开始优化..."
     echo ""
 
     backup_all
-    configure_apt_sources
-    install_base_tools
     clean_system
-    optimize_memory_t6
-    # BUG#1 FIX: T6 在 zram 之后才检查 swap（避免与 zram 冲突）
+    oracle_cloud_cleanup
+    optimize_memory_oracle
+    configure_cpufreq
+    # Check swap after zram to avoid conflicts
     configure_swap
-    configure_sysctl_t6
-    configure_conntrack_hashsize_t6
+    configure_sysctl_oracle
+    # AUDIT-2 FIX: 调用 configure_conntrack_hashsize 设置只读参数
+    configure_conntrack_hashsize
     configure_limits
     configure_fstab
     configure_journald
@@ -856,8 +856,7 @@ main() {
     configure_npm_cache_tmpfs
     configure_memory_accounting
     optimize_io_scheduler
-    optimize_arm
-    optimize_network_t6
+    optimize_network_oracle
     optimize_oom
     configure_unattended_upgrades
     configure_fail2ban
@@ -873,30 +872,31 @@ main() {
     if [[ "${INSTALL_DEPS}" == "true" ]]; then
         install_build_deps
     fi
-    local did_install=false
-    if [[ "$SKIP_SOFTWARE_SCRIPT" != "true" ]]; then
+    
+    if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
+        log_info "纯优化模式，跳过 Docker / Node.js 安装"
+    else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
-        [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
-    else
-        log_info "纯优化模式，跳过 Docker / Node.js 安装"
+        if [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]]; then
+            did_install=true
+        fi
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
 
-    apt-get autoremove -y >> "$APT_LOG" 2>&1 || true
     apt-get autoclean >> "$APT_LOG" 2>&1 || true
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ Oracle Cloud ARM v${SCRIPT_VERSION} 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
-    echo "  - sysctl 网络/内存参数（16GB 平衡模式）"
+    echo "  - sysctl 高缓冲网络参数"
     echo "  - journald: 100MB 持久化"
-    echo "  - /tmp: tmpfs 1GB"
-    echo "  - swap: 物理swap禁用，zram保留"
+    echo "  - Oracle cloud-agent 已禁用（节省资源）"
+    echo "  - cloud-init 网络探测已禁用"
     echo "  - 编译依赖: build-essential/cmake/pkg-config等"
 
     if [[ "$did_install" == "true" ]]; then

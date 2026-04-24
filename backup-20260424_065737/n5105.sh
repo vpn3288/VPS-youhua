@@ -2,12 +2,13 @@
 #
 # 修复: 非交互式环境(如SSH远程执行)需要 TERM 变量
 : "${TERM:=xterm}"
-# VPS 优化脚本 - NanoPC T6 (Armbian)
+# VPS 优化脚本 - N5105/N5095 小主机
+# GPT-5.3-codex test
 #
 # 用法:
-#   sudo bash nanopc-t6.sh                    # 完整安装（底层优化 + 软件依赖）
-#   sudo bash nanopc-t6.sh --optimize-only    # 仅底层优化
-#   sudo bash nanopc-t6.sh --uninstall        # 卸载所有优化
+#   sudo bash n5105.sh                    # 完整安装（底层优化 + 软件依赖）
+#   sudo bash n5105.sh --optimize-only    # 仅底层优化
+#   sudo bash n5105.sh --uninstall        # 卸载所有优化
 #
 # 功能:
 #   - 系统内核参数优化（网络、内存、文件系统）
@@ -19,12 +20,12 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.4.1
-# 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
-# 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
+# N5105/N5095 小主机专用优化安装脚本 v3.4.1
+# 硬件: Intel N5105/N5095 x86_64, 有风扇, SSD
+# 特点: x86 高性能优化，有风扇所以不需要保守降频
 # =============================================================================
 #
-# 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopc-t6.sh)
+# 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)
 #
 # 模式说明:
 #   --optimize-only   纯环境优化（不安装 Docker/Node.js）
@@ -34,30 +35,17 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────────────────────────
 # 平台信息
 # ─────────────────────────────────────────────────────────────────────────────
-readonly PLATFORM_NAME="NanoPC T6 (Armbian)"
-readonly PLATFORM_DESC="RK3588S ARM64 | 16GB RAM | eMMC | Armbian 24.04"
+readonly PLATFORM_NAME="N5105/N5095 小主机"
+readonly PLATFORM_DESC="Intel N5105 | x86_64 | SSD | 有风扇"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 平台差异变量（T6 专项）
+# 平台差异变量
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-t6.conf"
-# journald persistent for eMMC
+readonly SYSCTL_FILE="/etc/sysctl.d/99-vps-youhua-n5105.conf"
+# journald persistent for local SSD
 readonly JOURNALD_STORAGE="persistent"
-readonly JOURNALD_MAX_USE="100M"             # eMMC 可以用更多日志
-readonly TMPFS_SIZE="1024M"                  # 16GB 机器 /tmp 可以更大
-
-# T6 使用 Armbian 原生 zram-config（SIZE=30%），不使用 ZRAM_SIZE 变量
-readonly ZRAM_ALGO="lz4"
-readonly SWAPPINESS=20                        # 16GB 积极回收 page cache
-readonly MIN_FREE_KB=65536                     # 16GB OOM 防线
-
-# T6 网络（2.5GbE × 2）
-readonly NETDEV_BACKLOG=131072
-readonly SOMAXCONN=65535
-# BUG 修复: T6 16GB 机器使用动态 conntrack 公式
-# 动态: RAM_MB * 32，范围 [16384, 1048576]
-# 公式: RAM_MB * 32 提供足够连接数同时不耗尽内存
-readonly CT_HASH_SIZE=131072
+readonly JOURNALD_MAX_USE="100M"
+readonly TMPFS_SIZE="1024M"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 加载通用函数库（必须在所有函数定义之前，让平台专属函数正确 override）
@@ -73,13 +61,7 @@ load_common_optimize() {
         fi
         echo -e "\033[33m[!] 警告: 本地 common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
-    if [[ -f /tmp/vps-youhua-tmp/common-optimize.sh ]]; then
-        source /tmp/vps-youhua-tmp/common-optimize.sh
-        if declare -f log_step >/dev/null 2>&1; then
-            return 0
-        fi
-        echo -e "\033[33m[!] 警告: /tmp/vps-youhua-tmp/common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
-    fi
+
     if [[ -f /tmp/vps-youhua/common-optimize.sh ]]; then
         source /tmp/vps-youhua/common-optimize.sh
         if declare -f log_step >/dev/null 2>&1; then
@@ -88,13 +70,13 @@ load_common_optimize() {
         echo -e "\033[33m[!] 警告: /tmp/vps-youhua/common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
     
-    # 下载到临时目录
+    # 下载到临时目录（SHA256 完整性验证）
     local tmpdir="/tmp/vps-youhua"
+    local sha256_expected="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         # SHA256 校验供应链安全
-        local sha256_expected="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
         local sha256_actual
         sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
         if [[ "$sha256_actual" != "$sha256_expected" ]]; then
@@ -103,7 +85,7 @@ load_common_optimize() {
             echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
             rm -f "${tmpdir}/common-optimize.sh"
             rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
-            exit 2
+            exit 1
         fi
         source "${tmpdir}/common-optimize.sh"
         if declare -f log_step >/dev/null 2>&1; then
@@ -118,109 +100,124 @@ load_common_optimize() {
 
 load_common_optimize
 
-# ─────────────────────────────────────────────────────────────────────────────
-# T6 eMMC 存储检测
-# ─────────────────────────────────────────────────────────────────────────────
-detect_storage_type() {
-    # T6 专用 eMMC，始终返回 emmc
-    STORAGE_TYPE="emmc"
-    local root_dev
-    root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    root_dev=$(basename "$root_dev" 2>/dev/null)
-
-    if [[ "$root_dev" == mmcblk* ]]; then
-        log_info "检测到 eMMC 存储（$root_dev）"
+# N5105 内存分级
+_detect_n5105_memory_profile() {
+    # 验证 SYS_MEM_MB 是否已初始化
+    if [[ -z "${SYS_MEM_MB}" || "${SYS_MEM_MB}" -eq 0 ]]; then
+        echo -e "${RED}[✗] 错误: SYS_MEM_MB 未初始化，请先调用 detect_system()${NC}" >&2
+        return 1
+    fi
+    
+    # 内存档位策略说明：
+    # - 高内存(≥16GB): 无需zram, swappiness=10, 大TCP缓冲
+    # - 中等内存(4-16GB): 无需zram, swappiness=15, 中TCP缓冲
+    # - 低内存(<4GB): 启用zram 512MB, swappiness=20, 小TCP缓冲
+    # F-1 FIX: 移除 local 修饰符，使变量在函数返回后仍可被调用者使用
+    if [[ $SYS_MEM_MB -ge 16384 ]]; then
+        ZRAM_SIZE=0
+        SWAPPINESS=10
+        TCP_BUF_MAX=33554432
+        CT_MAX=131072
+        MIN_FREE_KB=32768
+        PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
+    elif [[ $SYS_MEM_MB -ge 4096 ]]; then
+        ZRAM_SIZE=0
+        SWAPPINESS=15
+        TCP_BUF_MAX=16777216
+        CT_MAX=65536
+        MIN_FREE_KB=32768
+        PROFILE_DESC="中等内存 (${SYS_MEM_MB}MB)"
     else
-        log_info "系统盘: $root_dev"
+        ZRAM_SIZE=512
+        SWAPPINESS=20
+        TCP_BUF_MAX=8388608
+        CT_MAX=32768
+        MIN_FREE_KB=16384
+        PROFILE_DESC="低内存 (${SYS_MEM_MB}MB)"
     fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 内存优化（T6 16GB 平衡模式：保留 ZRAM）
+# SSD 检测
 # ─────────────────────────────────────────────────────────────────────────────
-optimize_memory_t6() {
-    log_step "配置内存 (T6 16GB 平衡模式)..."
+detect_storage_type() {
+    local root_dev
+    root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
+    root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    # 禁用物理 swap（eMMC 也尽量不用）
+    if [[ -f "/sys/block/${root_dev}/queue/rotational" ]]; then
+        if [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]]; then
+            log_info "检测到 SSD: $root_dev"
+        else
+            log_info "检测到 HDD: $root_dev"
+        fi
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 内存优化（N5105）
+# ─────────────────────────────────────────────────────────────────────────────
+optimize_memory_n5105() {
+    log_step "配置内存优化..."
+
     # Round 3 Fix M2: 添加循环变量 local 声明
     local sw
     for sw in /swapfile /swap.img; do
         swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
     done
-    # HIGH FIX: 使用精确锚点匹配 fstab swap 条目
+    # LOW FIX: 统一 fstab sed 模式，使用一致的锚点语法
     sed -i '\|^[^#]*[[:space:]]/swapfile[[:space:]]|d' /etc/fstab 2>/dev/null || true
-    sed -i '\|^[^#]*[[:space:]]/swap.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
+    sed -i '\|^[^#]*[[:space:]]/swap\.img[[:space:]]|d' /etc/fstab 2>/dev/null || true
 
-    # Armbian zram-config 保留（zram 是压缩内存，零磁盘写入）
-    if systemctl is-active armbian-zram-config &>/dev/null; then
-        log_info "Armbian zram-config 保持原状"
+    if [[ -f /sys/module/zswap/parameters/enabled ]]; then
+        echo N > /sys/module/zswap/parameters/enabled 2>/dev/null || true
     fi
 
-    # ── Armbian 原生 zram-config 强化（T6 16GB）────────────────────────────────
-    if [[ -f /etc/default/armbian-zram-config ]]; then
-        # LOW FIX: sed 幂等性检查改进，处理末尾空格
-        if grep -q "^ENABLED=" /etc/default/armbian-zram-config 2>/dev/null; then
-            # 只在值不是 true 时才修改（忽略末尾空格）
-            if ! grep -qE "^ENABLED=true[[:space:]]*$" /etc/default/armbian-zram-config 2>/dev/null; then
-                sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-zram-config
-            fi
-        else
-            echo "ENABLED=true" >> /etc/default/armbian-zram-config
-        fi
-        # 16GB 内存下 zram SIZE=30%（T6 eMMC 耐久好，不强制压缩内存）
-        if grep -q "^SIZE=" /etc/default/armbian-zram-config 2>/dev/null; then
-            # 只在值不是 30% 时才修改（忽略末尾空格）
-            if ! grep -qE "^SIZE=30%[[:space:]]*$" /etc/default/armbian-zram-config 2>/dev/null; then
-                sed -i 's/^SIZE=.*$/SIZE=30%/' /etc/default/armbian-zram-config
-            fi
-        else
-            echo "SIZE=30%" >> /etc/default/armbian-zram-config
-        fi
-        log_info "Armbian zram-config 已强化（SIZE=30%）"
-    fi
+    if [[ $ZRAM_SIZE -gt 0 ]]; then
+        apt-get remove --purge -y zram-config >> "$APT_LOG" 2>&1 || true
+        apt-get install -y --no-install-recommends zram-tools >> "$APT_LOG" 2>&1 || true
 
-    # ── Armbian 原生 ramlog 强化（T6）──────────────────────────────────────────
-    if [[ -f /etc/default/armbian-ramlog ]]; then
-        if grep -q "^ENABLED=" /etc/default/armbian-ramlog 2>/dev/null; then
-            sed -i 's/^ENABLED=.*$/ENABLED=true/' /etc/default/armbian-ramlog
-        else
-            echo "ENABLED=true" >> /etc/default/armbian-ramlog
-        fi
-        if grep -q "^SIZE=" /etc/default/armbian-ramlog 2>/dev/null; then
-            sed -i 's/^SIZE=.*$/SIZE=256M/' /etc/default/armbian-ramlog
-        else
-            echo "SIZE=256M" >> /etc/default/armbian-ramlog
-        fi
-        log_info "Armbian ramlog 已强化（SIZE=256M）"
-    fi
-
-    # ── eMMC 每周 fstrim 定时任务（保持长期性能）────────────────────────────
-    mkdir -p /etc/cron.weekly
-    cat > /etc/cron.weekly/fstrim-emmc <<'EOF'
-#!/bin/sh
-# NanoPC T6 eMMC 每周 fstrim（保持长期 IO 性能）
-for d in / /var; do
-    fstrim -v "$d" 2>/dev/null || true
-done
+        cat > /etc/default/zramswap <<EOF
+ALGO=lzo
+SIZE=${ZRAM_SIZE}
+PRIORITY=100
 EOF
-    chmod +x /etc/cron.weekly/fstrim-emmc
-    log_info "已创建 eMMC 每周 fstrim 定时任务"
+        systemctl enable zramswap 2>/dev/null || true
+        systemctl restart zramswap 2>/dev/null || true
 
+        # P1-2 FIX: zram devicemapper race - wait for device AND swap activation
+        local retry=0
+        local max_retries=15
+        while [[ $retry -lt $max_retries ]]; do
+            if [[ -b /dev/zram0 ]] && swapon --show 2>/dev/null | grep -q zram; then
+                break
+            fi
+            sleep 1
+            ((retry++))
+        done
+
+        if swapon --show 2>/dev/null | grep -q zram; then
+            local zram_dev=$(lsblk -n -o NAME,TYPE | awk '$2=="swap" && /zram/ {print $1}' | head -1)
+            [[ -n "$zram_dev" ]] && log_info "ZRAM ${ZRAM_SIZE}MB 已启用 (/dev/${zram_dev})"
+        else
+            log_warn "ZRAM devicemapper 启动超时（${max_retries}s）"
+        fi
+    else
+        log_info "跳过 ZRAM（内存充足）"
+    fi
+
+    sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
     sysctl -w vm.oom_kill_allocating_task=1 2>/dev/null || true
-    log_info "内存优化完成（zram 保留，swappiness=$SWAPPINESS）"
+    log_info "内存优化完成（${PROFILE_DESC}）"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# T6 sysctl（高性能网络 + 平衡内存）
+# N5105 sysctl
 # ─────────────────────────────────────────────────────────────────────────────
-configure_sysctl_t6() {
-    log_step "配置 sysctl (NanoPC T6)..."
 
-    # 计算 conntrack_max（使用 RAM_MB * 32 公式，范围 [16384, 1048576]）
-    local calc_conntrack_max=$(( SYS_MEM_MB * 32 ))
-    [[ $calc_conntrack_max -lt 16384 ]] && calc_conntrack_max=16384
-    [[ $calc_conntrack_max -gt 1048576 ]] && calc_conntrack_max=1048576
+configure_sysctl_n5105() {
+    log_step "配置 sysctl (N5105)..."
 
     backup_file "$SYSCTL_FILE"
 
@@ -228,22 +225,29 @@ configure_sysctl_t6() {
 
     cat >> "$SYSCTL_FILE" <<EOF
 
-# ── T6 内存（16GB 平衡）──────────────────────────────────────────────────────
+# ── N5105 内存 ──────────────────────────────────────────────────────────────
 vm.swappiness = ${SWAPPINESS}
-vm.dirty_ratio = 20
+vm.min_free_kbytes = ${MIN_FREE_KB}
+vm.vfs_cache_pressure = 50
+vm.oom_kill_allocating_task = 1
+vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
 vm.dirty_writeback_centisecs = 10000
 vm.dirty_expire_centisecs = 60000
 
-# ── T6 网络（2.5GbE × 2，高并发）────────────────────────────────────────────
-net.core.netdev_max_backlog = ${NETDEV_BACKLOG}
-net.core.somaxconn = ${SOMAXCONN}
-net.core.rmem_max = 33554432
-net.core.wmem_max = 33554432
-net.ipv4.tcp_rmem = 4096 262144 33554432
-net.ipv4.tcp_wmem = 4096 262144 33554432
+# ── N5105 网络 ──────────────────────────────────────────────────────────────
+net.core.netdev_max_backlog = 65535
+net.core.somaxconn = 65535
+net.ipv4.tcp_max_syn_backlog = 8192  # 高并发连接
+net.core.rmem_max = ${TCP_BUF_MAX}
+net.core.wmem_max = ${TCP_BUF_MAX}
+net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
+net.ipv4.tcp_wmem = 4096 131072 ${TCP_BUF_MAX}
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_orphan_retries = 1
 net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
@@ -251,119 +255,57 @@ net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_syncookies = 1
 
 # ── 连接追踪 ─────────────────────────────────────────────────────────────────
-net.netfilter.nf_conntrack_max = ${calc_conntrack_max}
-# AUDIT-13 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
-# 将在 configure_conntrack_hashsize_t6() 函数中通过 /sys/module 设置
+net.netfilter.nf_conntrack_max = ${CT_MAX}
+# AUDIT-2 FIX: nf_conntrack_hashsize 是只读参数，不能通过 sysctl 设置
+# 将在 configure_conntrack_hashsize() 函数中通过 /sys/module 设置
 net.netfilter.nf_conntrack_tcp_timeout_established = 900
 net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 20
 net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30
-net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10
-net.netfilter.nf_conntrack_tcp_timeout_close_wait = 5
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 15
+net.netfilter.nf_conntrack_tcp_timeout_close_wait = 10
 net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 10
 EOF
 
     apply_sysctl
-    log_info "T6 sysctl 配置完成"
+
+    # P1-5 FIX: sysctl live reset missing - add reset logic
+    sysctl -w vm.swappiness=$SWAPPINESS 2>/dev/null || true
+    sysctl -w vm.min_free_kbytes=$MIN_FREE_KB 2>/dev/null || true
+    sysctl -w net.core.rmem_max=$TCP_BUF_MAX 2>/dev/null || true
+    sysctl -w net.core.wmem_max=$TCP_BUF_MAX 2>/dev/null || true
+    sysctl -w net.netfilter.nf_conntrack_max=$CT_MAX 2>/dev/null || true
+
+    log_info "N5105 sysctl 配置完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ARM 专项优化（T6 RK3588S）
+# AUDIT-2 FIX: 设置 nf_conntrack_hashsize（只读参数，不能通过 sysctl）
 # ─────────────────────────────────────────────────────────────────────────────
-optimize_arm() {
-    log_step "ARM 专项优化..."
-
-    mkdir -p /etc/default
-    cat > /etc/default/cpufrequtils <<'EOF'
-GOVERNOR=schedutil
-MIN_SPEED=408000
-MAX_SPEED=2400000
-EOF
-    systemctl restart cpufrequtils 2>/dev/null || true
-
-    if ! command -v irqbalance &>/dev/null; then
-        apt-get install -y irqbalance >> "$APT_LOG" 2>&1 || true
-    fi
-    systemctl enable irqbalance 2>/dev/null || true
-
-    log_info "ARM 优化完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# T6 网络优化（2.5GbE 高吞吐）
-# ─────────────────────────────────────────────────────────────────────────────
-optimize_network_t6() {
-    log_step "T6 网络优化..."
-
-    for iface in /sys/class/net/en* /sys/class/net/eth*; do
-        [[ -d "$iface" ]] || continue
-        local name; name=$(basename "$iface")
-
-        # 启用 TSO/GSO/GRO
-        ethtool -K "$name" tso on 2>/dev/null || true
-        ethtool -K "$name" gso on 2>/dev/null || true
-        ethtool -K "$name" gro on 2>/dev/null || true
-        ip link set "$name" txqueuelen 10000 2>/dev/null || true
-
-        # RPS（RK3588S 多核）
-        if [[ $SYS_CPU_CORES -gt 1 ]]; then
-            local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
-            if [[ $cores -gt 0 ]]; then
-                local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
-                for rps_file in /sys/class/net/${name}/queues/rx-*/rps_cpus; do
-                    [[ -f "$rps_file" ]] || continue
-                    printf "%s" "$mask" > "$rps_file" 2>/dev/null || true
-                done
-            fi
-        fi
-        log_info "网卡 $name 已优化"
-    done
-
-    log_info "T6 网络优化完成"
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# HIGH FIX: 标准化 nf_conntrack_hashsize 配置（只读参数，不能通过 sysctl）
-# ─────────────────────────────────────────────────────────────────────────────
-configure_conntrack_hashsize_t6() {
+configure_conntrack_hashsize() {
     log_step "配置 nf_conntrack_hashsize..."
     
-    # 加载 nf_conntrack 模块
+    # Round 3 Fix H1: 参数验证
+    local conntrack_max=${CT_MAX:-0}
+    
+    if [[ -z "$conntrack_max" || "$conntrack_max" -le 0 ]]; then
+        log_warn "conntrack_max 无效（${conntrack_max:-未定义}），使用默认值"
+        conntrack_max=131072
+    fi
+    
+    local hashsize=$((conntrack_max / 4))
+    
+    # 最小值保护
+    if [[ $hashsize -lt 16384 ]]; then
+        log_warn "hashsize 过小（$hashsize），使用最小值 16384"
+        hashsize=16384
+    fi
+    
     modprobe nf_conntrack 2>/dev/null || true
     
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
-        # 计算 hashsize（conntrack_max / 4，上限为 CT_HASH_SIZE）
-        local calc_conntrack_max
-        calc_conntrack_max=$(sysctl -n net.netfilter.nf_conntrack_max 2>/dev/null || echo "262144")
-        
-        # Round 3 Fix H1: 增强参数验证
-        if [[ -z "$calc_conntrack_max" || "$calc_conntrack_max" -le 0 ]]; then
-            log_warn "conntrack_max 无效（${calc_conntrack_max:-未定义}），使用默认值"
-            calc_conntrack_max=262144
-        fi
-        
-        # 验证是否为有效数字
-        if ! [[ "$calc_conntrack_max" =~ ^[0-9]+$ ]]; then
-            log_warn "conntrack_max 不是有效数字（${calc_conntrack_max}），使用默认值 262144"
-            calc_conntrack_max=262144
-        fi
-        
-        local hashsize=$(( calc_conntrack_max / 4 ))
-        
-        # 最小值保护
-        if [[ $hashsize -lt 16384 ]]; then
-            log_warn "hashsize 过小（$hashsize），使用最小值 16384"
-            hashsize=16384
-        fi
-        
-        # CT_HASH_SIZE 作为上限保护
-        if [[ $hashsize -gt $CT_HASH_SIZE ]]; then
-            hashsize=$CT_HASH_SIZE
-        fi
-        
         echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
             log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
-            # 备用方案：通过 modprobe 配置（下次启动或模块重载时生效）
             mkdir -p /etc/modprobe.d
             echo "options nf_conntrack hashsize=$hashsize" > /etc/modprobe.d/nf_conntrack.conf
         }
@@ -376,7 +318,7 @@ configure_conntrack_hashsize_t6() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OOM 配置
+# OOM
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_oom() {
     log_step "配置 OOM Killer..."
@@ -384,14 +326,14 @@ optimize_oom() {
     cat > /etc/systemd/system.conf.d/99-oom-policy.conf <<'EOF'
 [Manager]
 OOMPolicy=continue
-OOMScoreAdjust=-300
+OOMScoreAdjust=-900
 EOF
     systemctl daemon-reload 2>/dev/null || true
     log_info "OOM Killer 配置完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# journald（T6 eMMC 模式）
+# journald
 # ─────────────────────────────────────────────────────────────────────────────
 configure_journald() {
     log_step "配置 journald..."
@@ -412,11 +354,11 @@ RuntimeMaxUse=100M
 Seal=yes
 EOF
     systemctl restart systemd-journald 2>/dev/null || true
-    log_info "journald 配置完成（Storage=${JOURNALD_STORAGE}）"
+    log_info "journald 配置完成"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# I/O Scheduler（eMMC/SSD → none）
+# I/O Scheduler（SSD → none）
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_io_scheduler() {
     log_step "配置 I/O Scheduler..."
@@ -425,21 +367,15 @@ optimize_io_scheduler() {
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    if [[ "$root_dev" == mmcblk* ]]; then
-        # eMMC 或 TF 卡：none
-        local sched_file="/sys/block/${root_dev}/queue/scheduler"
-        if [[ -f "$sched_file" ]]; then
-            echo "none" > "$sched_file" 2>/dev/null || true
-            log_info "eMMC/TF $root_dev I/O Scheduler → none"
-        fi
-    elif [[ -f "/sys/block/${root_dev}/queue/rotational" ]] && \
-         [[ "$(cat /sys/block/${root_dev}/queue/rotational 2>/dev/null)" == "0" ]]; then
-        # SSD：none
+    if [[ -f "/sys/block/${root_dev}/queue/rotational" ]] && \
+       [[ "$(cat "/sys/block/${root_dev}/queue/rotational" 2>/dev/null)" == "0" ]]; then
         local sched_file="/sys/block/${root_dev}/queue/scheduler"
         if [[ -f "$sched_file" ]]; then
             echo "none" > "$sched_file" 2>/dev/null || true
             log_info "SSD $root_dev I/O Scheduler → none"
         fi
+        # 启用 fstrim.timer（SSD 定期 TRIM）
+        systemctl enable --now fstrim.timer 2>/dev/null || true
     fi
 }
 
@@ -544,15 +480,27 @@ install_docker() {
     "https://docker.xuanyuan.me"
   ],
   "log-driver": "json-file",
-  "log-opts": {"max-size": "10m", "max-file": "3"}
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
 }
 EOF
     systemctl restart docker 2>/dev/null || true
+
+    # P1-2 FIX: Docker wait loop timeout - add --max-time to curl
+    local retry=0
+    local max_retries=30
+    while ! docker ps >/dev/null 2>&1 && [[ $retry -lt $max_retries ]]; do
+        sleep 1
+        ((retry++))
+    done
+
     # Docker 健康检查
     if docker ps >/dev/null 2>&1; then
         log_info "Docker 运行正常: $(docker ps -q | wc -l) 个容器在运行"
     else
-        log_warn "Docker 守护进程可能未正常启动"
+        log_warn "Docker 守护进程可能未正常启动（超时 ${max_retries}s）"
     fi
     log_info "Docker 安装完成"
 }
@@ -569,33 +517,26 @@ install_nodejs() {
         return 0
     fi
 
-    # [H10] FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
-    local nodesource_script="/tmp/setup_nodesource.sh"
+    # H11 FIX: 先下载脚本到临时文件，检查SHA256后再执行（禁止 curl|bash）
+    local nodesource_script="/tmp/nodesource_setup_22.sh"
     local nodesource_download_ok=false
-    if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null; then
-        nodesource_download_ok=true
-    fi
+    curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null && nodesource_download_ok=true
 
     if [[ "$nodesource_download_ok" == "true" ]]; then
         # SHA256 完整性校验（防止供应链污染）
-        # ⚠️  警告：NodeSource 脚本会定期更新，SHA256 会变化
-        # 生产环境建议：
-        #   1. 定期更新此校验和（每月检查 https://deb.nodesource.com/setup_lts.x）
-        #   2. 或使用动态校验（curl + 官方签名验证）
-        #   3. 或固定 Node.js 版本号避免自动更新
-        local expected_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
-        local actual_sha256
-        actual_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
-        if [[ "$actual_sha256" == "$expected_sha256" ]]; then
-            chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && log_info "Node.js 安装完成" || nodesource_download_ok="failed"
+        local expected_nodesource_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
+        local actual_nodesource_sha256
+        actual_nodesource_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_nodesource_sha256" == "$expected_nodesource_sha256" ]]; then
+            bash "$nodesource_script" >> "$APT_LOG" 2>&1 && nodesource_download_ok="verified" || nodesource_download_ok="failed"
         else
-            log_warn "NodeSource SHA256 校验异常（预期: $expected_sha256, 实际: $actual_sha256），跳过执行"
+            log_warn "NodeSource 安装脚本 SHA256 校验异常，跳过执行"
             nodesource_download_ok="failed"
         fi
         rm -f "$nodesource_script"
     fi
 
-    if [[ "$nodesource_download_ok" != "true" ]]; then
+    if [[ "$nodesource_download_ok" != "verified" ]]; then
         log_warn "NodeSource 安装失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
             log_error "Node.js 安装失败，请查看 $APT_LOG"
@@ -617,13 +558,13 @@ install_nodejs() {
 run_doctor() {
     log_step "运行诊断..."
     echo ""
-    echo "=== VPS-youhua 环境诊断报告 (NanoPC T6) ==="
+    echo "=== VPS-youhua 环境诊断报告 (N5105) ==="
     echo ""
     echo "1. 系统信息:"
     echo "   平台: $PLATFORM_NAME"
     echo "   系统: $(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d'"' -f2)"
-    echo "   内核: $(uname -r)"
     echo "   内存: ${SYS_MEM_MB}MB"
+    echo "   配置: ${PROFILE_DESC}"
     echo ""
     echo "2. CPU:"
     local gov; gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "unknown")
@@ -639,9 +580,6 @@ run_doctor() {
     echo ""
     echo "4. Node.js:"
     command -v node &>/dev/null && echo "   版本: $(node --version)" || echo "   未安装"
-    echo ""
-    echo "5. 端口监听:"
-    ss -tlnp 2>/dev/null | grep -E "18789|18790" || echo "   无"
     echo ""
     echo "=== 诊断完成 ==="
 }
@@ -660,6 +598,7 @@ configure_fail2ban() {
         }
     fi
 
+    # P1-4 FIX: Fail2ban overwrite risk - use separate config file
     mkdir -p /etc/fail2ban/jail.d
     cat > /etc/fail2ban/jail.d/99-vps-youhua-sshd.conf << 'EOF'
 [sshd]
@@ -699,6 +638,7 @@ uninstall_all() {
 
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
+    # M6 FIX: 非交互卸载confirm兜底（SSH远程/cron场景）
     # 非交互卸载时跳过确认提示
     if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
         echo -n "确认卸载？(输入 'yes' 继续): "
@@ -719,7 +659,7 @@ uninstall_all() {
 
 
     # 清理所有配置文件
-    rm -f /etc/sysctl.d/99-vps-youhua-t6.conf
+    rm -f /etc/sysctl.d/99-vps-youhua-n5105.conf
     rm -f /etc/systemd/journald.conf.d/99-vps-youhua.conf
     rm -f /etc/security/limits.d/99-vps-youhua.conf
     rm -f /etc/systemd/system.conf.d/99-memory-accounting.conf
@@ -728,34 +668,29 @@ uninstall_all() {
     rm -f /etc/ssh/sshd_config.d/99-vps-youhua.conf
     rm -f /etc/cron.d/vps-youhua-cleanup
     rm -f /etc/logrotate.d/vps-youhua
+    # BUG#6b FIX: 清理 conntrack hashsize 配置
+    rm -f /etc/modprobe.d/nf_conntrack.conf
     rm -f /etc/apt/apt.conf.d/99-noninteractive
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-no-unattended
     rm -f /etc/apt/apt.conf.d/99-vps-youhua-unattended
     rm -f /etc/needrestart/conf.d/99-vps-youhua.conf
     rm -f /etc/default/cpufrequtils 2>/dev/null || true
-    rm -f /etc/cron.weekly/fstrim-emmc
-    rm -f /etc/profile.d/nodejs-memory.sh
-    rm -f /etc/docker/daemon.json
-    rm -f /etc/modprobe.d/nf_conntrack.conf
-    # 恢复 Armbian zram-config 默认值
-    if [[ -f /etc/default/armbian-zram-config ]]; then
-        sed -i 's/^ENABLED=.*/ENABLED=false/' /etc/default/armbian-zram-config 2>/dev/null || true
-        sed -i 's/^SIZE=.*/SIZE=50%/' /etc/default/armbian-zram-config 2>/dev/null || true
-    fi
-    # 恢复 Armbian ramlog 默认值
-    if [[ -f /etc/default/armbian-ramlog ]]; then
-        sed -i 's/^ENABLED=.*/ENABLED=true/' /etc/default/armbian-ramlog 2>/dev/null || true
-        sed -i 's/^SIZE=.*/SIZE=100M/' /etc/default/armbian-ramlog 2>/dev/null || true
-    fi
-    # 恢复 fstab tmpfs 条目（/tmp 和 /var/log）
-    sed -i '/tmpfs.*\/tmp/d' /etc/fstab 2>/dev/null || true
-    sed -i '/tmpfs.*\/var\/log/d' /etc/fstab 2>/dev/null || true
 
     # 停止并卸载 unattended-upgrades（如果安装了的话）
     if command -v unattended-upgrades &>/dev/null; then
         systemctl stop unattended-upgrades 2>/dev/null || true
         systemctl disable unattended-upgrades 2>/dev/null || true
         apt-get remove --purge -y unattended-upgrades >> /dev/null 2>&1 || true
+    fi
+
+    # 停止并卸载 zramswap（如果安装了的话）
+    if systemctl is-active --quiet zramswap 2>/dev/null || \
+       command -v zramswap &>/dev/null; then
+        systemctl stop zramswap 2>/dev/null || true
+        systemctl disable zramswap 2>/dev/null || true
+        rm -f /etc/default/zramswap
+        apt-get remove --purge -y zram-tools >> /dev/null 2>&1 || true
+        log_info "zramswap 已清理"
     fi
 
     # 停止并卸载 fail2ban（如果安装了的话）
@@ -801,6 +736,7 @@ main() {
             --uninstall) ;;
         esac
     done
+
     : "${SKIP_SOFTWARE_SCRIPT:=false}"
     FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
 
@@ -810,20 +746,30 @@ main() {
 
     clear
     echo "========================================================================"
-    echo -e "${GREEN}  NanoPC T6 专用优化安装脚本 v${SCRIPT_VERSION}${NC}"
+    echo -e "${GREEN}  N5105/N5095 小主机优化安装脚本 v${SCRIPT_VERSION}${NC}"
     echo "========================================================================"
     echo ""
 
     init_script
     check_idempotent
-    # BUG#5: IPv6 黑洞检测
-    configure_ipv6_health
-    # BUG#7: DNS 锁定防篡改
-    configure_dns_lock
     detect_system
     detect_storage_type
     check_network
     preflight_check
+    # BUG#6 FIX: 必须先检测内存profile，才能正确配置zram/swap
+    _detect_n5105_memory_profile || {
+        log_error "内存profile检测失败，无法继续"
+        exit 1
+    }
+    optimize_memory_n5105
+    # BUG#5 FIX: configure_swap 幂等调用（防止 common-optimize.sh 未加载时崩溃）
+    if declare -f configure_swap > /dev/null 2>&1; then
+        configure_swap
+    fi
+    # BUG#5: IPv6 黑洞检测
+    configure_ipv6_health
+    # BUG#7: DNS 锁定防篡改
+    configure_dns_lock
 
     show_platform_summary
 
@@ -834,18 +780,14 @@ main() {
     fi
 
     echo ""
-    log_step "开始优化..."
+    log_step "[1/12] 开始优化..."
     echo ""
 
     backup_all
     configure_apt_sources
-    install_base_tools
     clean_system
-    optimize_memory_t6
-    # BUG#1 FIX: T6 在 zram 之后才检查 swap（避免与 zram 冲突）
-    configure_swap
-    configure_sysctl_t6
-    configure_conntrack_hashsize_t6
+    configure_sysctl_n5105
+    configure_conntrack_hashsize
     configure_limits
     configure_fstab
     configure_journald
@@ -856,8 +798,6 @@ main() {
     configure_npm_cache_tmpfs
     configure_memory_accounting
     optimize_io_scheduler
-    optimize_arm
-    optimize_network_t6
     optimize_oom
     configure_unattended_upgrades
     configure_fail2ban
@@ -874,12 +814,12 @@ main() {
         install_build_deps
     fi
     local did_install=false
-    if [[ "$SKIP_SOFTWARE_SCRIPT" != "true" ]]; then
+    if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
+        log_info "纯优化模式，跳过 Docker / Node.js 安装"
+    else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
         [[ "$INSTALL_NODEJS" == "true" ]] && install_nodejs
         [[ "$INSTALL_DOCKER" == "true" || "$INSTALL_NODEJS" == "true" ]] && did_install=true
-    else
-        log_info "纯优化模式，跳过 Docker / Node.js 安装"
     fi
 
     run_doctor || { log_warn "诊断报告有异常，但继续完成"; }
@@ -889,14 +829,14 @@ main() {
 
     echo ""
     echo "========================================================================"
-    echo -e "${GREEN}  ✅ NanoPC T6 v${SCRIPT_VERSION} 优化完成！${NC}"
+    echo -e "${GREEN}  ✅ N5105 v${SCRIPT_VERSION} 优化完成！${NC}"
     echo "========================================================================"
     echo ""
     echo -e "${CYAN}系统优化内容:${NC}"
-    echo "  - sysctl 网络/内存参数（16GB 平衡模式）"
+    echo "  - sysctl 内存/网络参数（${PROFILE_DESC}）"
     echo "  - journald: 100MB 持久化"
     echo "  - /tmp: tmpfs 1GB"
-    echo "  - swap: 物理swap禁用，zram保留"
+    echo "  - SSD: I/O Scheduler=none, fstrim.timer"
     echo "  - 编译依赖: build-essential/cmake/pkg-config等"
 
     if [[ "$did_install" == "true" ]]; then
@@ -907,7 +847,7 @@ main() {
         echo ""
         echo -e "${CYAN}后续步骤:${NC}"
         echo "  1. reboot  ← 必须重启！"
-        echo "  2. 安装你的软件（Docker / Xray / Nginx / agent 等）"
+        echo "  2. 安装你的软件"
     fi
 
     echo ""
@@ -923,7 +863,7 @@ main() {
     return 0
 }
 
-trap 'log_error "脚本异常退出 (行: ${LINENO})"; exit 1' ERR
+trap "log_error \"脚本异常退出 (行: \${LINENO})\"; exit 1" ERR
 trap 'log_warn "被中断"; exit 130' INT TERM
 
 main "$@"
