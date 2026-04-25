@@ -49,7 +49,9 @@ readonly TMPFS_SIZE="256M"
 
 # 1C1G TCP 缓冲（内存的 3%，上限 8MB，下限 4MB）
 # MemTotal 单位为 KB，乘以 1024 转换为字节，再计算 3%
+# MEDIUM FIX: 添加验证，防止 awk 失败导致空值被 readonly 锁定
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=int(m*0.03); if(buf>8388608) buf=8388608; if(buf<4194304) buf=4194304; printf "%d", buf}' /proc/meminfo)
+[[ -z "$TCP_BUF_MAX" || ! "$TCP_BUF_MAX" =~ ^[0-9]+$ ]] && TCP_BUF_MAX=4194304
 readonly TCP_BUF_MAX
 readonly CT_MAX=16384
 readonly SOMAXCONN=512       # 1C1G 低资源限制

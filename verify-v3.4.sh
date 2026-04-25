@@ -71,6 +71,8 @@ detect_platform() {
             # Oracle 1C4G vs 2C16G：通过内存判断
             local mem_kb
             mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+            # MEDIUM FIX: 验证 mem_kb 是否为有效数字
+            [[ -z "$mem_kb" || ! "$mem_kb" =~ ^[0-9]+$ ]] && mem_kb=0
             local mem_mb=$((mem_kb / 1024))
             if [[ "$mem_mb" -lt 8192 ]]; then
                 echo "oracle-1c4g"
@@ -86,6 +88,8 @@ detect_platform() {
         # Round 10 Fix: 使用统一的 is_oracle_cloud() 函数
         local mem_kb
         mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+        # MEDIUM FIX: 验证 mem_kb 是否为有效数字
+        [[ -z "$mem_kb" || ! "$mem_kb" =~ ^[0-9]+$ ]] && mem_kb=0
         local mem_mb=$((mem_kb / 1024))
         if [[ "$mem_mb" -lt 8192 ]]; then
             echo "oracle-1c4g"
