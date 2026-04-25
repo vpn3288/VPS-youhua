@@ -128,10 +128,12 @@ check_zram_status() {
         for dev in /sys/block/zram*; do
             [[ -d "$dev" ]] || continue
             local name
-            name=$(basename "$dev")
-            local disksize
-            disksize=$(cat "$dev/disksize" 2>/dev/null || echo "0")
-            local size_mb=$((disksize / 1024 / 1024))
+        local dev="/sys/block/$name"
+        [[ ! -d "$dev" ]] && continue
+        disksize=$(cat "$dev/disksize" 2>/dev/null || echo "0")
+        # MEDIUM FIX: 验证 disksize 是否为有效数字
+        [[ -z "$disksize" || ! "$disksize" =~ ^[0-9]+$ ]] && disksize=0
+        local size_mb=$((disksize / 1024 / 1024))
             if [[ $size_mb -gt 0 ]]; then
                 log_pair "zram/${name}" "${size_mb}MB"
             fi

@@ -989,6 +989,11 @@ configure_lowmem_purge() {
 configure_conntrack_hashsize() {
     # CT_MAX 由调用者定义（各平台不同）
     local CT_MAX="${CT_MAX:-65536}"
+    # MEDIUM FIX: 验证 CT_MAX 是否为有效数字
+    if [[ ! "$CT_MAX" =~ ^[0-9]+$ || "$CT_MAX" -le 0 ]]; then
+        log_warn "CT_MAX 无效（${CT_MAX}），使用默认值 65536"
+        CT_MAX=65536
+    fi
     local hashsize=$((CT_MAX / 4))
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
 
@@ -1039,11 +1044,15 @@ configure_swap() {
     # 检查是否已有物理 swap 或 zram
     local swap_total zram_total=0
     swap_total=$(awk '/SwapTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
+    # MEDIUM FIX: 验证 swap_total 是否为有效数字
+    [[ -z "$swap_total" || ! "$swap_total" =~ ^[0-9]+$ ]] && swap_total=0
     # zram 也算 Swap（/proc/meminfo 的 Swap 统计不包含 zram，需手动计算）
     # disksize 单位是字节，除以 1024 得到 KB
     if [[ -d /sys/block/zram0 ]] && [[ -f /sys/block/zram0/disksize ]]; then
         local zram_size
         zram_size=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
+        # MEDIUM FIX: 验证 zram_size 是否为有效数字
+        [[ -z "$zram_size" || ! "$zram_size" =~ ^[0-9]+$ ]] && zram_size=0
         zram_total=$((zram_size / 1024))  # KB
     fi
     local total_swap=$((swap_total + zram_total))

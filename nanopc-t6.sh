@@ -310,8 +310,9 @@ optimize_network_t6() {
         ethtool -K "$name" gro on 2>/dev/null || true
         ip link set "$name" txqueuelen 10000 2>/dev/null || true
 
-        # RPS（RK3588S 多核）
-        if [[ $SYS_CPU_CORES -gt 1 ]]; then
+    # 多核 CPU 优化 RPS/RFS
+    # LOW FIX: 使用防御性语法避免未初始化变量
+    if [[ ${SYS_CPU_CORES:-0} -gt 1 ]]; then
             local cores=$((SYS_CPU_CORES > 63 ? 63 : SYS_CPU_CORES))
             if [[ $cores -gt 0 ]]; then
                 local mask; mask=$(printf '%x' $(( (1 << cores) - 1 )))
