@@ -217,6 +217,12 @@ EOF
 configure_sysctl_t6() {
     log_step "配置 sysctl (NanoPC T6)..."
 
+    # HIGH FIX: 验证 SYS_MEM_MB 是否已初始化
+    if [[ -z "${SYS_MEM_MB}" || ! "${SYS_MEM_MB}" =~ ^[0-9]+$ || "${SYS_MEM_MB}" -le 0 ]]; then
+        log_error "SYS_MEM_MB 未初始化或无效（${SYS_MEM_MB:-未定义}），请先调用 detect_system()"
+        return 1
+    fi
+
     # 计算 conntrack_max（使用 RAM_MB * 32 公式，范围 [16384, 1048576]）
     local calc_conntrack_max=$(( SYS_MEM_MB * 32 ))
     [[ $calc_conntrack_max -lt 16384 ]] && calc_conntrack_max=16384

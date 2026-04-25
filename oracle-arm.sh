@@ -48,7 +48,11 @@ readonly TMPFS_SIZE="512M"
 
 # Oracle Cloud ARM Ampere 带宽：每核 1Gbps（1C=1G，2C=2G，4C=4G），远高于 X86 免费小户型 50Mbps
 # 内存 5% 作为 TCP 缓冲，上限 64MB（2C16G），下限 16MB（1C4G）
+# MEDIUM FIX: 添加验证，防止 awk 失败导致空值被 readonly 锁定
 TCP_BUF_MAX=$(awk '/MemTotal/{m=$2*1024; buf=m*5/100; if(buf>67108864) buf=67108864; if(buf<16777216) buf=16777216; printf "%d", buf}' /proc/meminfo)
+if [[ -z "$TCP_BUF_MAX" || ! "$TCP_BUF_MAX" =~ ^[0-9]+$ || "$TCP_BUF_MAX" -le 0 ]]; then
+    TCP_BUF_MAX=33554432  # 默认 32MB（2C16G 中等配置）
+fi
 readonly TCP_BUF_MAX
 readonly CT_MAX=131072
 readonly SOMAXCONN=65535
