@@ -36,7 +36,7 @@ set -euo pipefail
 # 平台信息
 # ─────────────────────────────────────────────────────────────────────────────
 readonly PLATFORM_NAME="Oracle Cloud ARM (1核4G)"
-readonly PLATFORM_DESC="Ampere Altra ($(awk '/MemTotal/{printf "%.0fGB", $2/1024/1024}' /proc/meminfo), Oracle Cloud 1核精选)"
+readonly PLATFORM_DESC="Ampere Altra ($(awk '/MemTotal/{printf "%.0fGB", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo "4"), Oracle Cloud 1核精选)"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 平台差异变量（Oracle ARM 1C4G 专项，比 2C16G 更保守）
