@@ -94,7 +94,7 @@ load_common_optimize() {
     local sha256_expected="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
-    if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
+    if curl --connect-timeout 10 --max-time 60 -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         # SHA256 校验供应链安全
         local sha256_actual
         sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
@@ -441,7 +441,7 @@ install_docker() {
     trap 'rm -f "$gpg_tmp" "$gpg_stderr" "$gpg_dearmored"' RETURN INT
 
     # 先下载到临时文件，避免 TOCTOU 漏洞
-    if ! curl -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then
+    if ! curl --connect-timeout 10 --max-time 60 -fsSL https://download.docker.com/linux/debian/gpg -o "$gpg_tmp" 2>"$gpg_stderr"; then
         log_error "Docker GPG 密钥下载失败"
         cat "$gpg_stderr" >> "$APT_LOG" 2>/dev/null
         return 1

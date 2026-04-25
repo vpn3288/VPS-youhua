@@ -115,7 +115,7 @@ run_verify_status() {
     local verify_file
     verify_file=$(mktemp /tmp/vps-youhua-verify-XXXXXX.sh)
 
-    if ! curl -fsSL "$verify_url" -o "$verify_file"; then
+    if ! curl --connect-timeout 10 --max-time 60 -fsSL "$verify_url" -o "$verify_file"; then
         log_error "无法下载 verify-v3.4.sh，请检查网络连接"
         rm -f "$verify_file"
         return 1
@@ -899,12 +899,12 @@ download_and_run() {
     fi
 
     log_step "下载 ${platform}.sh + common-optimize.sh..."
-    if ! curl -fsSL "$platform_url" -o "$platform_file"; then
+    if ! curl --connect-timeout 10 --max-time 60 -fsSL "$platform_url" -o "$platform_file"; then
         log_error "下载失败: $platform_url"
         rm -rf "$tmpdir"
         exit 1
     fi
-    if ! curl -fsSL "$common_url" -o "$common_file"; then
+    if ! curl --connect-timeout 10 --max-time 60 -fsSL "$common_url" -o "$common_file"; then
         log_error "下载失败: $common_url"
         rm -rf "$tmpdir"
         exit 1
@@ -1021,7 +1021,7 @@ uninstall_all() {
     local platform_file="${tmpdir}/${platform}.sh"
     local common_file="${tmpdir}/common-optimize.sh"
 
-    if ! curl -fsSL "${RAW_BASE}/${platform}.sh" -o "$platform_file"; then
+    if ! curl --connect-timeout 10 --max-time 60 -fsSL "${RAW_BASE}/${platform}.sh" -o "$platform_file"; then
         log_error "下载失败: ${RAW_BASE}/${platform}.sh"
         rm -rf "$tmpdir"
         exit 1
@@ -1040,7 +1040,7 @@ uninstall_all() {
         fi
     fi
 
-    if ! curl -fsSL "${RAW_BASE}/common-optimize.sh" -o "$common_file"; then
+    if ! curl --connect-timeout 10 --max-time 60 -fsSL "${RAW_BASE}/common-optimize.sh" -o "$common_file"; then
         log_error "下载失败: ${RAW_BASE}/common-optimize.sh"
         rm -rf "$tmpdir"
         exit 1
