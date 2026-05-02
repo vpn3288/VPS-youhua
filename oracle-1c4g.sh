@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Oracle Cloud ARM 1核4G 专用优化安装脚本 v3.4.4
+# Oracle Cloud ARM 1核4G 专用优化安装脚本 v3.4.5
 # 硬件: Ampere Altra, 1核 4GB, Oracle Cloud
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，元数据检查）
 #       针对 1C4G 资源精简优化（比 2C16G 更保守）
@@ -157,6 +157,22 @@ detect_oracle_cloud() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CRITICAL FIX #1: 存储类型检测（Oracle Cloud 云盘场景）
+# ─────────────────────────────────────────────────────────────────────────────
+detect_storage_type() {
+    # Oracle Cloud 使用云盘（块存储），始终返回 cloud_disk
+    STORAGE_TYPE="cloud_disk"
+    
+    local root_dev
+    root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
+    if [[ -n "$root_dev" ]]; then
+        log_info "存储类型: cloud_disk ($(basename "$root_dev"))"
+    else
+        log_info "存储类型: cloud_disk"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Oracle Cloud 专属清理（云监控组件）
 # ─────────────────────────────────────────────────────────────────────────────
 oracle_cloud_cleanup() {
@@ -204,9 +220,10 @@ optimize_memory_oracle() {
                 log_info "zram0 disksize 已设置，跳过配置"
             else
                 echo lz4 > /sys/block/zram0/comp_algorithm 2>/dev/null || true
+                # MEDIUM FIX #4: 添加内存读取验证
                 local mem_kb
-                mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
-                if [[ -z "$mem_kb" || ! "$mem_kb" =~ ^[0-9]+$ ]]; then
+                mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "")
+                if [[ -z "$mem_kb" || ! "$mem_kb" =~ ^[0-9]+$ || "$mem_kb" -le 0 ]]; then
                     log_error "无法读取有效的内存信息"
                     return 1
                 fi
@@ -307,6 +324,12 @@ configure_conntrack_hashsize() {
     
     # 加载 nf_conntrack 模块
     modprobe nf_conntrack 2>/dev/null || true
+    
+    # MEDIUM FIX #3: 验证 CT_MAX 是否为有效数字
+    if [[ -z "${CT_MAX}" || ! "${CT_MAX}" =~ ^[0-9]+$ || "${CT_MAX}" -le 0 ]]; then
+        log_error "CT_MAX 无效（${CT_MAX:-未定义}），跳过 hashsize 配置"
+        return 1
+    fi
     
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
@@ -687,6 +710,7 @@ main() {
     init_script
     check_idempotent
     detect_system
+    detect_storage_type
     # M1 FIX: detect_oracle_cloud 必须在 configure_ipv6_health 和 configure_dns_lock 之前
     # 因为 SYS_IS_ORACLE_CLOUD 变量被这些函数使用来决定行为
     detect_oracle_cloud

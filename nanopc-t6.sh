@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.4.1
+# NanoPC T6/T6S (FriendlyELEC) 专用优化安装脚本 v3.4.2
 # 硬件: RK3588S ARM64, 16GB RAM, eMMC, 1×GbE + 2×2.5GbE
 # 特点: 平衡稳定模式（保留轻量 ZRAM，不过度禁用缓冲）
 # =============================================================================
@@ -124,6 +124,7 @@ load_common_optimize
 detect_storage_type() {
     # T6 专用 eMMC，始终返回 emmc
     STORAGE_TYPE="emmc"
+    # HIGH FIX #7: 添加 local 声明
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)

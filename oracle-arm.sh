@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# Oracle Cloud ARM 专用优化安装脚本 v3.4.4
+# Oracle Cloud ARM 专用优化安装脚本 v3.4.5
 # 硬件: Ampere Altra, 2核16GB, 100GB 云盘
 # 特点: Oracle Cloud 专属优化（禁用 cloud-agent，MTU 感知，高 TCP 缓冲）
 # =============================================================================
@@ -129,6 +129,22 @@ detect_oracle_cloud() {
         log_info "Oracle Cloud 环境检测通过"
     else
         SYS_IS_ORACLE_CLOUD=false
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRITICAL FIX #11: 存储类型检测（Oracle Cloud 云盘场景）
+# ─────────────────────────────────────────────────────────────────────────────
+detect_storage_type() {
+    # Oracle Cloud 使用云盘（块存储），始终返回 cloud_disk
+    STORAGE_TYPE="cloud_disk"
+    
+    local root_dev
+    root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
+    if [[ -n "$root_dev" ]]; then
+        log_info "存储类型: cloud_disk ($(basename "$root_dev"))"
+    else
+        log_info "存储类型: cloud_disk"
     fi
 }
 
@@ -814,6 +830,7 @@ main() {
     init_script
     check_idempotent
     detect_system
+    detect_storage_type
     detect_oracle_cloud
     check_network
     preflight_check

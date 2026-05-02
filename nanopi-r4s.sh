@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.4.1
+# NanoPi R4S 专用优化安装脚本 v3.4.2
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
@@ -152,6 +152,7 @@ cleanup_legacy_tmpfs() {
 # 存储类型检测（usb_hdd, usb_ssd, tf_card, emmc, unknown）
 # ─────────────────────────────────────────────────────────────────────────────
 detect_storage_type() {
+    # CRITICAL FIX #9: 所有变量添加 local 声明
     local root_dev root_base storage_type="unknown"
 
     # Step 1: Get root device
@@ -189,6 +190,7 @@ detect_storage_type() {
     elif [[ "$root_base" =~ ^mmcblk[0-9]+$ ]]; then
         local has_emmc=false
         # Check if any mmcblk device is eMMC
+        local dev_type
         for dev_type in /sys/class/block/mmcblk*/device/type; do
             [[ -f "$dev_type" ]] || continue
             local type_val
@@ -206,9 +208,8 @@ detect_storage_type() {
         fi
     fi
 
-    # Output results
+    # CRITICAL FIX #9: 移除 echo 输出，只设置变量
     STORAGE_TYPE="$storage_type"
-    echo "STORAGE_TYPE=${storage_type} DEVICE=/dev/${root_base}"
 
     # Set legacy TF card flag for backward compatibility
     if [[ "$storage_type" == "tf_card" ]]; then
@@ -846,16 +847,31 @@ install_nodejs() {
     # R66 FIX: 先下载 NodeSource setup 脚本到文件，再执行（避免 curl|bash 管道）
     local node_setup="/tmp/nodesource_setup_22.sh"
     if curl --connect-timeout 10 --max-time 60 -fsSL https://deb.nodesource.com/setup_22.x -o "$node_setup" 2>/dev/null; then
-        bash "$node_setup" >> "$APT_LOG" 2>&1 || {
-            log_warn "NodeSource setup 执行失败，尝试 apt 安装..."
+        # HIGH FIX #10: 添加 SHA256 校验
+        local expected_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
+        local actual_sha256
+        actual_sha256=$(sha256sum "$node_setup" 2>/dev/null | awk '{print $1}')
+        if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+            log_warn "NodeSource SHA256 校验失败（预期: $expected_sha256, 实际: $actual_sha256），尝试 apt 安装..."
             rm -f "$node_setup"
             apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
                 log_error "Node.js 安装失败，请查看 $APT_LOG"
                 [[ "$tmpfs_mounted" == "true" ]] && umount /tmp 2>/dev/null || log_warn "umount /tmp 失败"
                 return 1
             }
-        }
-        rm -f "$node_setup"
+        else
+            log_info "NodeSource SHA256 校验通过"
+            bash "$node_setup" >> "$APT_LOG" 2>&1 || {
+                log_warn "NodeSource setup 执行失败，尝试 apt 安装..."
+                rm -f "$node_setup"
+                apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {
+                    log_error "Node.js 安装失败，请查看 $APT_LOG"
+                    [[ "$tmpfs_mounted" == "true" ]] && umount /tmp 2>/dev/null || log_warn "umount /tmp 失败"
+                    return 1
+                }
+            }
+            rm -f "$node_setup"
+        fi
     else
         log_warn "NodeSource setup 下载失败，尝试 apt 安装..."
         apt-get install -y nodejs >> "$APT_LOG" 2>&1 || {

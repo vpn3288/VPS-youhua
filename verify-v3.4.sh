@@ -125,15 +125,18 @@ check_zram_status() {
         zram_devs=$(ls -d /sys/block/zram* 2>/dev/null | wc -l)
         echo -e "  ${GREEN}✓ zram 模块已加载${RESET}（${zram_devs} 个设备）"
         # 显示各 zram 设备大小
+        # HIGH FIX #5: 修复变量作用域错误
         for dev in /sys/block/zram*; do
             [[ -d "$dev" ]] || continue
             local name
-        local dev="/sys/block/$name"
-        [[ ! -d "$dev" ]] && continue
-        disksize=$(cat "$dev/disksize" 2>/dev/null || echo "0")
-        # MEDIUM FIX: 验证 disksize 是否为有效数字
-        [[ -z "$disksize" || ! "$disksize" =~ ^[0-9]+$ ]] && disksize=0
-        local size_mb=$((disksize / 1024 / 1024))
+            name=$(basename "$dev")
+            local disksize
+            disksize=$(cat "$dev/disksize" 2>/dev/null || echo "0")
+            # MEDIUM FIX #6: 验证 disksize 是否为有效数字
+            if [[ -z "$disksize" || ! "$disksize" =~ ^[0-9]+$ ]]; then
+                disksize=0
+            fi
+            local size_mb=$((disksize / 1024 / 1024))
             if [[ $size_mb -gt 0 ]]; then
                 log_pair "zram/${name}" "${size_mb}MB"
             fi
