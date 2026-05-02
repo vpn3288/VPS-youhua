@@ -20,10 +20,11 @@
 #
 set -euo pipefail
 # =============================================================================
-# N5105/N5095 小主机专用优化安装脚本 v3.4.1
+# N5105/N5095 小主机专用优化安装脚本 v3.4.2
 # 硬件: Intel N5105/N5095 x86_64, 有风扇, SSD
 # 特点: x86 高性能优化，有风扇所以不需要保守降频
 # =============================================================================
+# Round 1 Fix M1: _detect_n5105_memory_profile() 使用 declare -g 避免全局污染
 #
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)
 #
@@ -112,28 +113,28 @@ _detect_n5105_memory_profile() {
     # - 高内存(≥16GB): 无需zram, swappiness=10, 大TCP缓冲
     # - 中等内存(4-16GB): 无需zram, swappiness=15, 中TCP缓冲
     # - 低内存(<4GB): 启用zram 512MB, swappiness=20, 小TCP缓冲
-    # F-1 FIX: 移除 local 修饰符，使变量在函数返回后仍可被调用者使用
+    # M1 FIX: 使用 declare -g 显式声明全局变量，避免命名空间污染
     if [[ $SYS_MEM_MB -ge 16384 ]]; then
-        ZRAM_SIZE=0
-        SWAPPINESS=10
-        TCP_BUF_MAX=33554432
-        CT_MAX=131072
-        MIN_FREE_KB=32768
-        PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
+        declare -g ZRAM_SIZE=0
+        declare -g SWAPPINESS=10
+        declare -g TCP_BUF_MAX=33554432
+        declare -g CT_MAX=131072
+        declare -g MIN_FREE_KB=32768
+        declare -g PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
     elif [[ $SYS_MEM_MB -ge 4096 ]]; then
-        ZRAM_SIZE=0
-        SWAPPINESS=15
-        TCP_BUF_MAX=16777216
-        CT_MAX=65536
-        MIN_FREE_KB=32768
-        PROFILE_DESC="中等内存 (${SYS_MEM_MB}MB)"
+        declare -g ZRAM_SIZE=0
+        declare -g SWAPPINESS=15
+        declare -g TCP_BUF_MAX=16777216
+        declare -g CT_MAX=65536
+        declare -g MIN_FREE_KB=32768
+        declare -g PROFILE_DESC="中等内存 (${SYS_MEM_MB}MB)"
     else
-        ZRAM_SIZE=512
-        SWAPPINESS=20
-        TCP_BUF_MAX=8388608
-        CT_MAX=32768
-        MIN_FREE_KB=16384
-        PROFILE_DESC="低内存 (${SYS_MEM_MB}MB)"
+        declare -g ZRAM_SIZE=512
+        declare -g SWAPPINESS=20
+        declare -g TCP_BUF_MAX=8388608
+        declare -g CT_MAX=32768
+        declare -g MIN_FREE_KB=16384
+        declare -g PROFILE_DESC="低内存 (${SYS_MEM_MB}MB)"
     fi
 }
 

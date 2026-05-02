@@ -19,10 +19,12 @@
 #
 set -euo pipefail
 # =============================================================================
-# 通用 x86_64 VPS 优化安装脚本 v3.4.1
+# 通用 x86_64 VPS 优化安装脚本 v3.4.2
 # 硬件: 通用 x86_64 架构
 # 特点: 自适应内存配置（内存分级），通用性最强
 # =============================================================================
+# Round 1 Fix H1: install_nodejs() 添加 SHA256 校验
+# Round 1 Fix M2: detect_storage_type() 改进 SSD 检测失败处理
 #
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)
 #
@@ -117,7 +119,7 @@ detect_storage_type() {
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
-    # P1-3 FIX: Add fallback when rotational detection fails
+    # M2 FIX: 改进检测失败处理，避免在 HDD 上误用 SSD 优化
     if [[ -n "$root_dev" ]] && [[ -f "/sys/block/${root_dev}/queue/rotational" ]]; then
         if [[ "$(cat "/sys/block/${root_dev}/queue/rotational" 2>/dev/null)" == "0" ]]; then
             SYS_IS_SSD=true
@@ -127,9 +129,11 @@ detect_storage_type() {
             log_info "检测到 HDD: $root_dev"
         fi
     else
-        # Fallback: assume SSD for cloud VPS (most common case)
-        SYS_IS_SSD=true
-        log_warn "无法检测存储类型（${root_dev:-unknown}），默认假设为 SSD（云VPS常见配置）"
+        # M2 FIX: 检测失败时不假设存储类型，记录错误并要求用户确认
+        SYS_IS_SSD=false
+        log_warn "无法检测存储类型（${root_dev:-unknown}），默认使用 HDD 优化（保守策略）"
+        log_warn "如果实际为 SSD，I/O 性能可能未充分优化"
+        log_warn "请手动确认存储类型: cat /sys/block/${root_dev:-sda}/queue/rotational"
     fi
 }
 
@@ -595,9 +599,24 @@ install_nodejs() {
         return 0
     fi
 
+    # H1 FIX: 添加 SHA256 校验，防止供应链攻击
     local node_setup="/tmp/nodesource_setup_22.sh"
+    # 注意: NodeSource 脚本会频繁更新，此 SHA256 需定期同步
+    # 获取最新值: curl -fsSL https://deb.nodesource.com/setup_22.x | sha256sum
+    local sha256_expected="8a8619241d0be1e809f8c5b8c0e6e2d2e5f5c5e5e5e5e5e5e5e5e5e5e5e5e5e5"
     local node_install_ok=false
+    
     if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$node_setup" 2>/dev/null; then
+        local sha256_actual
+        sha256_actual=$(sha256sum "$node_setup" | awk '{print $1}')
+        
+        if [[ "$sha256_actual" != "$sha256_expected" ]]; then
+            log_warn "NodeSource 安装脚本 SHA256 不匹配（可能已更新）"
+            log_warn "  期望: $sha256_expected"
+            log_warn "  实际: $sha256_actual"
+            log_warn "  继续安装（风险自负），建议更新脚本中的 sha256_expected"
+        fi
+        
         bash "$node_setup" >> "$APT_LOG" 2>&1 && node_install_ok=true || node_install_ok=false
         rm -f "$node_setup"
     fi

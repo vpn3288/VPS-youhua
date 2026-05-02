@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AIagent 环境优化脚本（统一入口） v3.4
+# AIagent 环境优化脚本（统一入口） v3.4.2
 # 支持平台: NanoPi R4S, NanoPC T6, Oracle ARM, N5105, 通用 x86 VPS
 # =============================================================================
+# Round 1 Fix M3: wait_for_apt_lock() 添加 trap 确保异常退出时 unmask
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -203,6 +204,9 @@ wait_for_apt_lock() {
     local max_wait=60
     local waited=0
 
+    # M3 FIX: 添加 trap 确保脚本异常退出时也能 unmask 服务
+    trap 'cleanup_apt_mask' EXIT INT TERM
+
     # 优雅停止 apt-daily 服务并屏蔽（防止恢复）
     for svc in apt-daily apt-daily-upgrade unattended-upgrades; do
         if systemctl is-active --quiet "$svc" 2>/dev/null; then
@@ -235,6 +239,9 @@ wait_for_apt_lock() {
     
     # 清理 mask 状态，恢复服务
     cleanup_apt_mask
+    
+    # M3 FIX: 移除 trap（正常退出路径）
+    trap - EXIT INT TERM
     return 0
 }
 

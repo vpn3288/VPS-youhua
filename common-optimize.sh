@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPS-youhua 通用函数库 v3.4.4
+# VPS-youhua 通用函数库 v3.4.2
 # 所有平台共享的函数和变量（各平台脚本 source 此文件）
 # =============================================================================
+# Round 1 Fix M4: detect_system() 改进内存检测失败处理
+# Round 1 Fix M5: 移除重复的 DNS 配置函数
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 基础安全设置
@@ -116,7 +118,12 @@ detect_system() {
     log_step "检测系统信息..."
 
     SYS_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
-    [[ -z "$SYS_MEM_MB" || "$SYS_MEM_MB" -eq 0 ]] && SYS_MEM_MB=1024
+    # M4 FIX: 内存检测失败时记录错误并退出，避免使用不准确的默认值
+    if [[ -z "$SYS_MEM_MB" || "$SYS_MEM_MB" -eq 0 ]]; then
+        log_error "无法检测系统内存，请检查 /proc/meminfo 或 free 命令"
+        log_error "手动检查: free -m | awk '/^Mem:/{print \$2}'"
+        return 1
+    fi
 
     SYS_CPU_CORES=$(nproc 2>/dev/null || echo 1)
     SYS_KERNEL=$(uname -r)
@@ -530,44 +537,11 @@ install_if_missing() {
 # ─────────────────────────────────────────────────────────────────────────────
 # DNS 配置
 # ─────────────────────────────────────────────────────────────────────────────
+# M5 FIX: 旧的 configure_dns() 已废弃，功能已合并到 configure_dns_lock()
+# 保留此注释以避免破坏依赖旧函数名的调用，实际功能请使用 configure_dns_lock()
 configure_dns() {
-    log_step "配置 DNS..."
-
-    mkdir -p /etc/systemd
-    cat > /etc/systemd/resolved.conf <<'EOF'
-[Resolve]
-DNS=1.1.1.1 8.8.8.8 223.5.5.5
-FallbackDNS=1.0.0.1 8.8.4.4 119.29.29.29
-DNSSEC=no
-DNSOverTLS=no
-DNSStubListener=no
-ReadEtcHosts=yes
-EOF
-    systemctl restart systemd-resolved 2>/dev/null || true
-    systemctl enable systemd-resolved 2>/dev/null || true
-
-    # DNS 防篡改：锁定 resolv.conf（百毒不侵核心）
-    # 注意：systemd-resolved 激活时不能 chattr +i（由systemd管理）
-    if [[ -f /etc/resolv.conf ]]; then
-        local resolved_active=false
-        if systemctl is-active systemd-resolved > /dev/null 2>&1; then
-            resolved_active=true
-        fi
-        if [[ "$resolved_active" == "true" ]]; then
-            log_info "DNS 由 systemd-resolved 管理，跳过 chattr +i"
-            if lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
-                chattr -i /etc/resolv.conf 2>/dev/null || true
-                log_info "已解锁 resolv.conf（systemd-resolved 需要写入权限）"
-            fi
-        else
-            if ! lsattr /etc/resolv.conf 2>/dev/null | grep -q 'i'; then
-                chattr +i /etc/resolv.conf 2>/dev/null || log_warn "chattr +i 失败（权限不足）"
-                log_info "DNS 配置已锁定（chattr +i）"
-            fi
-        fi
-    fi
-
-    log_info "DNS 配置完成"
+    log_warn "configure_dns() 已废弃，请使用 configure_dns_lock()"
+    configure_dns_lock
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
