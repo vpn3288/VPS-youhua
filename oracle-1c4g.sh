@@ -97,7 +97,7 @@ load_common_optimize() {
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
 
     local dest="${tmpdir}/common-optimize.sh"
-    local sha256_expected="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
+    local sha256_expected="0029bb95a667ce0defe8ee0435cc9cbf8a89b93689f14a5e84c3bacdfa684e0f"
     local sha256_actual=""
 
     # 主站下载（带 SHA256 验证）

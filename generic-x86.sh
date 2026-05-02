@@ -79,7 +79,7 @@ load_common_optimize() {
     
     # 下载到临时目录（SHA256 完整性验证）
     local tmpdir="/tmp/vps-youhua"
-    local sha256_expected="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
+    local sha256_expected="0029bb95a667ce0defe8ee0435cc9cbf8a89b93689f14a5e84c3bacdfa684e0f"
     mkdir -p "$tmpdir"
     echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
@@ -603,7 +603,7 @@ install_nodejs() {
     local node_setup="/tmp/nodesource_setup_22.sh"
     # 注意: NodeSource 脚本会频繁更新，此 SHA256 需定期同步
     # 获取最新值: curl -fsSL https://deb.nodesource.com/setup_22.x | sha256sum
-    local sha256_expected="8a8619241d0be1e809f8c5b8c0e6e2d2e5f5c5e5e5e5e5e5e5e5e5e5e5e5e5e5"
+    local sha256_expected="0029bb95a667ce0defe8ee0435cc9cbf8a89b93689f14a5e84c3bacdfa684e0f"
     local node_install_ok=false
     
     if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$node_setup" 2>/dev/null; then
