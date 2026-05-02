@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # VPS 优化脚本 - 通用 1核 1G VPS
 #

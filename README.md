@@ -492,6 +492,41 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 
 ---
 
+
+---
+
+## 脚本标准
+
+### Shebang 规范
+
+所有脚本统一使用 `#!/usr/bin/env bash` 作为 Shebang：
+
+```bash
+#!/usr/bin/env bash
+```
+
+**为什么使用 `/usr/bin/env bash` 而不是 `/bin/bash`？**
+
+- **可移植性更好**：`env` 会在 PATH 中查找 bash，适配不同系统的 bash 安装路径
+- **支持更多环境**：某些系统（如 NixOS、Homebrew）的 bash 不在 `/bin` 目录
+- **符合最佳实践**：现代 Shell 脚本推荐的标准写法
+
+### 脚本执行权限
+
+所有 `.sh` 脚本文件都具有可执行权限（`chmod +x`），可以直接运行：
+
+```bash
+./nanopi-r4s.sh
+```
+
+或通过 bash 显式调用：
+
+```bash
+bash nanopi-r4s.sh
+```
+
+---
+
 ## 获取帮助
 
 - 问题反馈：https://github.com/vpn3288/VPS-youhua/issues

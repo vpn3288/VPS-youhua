@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # 修复: 非交互式环境(如SSH远程执行)需要 TERM 变量
 : "${TERM:=xterm}"
