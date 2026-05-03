@@ -19,11 +19,12 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.4.2
+# NanoPi R4S 专用优化安装脚本 v3.4.3
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装
 # =============================================================================
+# Round 2 Fix #26-29: 添加缺失的 local 声明
 #
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)
 #
@@ -141,7 +142,7 @@ cleanup_legacy_tmpfs() {
 # ─────────────────────────────────────────────────────────────────────────────
 detect_storage_type() {
     # CRITICAL FIX #9: 所有变量添加 local 声明
-    local root_dev root_base storage_type="unknown"
+    local root_dev root_base storage_type="unknown" device_path real_path rotational has_emmc dev_type type_val
 
     # Step 1: Get root device
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
@@ -253,6 +254,7 @@ configure_tf_card_protection() {
         fi
         # R66 FIX: 动态计算 ZRAM_SIZE（基于实际物理内存）
         local total_mem_kb
+    local total_mem_kb zram_mb
         total_mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
         if [[ -z "$total_mem_kb" || ! "$total_mem_kb" =~ ^[0-9]+$ ]]; then
             log_error "无法读取有效的内存信息"
@@ -487,6 +489,7 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # ARM 专项优化（R4S/RK3399）
 # ─────────────────────────────────────────────────────────────────────────────
+    local cpu_governor
 optimize_arm() {
     log_step "ARM 专项优化..."
 
@@ -616,6 +619,7 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # TF 卡检测后传递给 common 的 journald 配置
 # ─────────────────────────────────────────────────────────────────────────────
+    local journald_storage journald_max_use
 configure_journald() {
     log_step "配置 journald..."
     mkdir -p /etc/systemd/journald.conf.d

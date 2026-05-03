@@ -131,6 +131,7 @@ detect_storage_type() {
     
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
+    local root_dev
     if [[ -n "$root_dev" ]]; then
         log_info "存储类型: cloud_disk ($(basename "$root_dev"))"
     else
@@ -181,6 +182,7 @@ optimize_memory_oracle() {
         else
             # 检查 disksize 是否已设置
             local current_disksize
+    local current_disksize mem_kb
             current_disksize=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
             if [[ "$current_disksize" != "0" ]]; then
                 log_info "zram0 disksize 已设置，跳过配置"
@@ -306,6 +308,7 @@ configure_conntrack_hashsize() {
             mkdir -p /etc/modprobe.d
             echo "options nf_conntrack hashsize=$hashsize" > /etc/modprobe.d/nf_conntrack.conf
         }
+    local current_hashsize
         local current_hashsize
         current_hashsize=$(cat "$hashsize_file" 2>/dev/null || echo "unknown")
         log_info "nf_conntrack_hashsize 已设置: ${current_hashsize}"
@@ -320,6 +323,7 @@ configure_conntrack_hashsize() {
 optimize_network_oracle() {
     log_step "优化 Oracle Cloud 网络..."
 
+    local mtu cores mask
     # Oracle Cloud MTU 检测（不强制修改）
     local mtu
     mtu=$(ip link show $(ip route get 8.8.8.8 2>/dev/null | awk '{print $5; exit}') 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="mtu") print $(i+1); exit}' || echo "1500")
@@ -483,6 +487,7 @@ run_doctor() {
     echo "   qdisc: $(sysctl -n net.core.default_qdisc 2>/dev/null || echo '未知')"
     echo ""
     echo "5. 存储:"
+    local tmp_size
     # Round 10 Fix: 使用 tail -1 而不是 NR==2，避免文件系统名称过长导致换行时解析失败
     # LOW FIX: df 解析添加错误处理，避免解析失败时输出空值
     local tmp_size
@@ -495,6 +500,7 @@ run_doctor() {
 # ─────────────────────────────────────────────────────────────────────────────
 # Oracle Cloud 元数据健康检查（可选，防云端 kill）
 # ─────────────────────────────────────────────────────────────────────────────
+    local meta_status instance_id agent_status
 check_oracle_metadata() {
     log_step "检查 Oracle Cloud 元数据..."
 
@@ -539,6 +545,7 @@ uninstall_all() {
     fi
 
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
+    local confirm
     echo ""
     # 非交互卸载时跳过确认提示
     if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then

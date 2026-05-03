@@ -129,6 +129,7 @@ detect_storage_type() {
     
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
+    local root_dev
     if [[ -n "$root_dev" ]]; then
         log_info "存储类型: cloud_disk ($(basename "$root_dev"))"
     else
@@ -249,6 +250,7 @@ configure_conntrack_hashsize() {
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
         local hashsize
+    local hashsize current_hashsize
         hashsize=$((CT_MAX / 4))
         echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
             log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"
@@ -270,6 +272,7 @@ configure_conntrack_hashsize() {
 optimize_network_oracle() {
     log_step "Oracle Cloud 网络优化..."
 
+    local primary_iface cores mask
     local primary_iface
     primary_iface=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}')
 
@@ -393,6 +396,7 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_io_scheduler() {
     log_step "配置 I/O Scheduler..."
+    local root_dev
 
     local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
@@ -663,6 +667,7 @@ uninstall_all() {
     echo -e "${YELLOW}警告：此操作将删除所有 VPS-youhua 优化配置！${NC}"
     echo ""
     # 非交互卸载时跳过确认提示
+    local confirm
     if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
         echo -n "确认卸载？(输入 'yes' 继续): "
         read -r -t 30 confirm || confirm=""
@@ -754,6 +759,7 @@ uninstall_all() {
 # Oracle Cloud 元数据健康检查（可选，防云端 kill）
 # ─────────────────────────────────────────────────────────────────────────────
 check_oracle_metadata() {
+    local meta_status instance_id agent_status
     log_step "检查 Oracle Cloud 元数据..."
 
     # 检测是否在 Oracle Cloud 环境中
@@ -872,6 +878,7 @@ main() {
     fi
     
     if [[ "$SKIP_SOFTWARE_SCRIPT" == "true" ]]; then
+    local did_install
         log_info "纯优化模式，跳过 Docker / Node.js 安装"
     else
         [[ "$INSTALL_DOCKER" == "true" ]] && install_docker
