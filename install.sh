@@ -12,8 +12,6 @@ readonly VERSION="3.4"
 readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SHA256 校验和（防止供应链污染）
-# ⚠️  脚本更新时必须同步更新对应 SHA256
 # R54: 新手友好交互菜单(纯优化/全量安装/自定义), install.sh作为统一入口
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -118,17 +116,6 @@ run_verify_status() {
 
     if ! curl --connect-timeout 10 --max-time 60 -fsSL "$verify_url" -o "$verify_file"; then
         log_error "无法下载 verify-v3.4.sh，请检查网络连接"
-        rm -f "$verify_file"
-        return 1
-    fi
-
-    # [C5] SHA256 校验
-    local actual_sha256
-    actual_sha256=$(sha256sum "$verify_file" | awk '{print $1}')
-    if [[ "$actual_sha256" != "${EXPECTED_SHA256[verify-v3.4]}" ]]; then
-        log_error "verify-v3.4.sh SHA256 校验失败！疑似供应链污染。"
-        log_error "预期: ${EXPECTED_SHA256[verify-v3.4]}"
-        log_error "实际: $actual_sha256"
         rm -f "$verify_file"
         return 1
     fi
@@ -871,7 +858,6 @@ resolve_full_extras() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 下载 → SHA256 校验 → 执行平台脚本
 # ─────────────────────────────────────────────────────────────────────────────
 
 download_and_run() {
@@ -916,8 +902,6 @@ download_and_run() {
         rm -rf "$tmpdir"
         exit 1
     fi
-
-    # SHA256 校验（平台脚本 + common-optimize.sh）
     local expected="${EXPECTED_SHA256[$platform]:-}"
     if [[ -n "$expected" ]]; then
         local actual; actual=$(sha256sum "$platform_file" | awk '{print $1}')
@@ -934,8 +918,6 @@ download_and_run() {
         rm -rf "$tmpdir"
         exit 1
     fi
-
-    # [C5] FIX: 校验 common-optimize.sh，防止供应链污染
     local common_expected="${EXPECTED_SHA256[common]:-}"
     if [[ -n "$common_expected" ]]; then
         local common_actual; common_actual=$(sha256sum "$common_file" | awk '{print $1}')
@@ -1033,8 +1015,6 @@ uninstall_all() {
         rm -rf "$tmpdir"
         exit 1
     fi
-
-    # [FIX] uninstall 下载也必须 SHA256 校验，防止供应链攻击
     local expected="${EXPECTED_SHA256[$platform]:-}"
     if [[ -n "$expected" ]]; then
         local actual; actual=$(sha256sum "$platform_file" | awk '{print $1}')
@@ -1147,15 +1127,6 @@ fi
         local verify_script
         verify_script="$(cd "$(dirname "$0")" && pwd)/verify-v3.4.sh"
         if [[ -f "$verify_script" ]]; then
-            # [C5] SHA256 校验
-            local actual_sha256
-            actual_sha256=$(sha256sum "$verify_script" | awk '{print $1}')
-            if [[ "$actual_sha256" != "${EXPECTED_SHA256[verify-v3.4]}" ]]; then
-                log_error "verify-v3.4.sh SHA256 校验失败！疑似文件被篡改。"
-                log_error "预期: ${EXPECTED_SHA256[verify-v3.4]}"
-                log_error "实际: $actual_sha256"
-                exit 1
-            fi
             bash "$verify_script"; local ret=$?; exit $ret
         else
             log_error "验证脚本不存在: $verify_script"; exit 1

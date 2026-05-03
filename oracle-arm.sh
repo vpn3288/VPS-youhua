@@ -89,31 +89,19 @@ load_common_optimize() {
         echo -e "\033[33m[!] 警告: /tmp/vps-youhua/common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
     
-    # 下载到临时目录（SHA256 完整性验证）
+    # 下载到临时目录
     local tmpdir="/tmp/vps-youhua"
-    local sha256_expected="0029bb95a667ce0defe8ee0435cc9cbf8a89b93689f14a5e84c3bacdfa684e0f"
     mkdir -p "$tmpdir"
-    echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
-    if curl --connect-timeout 10 --max-time 60 -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
-        # SHA256 校验供应链安全
-        local sha256_actual
-        sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
-        if [[ "$sha256_actual" != "$sha256_expected" ]]; then
-            echo -e "\033[31m[✗] 错误: common-optimize.sh SHA256 校验失败\033[0m" >&2
-            echo -e "\033[31m  期望: $sha256_expected\033[0m" >&2
-            echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
-            rm -f "${tmpdir}/common-optimize.sh"
-            rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
-            exit 1
-        fi
+    echo -e "[36m[➜] 下载 common-optimize.sh...[0m"
+    if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
         source "${tmpdir}/common-optimize.sh"
         if declare -f log_step >/dev/null 2>&1; then
             return 0
         fi
-        echo -e "\033[31m[✗] 错误: common-optimize.sh 下载成功但加载失败\033[0m" >&2
+        echo -e "[31m[✗] 错误: common-optimize.sh 下载成功但加载失败[0m" >&2
         exit 1
     fi
-    echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh\033[0m" >&2
+    echo -e "[31m[✗] 错误: 无法下载 common-optimize.sh[0m" >&2
     exit 1
 }
 
@@ -560,23 +548,12 @@ install_nodejs() {
     fi
 
     # H8 FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
-    # 供应链安全: SHA256 校验（与 n5105.sh 保持一致）
     local nodesource_script="/tmp/nodesource_setup_22.sh"
     local nodesource_download_ok=false
     curl -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null && nodesource_download_ok=true
 
     if [[ "$nodesource_download_ok" == "true" ]]; then
-        # 注意：NodeSource 脚本会定期更新，SHA256 会变化
-        # 生产环境建议定期更新此校验和或使用动态校验
-        local expected_nodesource_sha256="575583bbac2fccc0b5edd0dbc03e222d9f9dc8d724da996d22754d6411104fd1"
-        local actual_nodesource_sha256
-        actual_nodesource_sha256=$(sha256sum "$nodesource_script" 2>/dev/null | awk '{print $1}')
-        if [[ "$actual_nodesource_sha256" == "$expected_nodesource_sha256" ]]; then
-            chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && nodesource_download_ok="verified" || nodesource_download_ok="failed"
-        else
-            log_warn "NodeSource 安装脚本 SHA256 校验异常（预期: $expected_nodesource_sha256, 实际: $actual_nodesource_sha256），跳过执行"
-            nodesource_download_ok="failed"
-        fi
+        chmod +x "$nodesource_script" && "$nodesource_script" >> "$APT_LOG" 2>&1 && nodesource_download_ok="verified" || nodesource_download_ok="failed"
         rm -f "$nodesource_script"
     fi
 

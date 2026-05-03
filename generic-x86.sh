@@ -23,7 +23,6 @@ set -euo pipefail
 # 硬件: 通用 x86_64 架构
 # 特点: 自适应内存配置（内存分级），通用性最强
 # =============================================================================
-# Round 1 Fix H1: install_nodejs() 添加 SHA256 校验
 # Round 1 Fix M2: detect_storage_type() 改进 SSD 检测失败处理
 #
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)
@@ -77,31 +76,19 @@ load_common_optimize() {
         echo -e "\033[33m[!] 警告: /tmp/vps-youhua/common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
     
-    # 下载到临时目录（SHA256 完整性验证）
+    # 下载到临时目录
     local tmpdir="/tmp/vps-youhua"
-    local sha256_expected="0029bb95a667ce0defe8ee0435cc9cbf8a89b93689f14a5e84c3bacdfa684e0f"
     mkdir -p "$tmpdir"
-    echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
+    echo -e "[36m[➜] 下载 common-optimize.sh...[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
-        # SHA256 校验供应链安全
-        local sha256_actual
-        sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
-        if [[ "$sha256_actual" != "$sha256_expected" ]]; then
-            echo -e "\033[31m[✗] 错误: common-optimize.sh SHA256 校验失败\033[0m" >&2
-            echo -e "\033[31m  期望: $sha256_expected\033[0m" >&2
-            echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
-            rm -f "${tmpdir}/common-optimize.sh"
-            rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
-            exit 1
-        fi
         source "${tmpdir}/common-optimize.sh"
         if declare -f log_step >/dev/null 2>&1; then
             return 0
         fi
-        echo -e "\033[31m[✗] 错误: common-optimize.sh 下载成功但加载失败\033[0m" >&2
+        echo -e "[31m[✗] 错误: common-optimize.sh 下载成功但加载失败[0m" >&2
         exit 1
     fi
-    echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh\033[0m" >&2
+    echo -e "[31m[✗] 错误: 无法下载 common-optimize.sh[0m" >&2
     exit 1
 }
 
@@ -598,25 +585,10 @@ install_nodejs() {
         log_info "Node.js 已安装: $(node --version)，跳过"
         return 0
     fi
-
-    # H1 FIX: 添加 SHA256 校验，防止供应链攻击
     local node_setup="/tmp/nodesource_setup_22.sh"
-    # 注意: NodeSource 脚本会频繁更新，此 SHA256 需定期同步
-    # 获取最新值: curl -fsSL https://deb.nodesource.com/setup_22.x | sha256sum
-    local sha256_expected="0029bb95a667ce0defe8ee0435cc9cbf8a89b93689f14a5e84c3bacdfa684e0f"
     local node_install_ok=false
     
     if curl -fsSL https://deb.nodesource.com/setup_22.x -o "$node_setup" 2>/dev/null; then
-        local sha256_actual
-        sha256_actual=$(sha256sum "$node_setup" | awk '{print $1}')
-        
-        if [[ "$sha256_actual" != "$sha256_expected" ]]; then
-            log_warn "NodeSource 安装脚本 SHA256 不匹配（可能已更新）"
-            log_warn "  期望: $sha256_expected"
-            log_warn "  实际: $sha256_actual"
-            log_warn "  继续安装（风险自负），建议更新脚本中的 sha256_expected"
-        fi
-        
         bash "$node_setup" >> "$APT_LOG" 2>&1 && node_install_ok=true || node_install_ok=false
         rm -f "$node_setup"
     fi

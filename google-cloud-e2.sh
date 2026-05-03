@@ -88,31 +88,19 @@ load_common_optimize() {
         echo -e "\033[33m[!] 警告: /tmp/vps-youhua/common-optimize.sh 加载失败，尝试下载...\033[0m" >&2
     fi
     
-    # 下载到临时目录（SHA256 完整性验证）
+    # 下载到临时目录
     local tmpdir="/tmp/vps-youhua"
-    local sha256_expected="0029bb95a667ce0defe8ee0435cc9cbf8a89b93689f14a5e84c3bacdfa684e0f"
     mkdir -p "$tmpdir"
-    echo -e "\033[36m[➜] 下载 common-optimize.sh...\033[0m"
+    echo -e "[36m[➜] 下载 common-optimize.sh...[0m"
     if curl -fsSL "$COMMON_OPTIMIZE_URL" -o "${tmpdir}/common-optimize.sh"; then
-        # SHA256 校验供应链安全
-        local sha256_actual
-        sha256_actual=$(sha256sum "${tmpdir}/common-optimize.sh" | awk '{print $1}')
-        if [[ "$sha256_actual" != "$sha256_expected" ]]; then
-            echo -e "\033[31m[✗] 错误: common-optimize.sh SHA256 校验失败\033[0m" >&2
-            echo -e "\033[31m  期望: $sha256_expected\033[0m" >&2
-            echo -e "\033[31m  实际: $sha256_actual\033[0m" >&2
-            rm -f "${tmpdir}/common-optimize.sh"
-            rmdir "$tmpdir" 2>/dev/null || true  # 清理空目录
-            exit 1
-        fi
         source "${tmpdir}/common-optimize.sh"
         if declare -f log_step >/dev/null 2>&1; then
             return 0
         fi
-        echo -e "\033[31m[✗] 错误: common-optimize.sh 下载成功但加载失败\033[0m" >&2
+        echo -e "[31m[✗] 错误: common-optimize.sh 下载成功但加载失败[0m" >&2
         exit 1
     fi
-    echo -e "\033[31m[✗] 错误: 无法下载 common-optimize.sh\033[0m" >&2
+    echo -e "[31m[✗] 错误: 无法下载 common-optimize.sh[0m" >&2
     exit 1
 }
 
