@@ -342,9 +342,11 @@ EOF
     fi
     
     # 应用所有 sysctl 参数（忽略不支持的参数）
-    sysctl -p "$SYSCTL_FILE" 2>&1 | grep -v "cannot stat" || true
-    
-    log_info "sysctl 参数配置完成（已跳过不支持的参数）"
+    if sysctl -p "$SYSCTL_FILE" 2>&1 | grep -v "cannot stat"; then
+        log_info "sysctl 参数配置完成（已跳过不支持的参数）"
+    else
+        log_warn "sysctl 部分参数应用失败（可能是内核限制）"
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

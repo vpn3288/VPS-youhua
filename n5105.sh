@@ -103,7 +103,7 @@ _detect_n5105_memory_profile() {
     # - 高内存(≥16GB): 无需zram, swappiness=10, 大TCP缓冲
     # - 中等内存(4-16GB): 无需zram, swappiness=15, 中TCP缓冲
     # - 低内存(<4GB): 启用zram 512MB, swappiness=20, 小TCP缓冲
-    # M1 FIX: 使用 declare -g 显式声明全局变量（而非避免污染，declare -g 就是声明全局变量）
+    # 使用 declare -g 显式声明全局变量（这些变量需要在函数外部使用）
     if [[ $SYS_MEM_MB -ge 16384 ]]; then
         declare -g ZRAM_SIZE=0
         declare -g SWAPPINESS=10

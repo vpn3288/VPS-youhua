@@ -131,7 +131,7 @@ detect_storage_type() {
 # 内存分级检测
 # ─────────────────────────────────────────────────────────────────────────────
 detect_memory_profile() {
-    # LOW FIX: 改进 readonly 声明，先赋值再统一声明为 readonly
+    # 先赋值再统一声明为 readonly，避免重复声明错误
     if [[ $SYS_MEM_MB -ge 16384 ]]; then
         ZRAM_SIZE=0; SWAPPINESS=10; TCP_BUF_MAX=67108864; CT_MAX=262144; MIN_FREE_KB=32768
         PROFILE_DESC="高内存 (${SYS_MEM_MB}MB)"
