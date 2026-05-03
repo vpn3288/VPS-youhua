@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPS-youhua 通用函数库 v3.4.2
+# VPS-youhua 通用函数库 v3.4.3
 # 所有平台共享的函数和变量（各平台脚本 source 此文件）
 # =============================================================================
 # Round 1 Fix M4: detect_system() 改进内存检测失败处理
 # Round 1 Fix M5: 移除重复的 DNS 配置函数
+# Round 1 Fix #7: detect_system() return 1 不会导致脚本退出，需调用者检查
+# Round 1 Fix #8: configure_apt_sources() 添加缺失的 local 声明
+# Round 1 Fix #9: test_mirror_speed() 添加 local 声明
+# Round 1 Fix #10: write_common_sysctl() 添加参数验证
+# Round 1 Fix #12: configure_fail2ban() 添加 local 声明
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 基础安全设置
@@ -284,6 +289,7 @@ configure_apt_sources() {
     local sources_list="/etc/apt/sources.list"
     local codename
     codename=$(awk -F'["=]' '/^VERSION_CODENAME=/ {print $2; exit}' /etc/os-release 2>/dev/null || echo "bookworm")
+    local mirror_mode selected_mirror apt_marker
 
     backup_file "$sources_list"
 
@@ -301,8 +307,8 @@ $nrconf{unneeded} = 'a';
 EOF
 
     # CONFIGURE_MIRROR: auto=测速选源, off=仅配APT参数, preserve=保留原源
-    local mirror_mode="${CONFIGURE_MIRROR:-auto}"
-    local selected_mirror=""
+    mirror_mode="${CONFIGURE_MIRROR:-auto}"
+    selected_mirror=""
 
     if [[ "$mirror_mode" == "off" ]]; then
         log_info "跳过 APT 镜像切换（保持系统默认源）"
@@ -322,7 +328,7 @@ EOF
     fi
 
     # 幂等性检查：若已标记为已配置，跳过镜像切换（仅保留 apt-get update）
-    local apt_marker="/etc/vps-youhua-apt-sources-configured"
+    apt_marker="/etc/vps-youhua-apt-sources-configured"
     if [[ -f "$apt_marker" ]]; then
         log_info "APT 源已配置，跳过镜像切换"
         if ! apt-get update -qq >> "$APT_LOG" 2>&1; then

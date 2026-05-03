@@ -19,11 +19,12 @@
 : "${TERM:=xterm}"
 set -euo pipefail
 # =============================================================================
-# 通用 1核 1G VPS 极简优化安装脚本 v3.4.4
+# 通用 1核 1G VPS 极简优化安装脚本 v3.4.3
 # 硬件: 任意 1核 1GB x86_64 VPS（最低配套餐）
 # 特点: 极简资源占用优化（适用于 1GB 及以下超小内存 VPS）
 #       去除所有重资源功能（fail2ban / unattended-upgrades / zram 替代 swap）
 # =============================================================================
+# Round 1 Fix #23-24: 添加缺失的 local 声明
 #
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-1c1g.sh)
 #
@@ -186,7 +187,7 @@ configure_zram_1c1g() {
         return 0
     fi
 
-    local mem_kb
+    local mem_kb zram_size_bytes retry zram_dev current_disksize
     mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
     # Round 10 Fix: 验证 mem_kb 有效性，防止除零错误
     if [[ -z "$mem_kb" || "$mem_kb" -le 0 ]]; then
@@ -239,6 +240,7 @@ configure_conntrack_hashsize_1c1g() {
 
     # MEDIUM FIX: 添加参数验证
     local ct_max="${CT_MAX:-0}"
+    local hashsize hashsize_file current_hashsize
     if [[ -z "$ct_max" || ! "$ct_max" =~ ^[0-9]+$ || "$ct_max" -le 0 ]]; then
         log_warn "CT_MAX 无效（${ct_max}），使用默认值 32768"
         ct_max=32768

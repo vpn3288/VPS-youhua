@@ -19,11 +19,12 @@
 #
 set -euo pipefail
 # =============================================================================
-# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.4.4
+# Google Cloud e2-micro 永久免费 VPS 优化安装脚本 v3.4.3
 # 硬件: Google Cloud e2-micro, 1vCPU(共享) 1GB RAM, 30GB SSD
 # 特点: GCP 共享 CPU 特化优化（burstable CPU + Intel + VPC 网络）
 #       GCP Always Free 机型永久免费（1vCPU 1GB，非 ARM）
 # =============================================================================
+# Round 1 Fix #17-22: 添加缺失的 local 声明
 #
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/google-cloud-e2.sh)
 #
@@ -129,7 +130,7 @@ detect_gcp_cloud() {
 check_gcp_metadata() {
     log_step "检查 GCP Cloud 元数据..."
 
-    local meta_status
+    local meta_status instance_name instance_zone guest_status external_ip
     meta_status=$(curl -s --connect-timeout 3 -o /dev/null -w "%{http_code}" \
         -H "Metadata-Flavor: Google" \
         "http://metadata.google.internal/computeMetadata/v1/instance/" 2>/dev/null || echo "000")
@@ -200,7 +201,7 @@ optimize_memory_gcp() {
         return 0
     fi
 
-    local mem_kb
+    local mem_kb zram_size_bytes retry zram_dev current_disksize
     mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo "0")
     if [[ ! "$mem_kb" =~ ^[0-9]+$ ]] || [[ "$mem_kb" -le 0 ]]; then
         log_warn "无法读取有效内存信息（mem_kb=${mem_kb}），跳过 zram"
@@ -353,7 +354,7 @@ optimize_cpu_gcp() {
     [[ "$SYS_IS_GCP_CLOUD" != "true" ]] && return 0
     log_step "配置 GCP Cloud CPU 调度器..."
 
-    local avail_governors
+    local avail_governors chosen cpu gf cur
     avail_governors=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null || echo "")
 
     local chosen="ondemand"
@@ -383,6 +384,7 @@ optimize_network_gcp() {
     SYS_CPU_CORES=${SYS_CPU_CORES:-$(nproc 2>/dev/null || echo 1)}
     log_step "优化 GCP Cloud 网络..."
 
+    local iface name cores mask rps_file
     # GCP VPC 网卡优化
     for iface in /sys/class/net/en* /sys/class/net/eth* /sys/class/net/gcp*; do
         [[ -d "$iface" ]] || continue

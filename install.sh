@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AIagent 环境优化脚本（统一入口） v3.4.2
+# AIagent 环境优化脚本（统一入口） v3.4.3
 # 支持平台: NanoPi R4S, NanoPC T6, Oracle ARM, N5105, 通用 x86 VPS
 # =============================================================================
 # Round 1 Fix M3: wait_for_apt_lock() 添加 trap 确保异常退出时 unmask
+# Round 1 Fix #1: cleanup_apt_mask 函数定义移到 wait_for_apt_lock 之前
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -172,6 +173,15 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 取消屏蔽 apt-daily 服务（清理 wait_for_apt_lock 的副作用）
+# ─────────────────────────────────────────────────────────────────────────────
+cleanup_apt_mask() {
+    for svc in apt-daily apt-daily-upgrade unattended-upgrades; do
+        systemctl unmask "$svc" 2>/dev/null || true
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # APT 锁抢占处理（防止 unattended-upgrades 阻塞脚本）
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -218,15 +228,6 @@ wait_for_apt_lock() {
     # M3 FIX: 移除 trap（正常退出路径）
     trap - EXIT INT TERM
     return 0
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 取消屏蔽 apt-daily 服务（清理 wait_for_apt_lock 的副作用）
-# ─────────────────────────────────────────────────────────────────────────────
-cleanup_apt_mask() {
-    for svc in apt-daily apt-daily-upgrade unattended-upgrades; do
-        systemctl unmask "$svc" 2>/dev/null || true
-    done
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

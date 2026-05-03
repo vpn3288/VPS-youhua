@@ -20,11 +20,13 @@
 #
 set -euo pipefail
 # =============================================================================
-# N5105/N5095 小主机专用优化安装脚本 v3.4.2
+# N5105/N5095 小主机专用优化安装脚本 v3.4.3
 # 硬件: Intel N5105/N5095 x86_64, 有风扇, SSD
 # 特点: x86 高性能优化，有风扇所以不需要保守降频
 # =============================================================================
 # Round 1 Fix M1: _detect_n5105_memory_profile() 使用 declare -g 避免全局污染
+# Round 1 Fix #5: optimize_memory_n5105() 添加 local 声明
+# Round 1 Fix #6: configure_conntrack_hashsize() 添加 local 声明
 #
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)
 #
@@ -101,7 +103,7 @@ _detect_n5105_memory_profile() {
     # - 高内存(≥16GB): 无需zram, swappiness=10, 大TCP缓冲
     # - 中等内存(4-16GB): 无需zram, swappiness=15, 中TCP缓冲
     # - 低内存(<4GB): 启用zram 512MB, swappiness=20, 小TCP缓冲
-    # M1 FIX: 使用 declare -g 显式声明全局变量，避免命名空间污染
+    # M1 FIX: 使用 declare -g 显式声明全局变量（而非避免污染，declare -g 就是声明全局变量）
     if [[ $SYS_MEM_MB -ge 16384 ]]; then
         declare -g ZRAM_SIZE=0
         declare -g SWAPPINESS=10
@@ -275,6 +277,7 @@ configure_conntrack_hashsize() {
     
     # Round 3 Fix H1: 参数验证
     local conntrack_max=${CT_MAX:-0}
+    local hashsize hashsize_file current_hashsize
     
     if [[ -z "$conntrack_max" || "$conntrack_max" -le 0 ]]; then
         log_warn "conntrack_max 无效（${conntrack_max:-未定义}），使用默认值"

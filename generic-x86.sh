@@ -19,11 +19,14 @@
 #
 set -euo pipefail
 # =============================================================================
-# 通用 x86_64 VPS 优化安装脚本 v3.4.2
+# 通用 x86_64 VPS 优化安装脚本 v3.4.3
 # 硬件: 通用 x86_64 架构
 # 特点: 自适应内存配置（内存分级），通用性最强
 # =============================================================================
 # Round 1 Fix M2: detect_storage_type() 改进 SSD 检测失败处理
+# Round 1 Fix #13: detect_storage_type() 添加 local 声明
+# Round 1 Fix #15: optimize_memory_generic() 添加 local 声明
+# Round 1 Fix #16: configure_conntrack_hashsize() 添加 local 声明
 #
 # 一键运行: bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)
 #
@@ -153,7 +156,7 @@ optimize_memory_generic() {
     log_step "配置内存优化 (${PROFILE_DESC})..."
 
     # Round 3 Fix M2: 添加循环变量 local 声明
-    local sw
+    local sw zram_backend zram_size_bytes
     for sw in /swapfile /swap.img; do
         swapon --show 2>/dev/null | grep -qF "$sw" && swapoff "$sw" 2>/dev/null || true
         [[ -f "$sw" ]] && rm -f "$sw"
@@ -306,6 +309,7 @@ configure_conntrack_hashsize() {
     
     # Round 3 Fix H1: 参数验证
     local conntrack_max=${CT_MAX:-0}
+    local hashsize hashsize_file current_hashsize
     
     if [[ -z "$conntrack_max" || "$conntrack_max" -le 0 ]]; then
         log_warn "conntrack_max 无效（${conntrack_max:-未定义}），使用默认值"
