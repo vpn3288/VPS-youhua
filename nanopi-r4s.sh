@@ -217,6 +217,7 @@ detect_storage_type() {
 configure_tf_card_protection() {
     [[ "$STORAGE_TYPE" != "tf_card" ]] && return 0
     log_step "配置 TF 卡写入保护..."
+    local total_mem_kb zram_mb
 
     # ext4 挂载参数（减少随机写入）
     # 使用 awk 精确匹配 root 挂载点，避免 sed 正则误匹配
@@ -254,7 +255,6 @@ configure_tf_card_protection() {
         fi
         # R66 FIX: 动态计算 ZRAM_SIZE（基于实际物理内存）
         local total_mem_kb
-    local total_mem_kb zram_mb
         total_mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
         if [[ -z "$total_mem_kb" || ! "$total_mem_kb" =~ ^[0-9]+$ ]]; then
             log_error "无法读取有效的内存信息"
@@ -489,12 +489,11 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # ARM 专项优化（R4S/RK3399）
 # ─────────────────────────────────────────────────────────────────────────────
-    local cpu_governor
 optimize_arm() {
+    local cpu_governor
     log_step "ARM 专项优化..."
 
     # CPU governor 根据存储类型设置
-    local cpu_governor
     if [[ "$STORAGE_TYPE" == "usb_hdd" || "$STORAGE_TYPE" == "usb_ssd" ]]; then
         # USB 存储：使用 performance 以减少延迟
         cpu_governor="performance"
@@ -619,10 +618,10 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 # TF 卡检测后传递给 common 的 journald 配置
 # ─────────────────────────────────────────────────────────────────────────────
-    local journald_storage journald_max_use
 configure_journald() {
     log_step "配置 journald..."
     mkdir -p /etc/systemd/journald.conf.d
+    local journald_storage journald_max_use
 
     # Round 3 Fix H2: 添加备份
     local journald_conf="/etc/systemd/journald.conf.d/99-vps-youhua.conf"

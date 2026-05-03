@@ -110,12 +110,11 @@ load_common_optimize
 # T6 eMMC 存储检测
 # ─────────────────────────────────────────────────────────────────────────────
 detect_storage_type() {
+    local root_dev
     # T6 专用 eMMC，始终返回 emmc
     STORAGE_TYPE="emmc"
     # HIGH FIX #7: 添加 local 声明
-    local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
-    local root_dev
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
     if [[ "$root_dev" == mmcblk* ]]; then
@@ -416,10 +415,9 @@ EOF
 # I/O Scheduler（eMMC/SSD → none）
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_io_scheduler() {
+    local root_dev
     log_step "配置 I/O Scheduler..."
 
-    local root_dev
-    local root_dev
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
     root_dev=$(basename "$root_dev" 2>/dev/null)
 
@@ -561,6 +559,7 @@ EOF
 install_nodejs() {
     [[ "${INSTALL_NODEJS:-false}" != "true" ]] && return 0
     log_step "安装 Node.js..."
+    local nodesource_download_ok
 
     if command -v node &>/dev/null; then
         log_info "Node.js 已安装: $(node --version)，跳过"
@@ -570,7 +569,6 @@ install_nodejs() {
     # [H10] FIX: 使用临时文件替代 curl|bash 管道安装 Node.js
     local nodesource_script="/tmp/setup_nodesource.sh"
     local nodesource_download_ok=false
-    local nodesource_download_ok
     if curl --connect-timeout 10 --max-time 60 -fsSL https://deb.nodesource.com/setup_22.x -o "$nodesource_script" 2>/dev/null; then
         nodesource_download_ok=true
     fi
@@ -688,7 +686,6 @@ uninstall_all() {
     echo ""
     # 非交互卸载时跳过确认提示
     if [[ "${FORCE_UNINSTALL:-false}" != "true" ]]; then
-    local confirm
         echo -n "确认卸载？(输入 'yes' 继续): "
         read -r -t 30 confirm || confirm=""
         confirm="${confirm,,}"
