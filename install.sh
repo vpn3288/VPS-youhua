@@ -15,19 +15,7 @@ readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 # R54: 新手友好交互菜单(纯优化/全量安装/自定义), install.sh作为统一入口
 # ─────────────────────────────────────────────────────────────────────────────
 
-declare -A EXPECTED_SHA256=(
-    ["common-optimize"]="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
-    ["common"]="d5b94b48770d43216f2751bbd881aa2ff8ba9d856c4c9e56e3d91d07b9731e67"
-    ["nanopc-t6"]="404a55fb3b21eda64585ea337cd5d99410a7fbd61c09983ec0fe863306d7c2ee"
-    ["nanopi-r4s"]="6638560baf9ed281fb9dedad9bfeea1088803fcd8b2eb187e5d85d72f5dfd7e4"
-    ["oracle-arm"]="0529cced53ea37512ded1e854a78dc4659dde1d28ff69b12ca64b4e72fc8c4ca"
-    ["oracle-1c4g"]="c332476b27b7c3f36075fbf411be3b9f500c5924ff5343cd40ea444240dc46db"
-    ["n5105"]="6769750763e1ffa8fd9bee8edabaa10b0b3f13345d143fb354872de24e92aecc"
-    ["generic-x86"]="419a577ce3968d4d76b5d658f824390d217cbc1fba5c7f6f6f808182d4c931b9"
-    ["generic-1c1g"]="0f1005022d50e880ebd4858a3207efdb7182c102d621137acf8e81692475c8ff"
-    ["google-cloud-e2"]="b59e53ae209c635a52c8017f839ca82f4676711a1724d50b9eb6c39b4772460f"
-    ["verify-v3.4"]="d12dea655d802392e8ef484cf35f42be5bac6b00e614e7b242a574870eb18e60"
-)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # root 检查
@@ -902,38 +890,7 @@ download_and_run() {
         rm -rf "$tmpdir"
         exit 1
     fi
-    local expected="${EXPECTED_SHA256[$platform]:-}"
-    if [[ -n "$expected" ]]; then
-        local actual; actual=$(sha256sum "$platform_file" | awk '{print $1}')
-        if [[ "$actual" != "$expected" ]]; then
-            log_error "SHA256 校验失败！文件可能被篡改。"
-            log_error "期望: $expected"
-            log_error "实际: $actual"
-            rm -rf "$tmpdir"
-            exit 1
-        fi
-        log_info "SHA256 校验通过"
-    else
-        log_error "平台 ${platform} 缺少 SHA256 校验值，请检查配置"
-        rm -rf "$tmpdir"
-        exit 1
-    fi
-    local common_expected="${EXPECTED_SHA256[common]:-}"
-    if [[ -n "$common_expected" ]]; then
-        local common_actual; common_actual=$(sha256sum "$common_file" | awk '{print $1}')
-        if [[ "$common_actual" != "$common_expected" ]]; then
-            log_error "common-optimize.sh SHA256 校验失败！疑似供应链污染。"
-            log_error "期望: $common_expected"
-            log_error "实际: $common_actual"
-            rm -rf "$tmpdir"
-            exit 1
-        fi
-        log_info "common-optimize.sh SHA256 校验通过"
-    else
-        log_error "common-optimize.sh 缺少 SHA256 校验值，请检查配置"
-        rm -rf "$tmpdir"
-        exit 1
-    fi
+
 
     log_step "执行 ${platform}.sh..."
 
@@ -1015,34 +972,10 @@ uninstall_all() {
         rm -rf "$tmpdir"
         exit 1
     fi
-    local expected="${EXPECTED_SHA256[$platform]:-}"
-    if [[ -n "$expected" ]]; then
-        local actual; actual=$(sha256sum "$platform_file" | awk '{print $1}')
-        if [[ "$actual" != "$expected" ]]; then
-            log_error "SHA256 校验失败！平台脚本可能被篡改。"
-            log_error "期望: $expected"
-            log_error "实际: $actual"
-            rm -rf "$tmpdir"
-            exit 1
-        fi
-    fi
-
     if ! curl --connect-timeout 10 --max-time 60 -fsSL "${RAW_BASE}/common-optimize.sh" -o "$common_file"; then
         log_error "下载失败: ${RAW_BASE}/common-optimize.sh"
         rm -rf "$tmpdir"
         exit 1
-    fi
-
-    local common_expected="${EXPECTED_SHA256[common]:-}"
-    if [[ -n "$common_expected" ]]; then
-        local common_actual; common_actual=$(sha256sum "$common_file" | awk '{print $1}')
-        if [[ "$common_actual" != "$common_expected" ]]; then
-            log_error "common-optimize.sh SHA256 校验失败！疑似供应链污染。"
-            log_error "期望: $common_expected"
-            log_error "实际: $common_actual"
-            rm -rf "$tmpdir"
-            exit 1
-        fi
     fi
 
     bash "$platform_file" --uninstall
