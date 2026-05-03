@@ -181,7 +181,6 @@ optimize_memory_oracle() {
             log_info "zram0 已激活，跳过配置"
         else
             # 检查 disksize 是否已设置
-            local current_disksize
             current_disksize=$(cat /sys/block/zram0/disksize 2>/dev/null || echo "0")
             if [[ "$current_disksize" != "0" ]]; then
                 log_info "zram0 disksize 已设置，跳过配置"

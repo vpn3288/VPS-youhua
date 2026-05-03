@@ -254,7 +254,6 @@ configure_tf_card_protection() {
             echo "ENABLED=true" >> /etc/default/armbian-zram-config
         fi
         # R66 FIX: 动态计算 ZRAM_SIZE（基于实际物理内存）
-        local total_mem_kb
         total_mem_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
         if [[ -z "$total_mem_kb" || ! "$total_mem_kb" =~ ^[0-9]+$ ]]; then
             log_error "无法读取有效的内存信息"

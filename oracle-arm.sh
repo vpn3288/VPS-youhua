@@ -249,7 +249,6 @@ configure_conntrack_hashsize() {
     
     local hashsize_file="/sys/module/nf_conntrack/parameters/hashsize"
     if [[ -f "$hashsize_file" ]]; then
-        local hashsize
         hashsize=$((CT_MAX / 4))
         echo "$hashsize" > "$hashsize_file" 2>/dev/null || {
             log_warn "nf_conntrack_hashsize 设置失败，写入 modprobe 配置（下次启动生效）"

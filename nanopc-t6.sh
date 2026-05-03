@@ -415,7 +415,6 @@ EOF
 # I/O Scheduler（eMMC/SSD → none）
 # ─────────────────────────────────────────────────────────────────────────────
 optimize_io_scheduler() {
-    local root_dev
     log_step "配置 I/O Scheduler..."
 
     root_dev=$(df / 2>/dev/null | awk 'NR==2 {print $1}')
