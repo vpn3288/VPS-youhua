@@ -19,7 +19,7 @@
 #
 set -euo pipefail
 # =============================================================================
-# NanoPi R4S 专用优化安装脚本 v3.4.3
+# NanoPi R4S 专用优化安装脚本 v4.1.0
 # 硬件: RK3399 ARM64, 3.8GB RAM, 58GB TF卡
 # 特点: 强 TF 卡保护（journald volatile + /tmp tmpfs + 高 dirty_writeback）
 #       R4S 只做 Armbian 环境优化，不碰 agent 安装

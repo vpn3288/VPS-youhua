@@ -1,14 +1,14 @@
-# VPS-youhua 环境优化脚本
+# VPS-youhua 系统优化脚本
 
 <div align="center">
 
 **NanoPi R4S / T6、Oracle Cloud ARM、N5105、通用 x86 VPS 的系统优化**
-适用于 OpenClaw、Hermes 等所有需要 Linux 环境的 AIagent
+适用于任何需要 Linux 环境优化的应用场景
 
 [![Debian 12](https://img.shields.io/badge/Debian-12-AA0000?logo=debian)](https://www.debian.org/)
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v3.4](https://img.shields.io/badge/版本-v3.4-green.svg)](https://github.com/vpn3288/VPS-youhua)
+[![v4.1](https://img.shields.io/badge/版本-v4.1-green.svg)](https://github.com/vpn3288/VPS-youhua)
 [![8平台](https://img.shields.io/badge/平台-8个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
 
 </div>
@@ -17,7 +17,7 @@
 
 ## 简介
 
-本项目为 AIagent（OpenClaw、Hermes 等）提供**安装前的环境优化**，让 AIagent 能以安全、稳定、高速、长期运行的状态部署。
+本项目为 VPS、小主机和虚拟机提供**通用系统优化**，让 Linux 系统能以安全、稳定、高速、长期运行的状态部署任何应用。
 
 **交互模式默认行为：完整优化 + Docker + Node.js（适合新手快速部署）。**
 
@@ -29,6 +29,7 @@
 - **稳定长期**：参数以长期稳定运行为目标，不过度激进
 - **硬件适配**：每个平台针对性优化，不搞一刀切
 - **TF卡保护**（R4S专用）：dirty_writeback、SWAP、journald 等全部针对TF卡寿命优化
+- **用户配置保护**：智能检测并保留用户手动配置的 BBR3、bbrplus、cake 等优化，不会覆盖
 
 ---
 
@@ -76,7 +77,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/goog
 ```
 
 可选参数：
---optimize-only   仅做环境优化，跳过 Docker / Node.js / OpenClaw 安装
+--optimize-only   仅做环境优化，跳过 Docker / Node.js 安装
 --clean-system    清理 apt purge 预装软件（apache2/nginx/postfix 等）
 --uninstall       卸载已安装的优化配置
 --non-interactive 自动执行（适合自动化）
@@ -89,19 +90,18 @@ curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.4
 
 ```
 
-### 第三步：安装 AIagent
+### 第三步：部署你的应用
 
-如果你在第一步选择了安装 Docker / Node.js，现在可以安装你的 AIagent：
+系统优化完成后，你可以安装任何应用：
 
-**OpenClaw（推荐）：**
-```bash
-openclaw install      # 安装
-openclaw onboard      # 首次配置
-systemctl --user start openclaw-gateway   # 启动
-systemctl --user enable openclaw-gateway  # 开机自启
-```
+- **Web 服务器**：Nginx、Apache、Caddy
+- **容器平台**：Docker、Kubernetes
+- **数据库**：MySQL、PostgreSQL、Redis
+- **网络服务**：VPN、代理、CDN
+- **AI 应用**：各类 Agent、模型推理
+- **开发环境**：Node.js、Python、Go
 
-**或者纯优化用户：** 环境已优化完毕，直接安装你需要的软件即可。
+如果你在第一步选择了安装 Docker / Node.js，它们已经就绪。
 
 ---
 
@@ -244,7 +244,7 @@ GCP免费套餐，共享vCPU 1核1GB，针对资源共享优化：
 
 ---
 
-## v3.3 全部优化参数一览
+## v4.1 全部优化参数一览
 
 ### TCP 网络优化（全平台）
 
@@ -410,13 +410,18 @@ lsmod | grep bbr                         # 应显示 tcp_bbr
 
 ### Q: 优化后还需要做什么？
 
-运行完本脚本后，再按你的 AIagent 官方文档安装：
-- [OpenClaw 安装](https://docs.openclaw.ai/)
-- [Hermes Agent 安装](https://github.com/nickaroot/hermes-agent)
+运行完本脚本后，系统环境已优化完毕，可以直接安装你需要的任何应用。
 
 ---
 
 ## 版本历史
+
+### v4.1.0（2026-06-08）
+- **核心改进**：智能保留用户手动配置的网络优化（BBR3、bbrplus、cake 等），不再覆盖
+- **网络增强**：所有下载操作添加 3 次重试机制（指数退避），提升稳定性
+- **系统检测**：严格限制支持的系统版本（Debian 12/13, Ubuntu 22.04/24.04）
+- **文档更新**：移除应用特定引用，改为通用系统优化定位
+- **版本统一**：所有脚本升级到 v4.1.0，配置文件版本同步更新
 
 ### v3.4.3（最新）
 - **代码质量**：完成 3 轮系统性代码审查，所有脚本通过语法检查和变量作用域验证

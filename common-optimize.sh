@@ -33,7 +33,7 @@ log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $1" 
 # ─────────────────────────────────────────────────────────────────────────────
 # 全局常量（可被调用者 override）
 # ─────────────────────────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="3.4.4"
+readonly SCRIPT_VERSION="4.1.0"
 readonly APT_LOG="/var/log/vps-youhua.log"         # 统一日志路径（所有平台共用）
 readonly LOCK_FILE="/var/lock/vps-youhua.lock"      # 统一锁文件
 
@@ -149,6 +149,24 @@ detect_system() {
     log_info "系统: ${SYS_OS_ID} ${SYS_OS_VERSION}"
     log_info "架构: ${SYS_ARCH} | 内存: ${SYS_MEM_MB}MB | CPU: ${SYS_CPU_CORES}核"
 
+    # v4.1: 严格检查系统版本（仅支持 Debian 12/13, Ubuntu 22.04/24.04）
+    local supported=false
+    if [[ "$SYS_OS_ID" == "debian" ]]; then
+        if [[ "$SYS_OS_VERSION" == "12" || "$SYS_OS_VERSION" == "13" ]]; then
+            supported=true
+        fi
+    elif [[ "$SYS_OS_ID" == "ubuntu" ]]; then
+        if [[ "$SYS_OS_VERSION" == "22.04" || "$SYS_OS_VERSION" == "24.04" ]]; then
+            supported=true
+        fi
+    fi
+
+    if [[ "$supported" == "false" ]]; then
+        log_error "不支持的系统: ${SYS_OS_ID} ${SYS_OS_VERSION}"
+        log_error "仅支持: Debian 12/13, Ubuntu 22.04/24.04"
+        return 1
+    fi
+
     # ── 低内存自动检测（2GB 以下）───────────────────────────────────
     IS_LOW_MEMORY=false
     if [[ ${SYS_MEM_MB:-0} -gt 0 ]] && [[ ${SYS_MEM_MB} -lt 2048 ]]; then
@@ -193,6 +211,35 @@ check_network() {
         fi
     fi
     log_info "网络连接正常"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 网络下载重试函数（v4.1 新增）
+# ─────────────────────────────────────────────────────────────────────────────
+download_with_retry() {
+    local url="$1"
+    local output="$2"
+    local max_attempts=3
+    local attempt=1
+    local wait_time=2
+
+    while [[ $attempt -le $max_attempts ]]; do
+        log_debug "下载尝试 $attempt/$max_attempts: $url"
+        if curl --connect-timeout 10 --max-time 60 -fsSL "$url" -o "$output" 2>/dev/null; then
+            log_debug "下载成功: $output"
+            return 0
+        fi
+
+        if [[ $attempt -lt $max_attempts ]]; then
+            log_warn "下载失败，${wait_time}秒后重试... ($attempt/$max_attempts)"
+            sleep $wait_time
+            wait_time=$((wait_time * 2))  # 指数退避
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log_error "下载失败（已重试 $max_attempts 次）: $url"
+    return 1
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1104,56 +1151,75 @@ write_common_sysctl() {
 
     # MEDIUM FIX: 添加 local 声明，限制变量作用域
     # BUG#4: BBR 自适应检测（先运行，再写文件）
+    # v4.1: 智能保留用户已配置的 BBR3/bbrplus/cake，不覆盖
     local BBR_CC="cubic"
-    
-    # 智能选择 qdisc：优先 CAKE（为 BBR 优化），回退到 fq
-    local BBR_QDISC="fq"
-    modprobe -q sch_cake 2>/dev/null || true
-    if lsmod | grep -qw sch_cake 2>/dev/null; then
-        BBR_QDISC="cake"
-        # 持久化 CAKE 模块加载
-        mkdir -p /etc/modules-load.d
-        if ! grep -q "^sch_cake$" /etc/modules-load.d/qdisc.conf 2>/dev/null; then
-            echo "sch_cake" > /etc/modules-load.d/qdisc.conf
-            log_info "队列调度: cake（已加载并持久化，为 BBR 优化）"
-        else
-            log_info "队列调度: cake（已加载，为 BBR 优化）"
-        fi
+    local current_cc
+    current_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "")
+
+    # 检测用户是否已手动配置 BBR（包括 BBR3、bbrplus 等）
+    if [[ -n "$current_cc" ]] && [[ "$current_cc" != "cubic" ]] && [[ "$current_cc" != "reno" ]]; then
+        BBR_CC="$current_cc"
+        log_info "TCP 拥塞控制: $current_cc（检测到用户配置，已保留）"
     else
-        log_info "队列调度: fq（CAKE 不可用，使用默认）"
-    fi
-    
-    if [[ -f /proc/sys/net/ipv4/tcp_available_congestion_control ]]; then
-        modprobe -q tcp_bbr2 2>/dev/null || true
-        if grep -qw "bbr2" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
-            BBR_CC="bbr"
-            # 持久化 BBR 模块加载
-            mkdir -p /etc/modules-load.d
-            if ! grep -q "^tcp_bbr$" /etc/modules-load.d/bbr.conf 2>/dev/null; then
-                echo "tcp_bbr" > /etc/modules-load.d/bbr.conf
-                log_info "TCP 拥塞控制: bbr（BBRv2 已激活并持久化）"
-            else
-                log_info "TCP 拥塞控制: bbr（BBRv2 已激活）"
-            fi
+        # 智能选择 qdisc：优先 CAKE（为 BBR 优化），回退到 fq
+        local BBR_QDISC="fq"
+        local current_qdisc
+        current_qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null || echo "")
+
+        # 检测用户是否已配置 CAKE
+        if [[ "$current_qdisc" == "cake" ]]; then
+            BBR_QDISC="cake"
+            log_info "队列调度: cake（检测到用户配置，已保留）"
         else
-            modprobe -q tcp_bbr 2>/dev/null || true
-            if grep -qw "bbr" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+            modprobe -q sch_cake 2>/dev/null || true
+            if lsmod | grep -qw sch_cake 2>/dev/null; then
+                BBR_QDISC="cake"
+                # 持久化 CAKE 模块加载
+                mkdir -p /etc/modules-load.d
+                if ! grep -q "^sch_cake$" /etc/modules-load.d/qdisc.conf 2>/dev/null; then
+                    echo "sch_cake" > /etc/modules-load.d/qdisc.conf
+                    log_info "队列调度: cake（已加载并持久化，为 BBR 优化）"
+                else
+                    log_info "队列调度: cake（已加载，为 BBR 优化）"
+                fi
+            else
+                log_info "队列调度: fq（CAKE 不可用，使用默认）"
+            fi
+        fi
+
+        # 只有在用户没有配置的情况下才尝试启用 BBR
+        if [[ -f /proc/sys/net/ipv4/tcp_available_congestion_control ]]; then
+            modprobe -q tcp_bbr2 2>/dev/null || true
+            if grep -qw "bbr2" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
                 BBR_CC="bbr"
                 # 持久化 BBR 模块加载
                 mkdir -p /etc/modules-load.d
                 if ! grep -q "^tcp_bbr$" /etc/modules-load.d/bbr.conf 2>/dev/null; then
                     echo "tcp_bbr" > /etc/modules-load.d/bbr.conf
-                    log_info "TCP 拥塞控制: bbr（BBRv1 已激活并持久化）"
+                    log_info "TCP 拥塞控制: bbr（BBRv2 已激活并持久化）"
                 else
-                    log_info "TCP 拥塞控制: bbr（BBRv1 已激活）"
+                    log_info "TCP 拥塞控制: bbr（BBRv2 已激活）"
                 fi
             else
-                BBR_CC="cubic"
-                log_info "TCP 拥塞控制: cubic（BBR 不可用，降级）"
+                modprobe -q tcp_bbr 2>/dev/null || true
+                if grep -qw "bbr" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+                    BBR_CC="bbr"
+                    # 持久化 BBR 模块加载
+                    mkdir -p /etc/modules-load.d
+                    if ! grep -q "^tcp_bbr$" /etc/modules-load.d/bbr.conf 2>/dev/null; then
+                        echo "tcp_bbr" > /etc/modules-load.d/bbr.conf
+                        log_info "TCP 拥塞控制: bbr（BBRv1 已激活并持久化）"
+                    else
+                        log_info "TCP 拥塞控制: bbr（BBRv1 已激活）"
+                    fi
+                else
+                    BBR_CC="cubic"
+                    log_info "TCP 拥塞控制: cubic（BBR 不可用，降级）"
+                fi
             fi
+        else
+            BBR_CC="cubic"
         fi
-    else
-        BBR_CC="cubic"
     fi
 
     # 写入通用 sysctl 配置（使用已确定的 BBR_CC 值）

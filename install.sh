@@ -9,7 +9,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-readonly VERSION="3.4"
+readonly VERSION="4.1"
 readonly RAW_BASE="https://raw.githubusercontent.com/vpn3288/VPS-youhua/main"
 
 # ─────────────────────────────────────────────────────────────────────────────
