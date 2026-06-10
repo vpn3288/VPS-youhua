@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPS-youhua ordinary optimization launcher v4.2
+# VPS-youhua ordinary optimization launcher v4.3
 #
 # This launcher only selects a platform wrapper and runs the shared conservative
 # optimization engine. It does not install software or change DNS/SSH/firewall.
@@ -9,7 +9,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-VERSION="4.2"
+VERSION="4.3"
 RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com/vpn3288/VPS-youhua/main}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -24,6 +24,8 @@ MODE="optimize"
 SELECTED_PLATFORM=""
 INTERACTIVE=true
 FORCE_REAPPLY="${FORCE_REAPPLY:-false}"
+VPSY_SWAP_MODE="${VPSY_SWAP_MODE:-auto}"
+VPSY_SWAP_SIZE_MB="${VPSY_SWAP_SIZE_MB:-0}"
 
 VALID_PLATFORMS=(
     nanopi-r4s
@@ -50,6 +52,9 @@ VPS-youhua 普通优化统一入口 v${VERSION}
   --uninstall                      仅移除本项目写入的配置文件
   --non-interactive, -y, --yes     非交互，自动检测平台
   --force-reapply                  重写本项目配置
+  --no-swap                        不创建项目 swapfile
+  --force-swap                     允许在 TF 卡场景创建 swapfile
+  --swap-size=<MB>                 指定项目 swapfile 大小
   --help, -h                       显示帮助
 
 平台:
@@ -101,6 +106,24 @@ parse_args() {
                 ;;
             --force|--force-reapply)
                 FORCE_REAPPLY=true
+                ;;
+            --no-swap|--without-swap)
+                VPSY_SWAP_MODE="off"
+                ;;
+            --force-swap)
+                VPSY_SWAP_MODE="force"
+                ;;
+            --swap-size=*)
+                VPSY_SWAP_SIZE_MB="${arg#*=}"
+                ;;
+            --swap-size)
+                shift
+                next="${1:-}"
+                if [[ -z "$next" ]]; then
+                    log_error "--swap-size 需要 MB 数值"
+                    exit 1
+                fi
+                VPSY_SWAP_SIZE_MB="$next"
                 ;;
             --help|-h)
                 show_help
@@ -243,7 +266,7 @@ run_platform() {
     platform_file="${script_dir}/${platform}.sh"
     common_file="${script_dir}/common-optimize.sh"
 
-    export FORCE_REAPPLY
+    export FORCE_REAPPLY VPSY_SWAP_MODE VPSY_SWAP_SIZE_MB
 
     if [[ -f "$platform_file" && -f "$common_file" ]]; then
         log_step "执行本地平台脚本: ${platform}.sh"

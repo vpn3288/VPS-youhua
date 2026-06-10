@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPS-youhua common ordinary optimization engine v4.2
+# VPS-youhua common ordinary optimization engine v4.3
 #
 # Design goal:
 #   - high compatibility, low conflict, production friendly
@@ -21,9 +21,12 @@ log_error() { echo -e "${RED}[✗]${NC} $*" >&2; }
 log_step()  { echo -e "${CYAN}[➜]${NC} $*"; }
 log_debug() { [[ "${DEBUG:-0}" == "1" ]] && echo -e "${MAGENTA}[DEBUG]${NC} $*" || true; }
 
-SCRIPT_VERSION="4.2.0"
+SCRIPT_VERSION="4.3.0"
 APT_LOG="${APT_LOG:-/var/log/vps-youhua.log}"
 LOCK_FILE="${LOCK_FILE:-/var/lock/vps-youhua.lock}"
+VPSY_SWAP_FILE="${VPSY_SWAP_FILE:-/swapfile-vps-youhua}"
+VPSY_SWAP_MODE="${VPSY_SWAP_MODE:-auto}"
+VPSY_SWAP_SIZE_MB="${VPSY_SWAP_SIZE_MB:-0}"
 
 SYS_MEM_MB=0
 SYS_CPU_CORES=1
@@ -44,10 +47,16 @@ NOFILE_LIMIT=131072
 NPROC_LIMIT=65535
 FILE_MAX=524288
 INOTIFY_WATCHES=262144
+INOTIFY_INSTANCES=1024
+INOTIFY_QUEUED_EVENTS=32768
+NR_OPEN=1048576
+AIO_MAX_NR=1048576
 SOMAXCONN=2048
 NETDEV_BACKLOG=4096
 SYN_BACKLOG=2048
 TCP_BUF_MAX=8388608
+TCP_MAX_TW_BUCKETS=131072
+TCP_MAX_ORPHANS=65536
 CONNTRACK_MAX=65536
 SWAPPINESS=10
 MIN_FREE_KB=32768
@@ -56,6 +65,9 @@ DIRTY_RATIO=15
 DIRTY_WRITEBACK_CENTISECS=3000
 DIRTY_EXPIRE_CENTISECS=6000
 VFS_CACHE_PRESSURE=100
+MAX_MAP_COUNT=262144
+SWAP_CREATED=false
+SWAP_STATUS="未处理"
 
 if [[ -z "${PLATFORM_ID:-}" ]]; then PLATFORM_ID="generic"; fi
 if [[ -z "${PLATFORM_NAME:-}" ]]; then PLATFORM_NAME="通用 Linux"; fi
@@ -215,8 +227,12 @@ vpsy_calculate_values() {
             NETDEV_BACKLOG=2048
             SYN_BACKLOG=1024
             TCP_BUF_MAX=4194304
+            TCP_MAX_TW_BUCKETS=65536
+            TCP_MAX_ORPHANS=32768
             CONNTRACK_MAX=32768
             INOTIFY_WATCHES=131072
+            INOTIFY_INSTANCES=512
+            INOTIFY_QUEUED_EVENTS=16384
             ;;
         small)
             NOFILE_LIMIT=131072
@@ -225,8 +241,12 @@ vpsy_calculate_values() {
             NETDEV_BACKLOG=4096
             SYN_BACKLOG=2048
             TCP_BUF_MAX=8388608
+            TCP_MAX_TW_BUCKETS=131072
+            TCP_MAX_ORPHANS=65536
             CONNTRACK_MAX=65536
             INOTIFY_WATCHES=262144
+            INOTIFY_INSTANCES=1024
+            INOTIFY_QUEUED_EVENTS=32768
             ;;
         medium)
             NOFILE_LIMIT=196608
@@ -235,8 +255,12 @@ vpsy_calculate_values() {
             NETDEV_BACKLOG=8192
             SYN_BACKLOG=4096
             TCP_BUF_MAX=12582912
+            TCP_MAX_TW_BUCKETS=262144
+            TCP_MAX_ORPHANS=131072
             CONNTRACK_MAX=131072
             INOTIFY_WATCHES=524288
+            INOTIFY_INSTANCES=2048
+            INOTIFY_QUEUED_EVENTS=65536
             ;;
         large|*)
             NOFILE_LIMIT=262144
@@ -245,8 +269,12 @@ vpsy_calculate_values() {
             NETDEV_BACKLOG=16384
             SYN_BACKLOG=8192
             TCP_BUF_MAX=16777216
+            TCP_MAX_TW_BUCKETS=524288
+            TCP_MAX_ORPHANS=262144
             CONNTRACK_MAX=262144
             INOTIFY_WATCHES=524288
+            INOTIFY_INSTANCES=4096
+            INOTIFY_QUEUED_EVENTS=131072
             ;;
     esac
 
@@ -254,6 +282,8 @@ vpsy_calculate_values() {
         SOMAXCONN=$(vpsy_clamp "$SOMAXCONN" 512 2048)
         NETDEV_BACKLOG=$(vpsy_clamp "$NETDEV_BACKLOG" 1024 4096)
         SYN_BACKLOG=$(vpsy_clamp "$SYN_BACKLOG" 1024 2048)
+        TCP_MAX_TW_BUCKETS=$(vpsy_clamp "$TCP_MAX_TW_BUCKETS" 32768 131072)
+        TCP_MAX_ORPHANS=$(vpsy_clamp "$TCP_MAX_ORPHANS" 16384 65536)
         CONNTRACK_MAX=$(vpsy_clamp "$CONNTRACK_MAX" 16384 65536)
     fi
 
@@ -315,7 +345,11 @@ kernel.yama.ptrace_scope = 1
 fs.protected_hardlinks = 1
 fs.protected_symlinks = 1
 fs.file-max = ${FILE_MAX}
+fs.nr_open = ${NR_OPEN}
+fs.aio-max-nr = ${AIO_MAX_NR}
 fs.inotify.max_user_watches = ${INOTIFY_WATCHES}
+fs.inotify.max_user_instances = ${INOTIFY_INSTANCES}
+fs.inotify.max_queued_events = ${INOTIFY_QUEUED_EVENTS}
 
 # Conservative network hardening
 net.ipv4.tcp_syncookies = 1
@@ -350,6 +384,9 @@ net.ipv4.tcp_keepalive_time = 600
 net.ipv4.tcp_keepalive_intvl = 30
 net.ipv4.tcp_keepalive_probes = 5
 net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_max_tw_buckets = ${TCP_MAX_TW_BUCKETS}
+net.ipv4.tcp_max_orphans = ${TCP_MAX_ORPHANS}
+net.ipv4.tcp_no_metrics_save = 1
 net.ipv4.ip_local_port_range = 10000 65535
 net.ipv4.tcp_rmem = 4096 131072 ${TCP_BUF_MAX}
 net.ipv4.tcp_wmem = 4096 131072 ${TCP_BUF_MAX}
@@ -363,6 +400,9 @@ vm.swappiness = ${SWAPPINESS}
 vm.min_free_kbytes = ${MIN_FREE_KB}
 vm.vfs_cache_pressure = ${VFS_CACHE_PRESSURE}
 vm.overcommit_memory = 0
+vm.page-cluster = 0
+vm.max_map_count = ${MAX_MAP_COUNT}
+vm.zone_reclaim_mode = 0
 vm.dirty_background_ratio = ${DIRTY_BACKGROUND_RATIO}
 vm.dirty_ratio = ${DIRTY_RATIO}
 vm.dirty_writeback_centisecs = ${DIRTY_WRITEBACK_CENTISECS}
@@ -397,6 +437,175 @@ EOF
     chmod 644 "$file"
 }
 
+vpsy_active_swap_count() {
+    swapon --noheadings --show=NAME 2>/dev/null | awk 'NF {count++} END {print count + 0}'
+}
+
+vpsy_project_swap_active() {
+    swapon --noheadings --show=NAME 2>/dev/null | grep -Fxq "$VPSY_SWAP_FILE"
+}
+
+vpsy_configured_swap_count() {
+    [[ -f /etc/fstab ]] || { echo 0; return; }
+    awk '$1 !~ /^#/ && $3 == "swap" {count++} END {print count + 0}' /etc/fstab
+}
+
+vpsy_project_swap_configured() {
+    [[ -f /etc/fstab ]] || return 1
+    awk -v f="$VPSY_SWAP_FILE" '$1 == f && $3 == "swap" {found=1} END {exit found ? 0 : 1}' /etc/fstab
+}
+
+vpsy_swap_size_mb() {
+    if [[ "${VPSY_SWAP_SIZE_MB}" =~ ^[0-9]+$ ]] && (( VPSY_SWAP_SIZE_MB > 0 )); then
+        vpsy_clamp "$VPSY_SWAP_SIZE_MB" 256 8192
+        return
+    fi
+
+    case "$VPSY_MEMORY_PROFILE" in
+        tiny) echo 1024 ;;
+        small) echo 2048 ;;
+        medium)
+            if [[ "$VPSY_STORAGE_PROFILE" == "cloud" || "$VPSY_STORAGE_PROFILE" == "ssd" ]]; then
+                echo 1024
+            else
+                echo 0
+            fi
+            ;;
+        *) echo 0 ;;
+    esac
+}
+
+vpsy_root_free_mb() {
+    df -Pm / 2>/dev/null | awk 'NR==2 {print $4 + 0}'
+}
+
+vpsy_ensure_swap_fstab() {
+    local tmp
+    [[ -f /etc/fstab ]] || touch /etc/fstab
+
+    if awk -v f="$VPSY_SWAP_FILE" '$1 == f && $3 == "swap" {found=1} END {exit found ? 0 : 1}' /etc/fstab; then
+        return 0
+    fi
+
+    backup_file /etc/fstab
+    printf '%s none swap sw,nofail 0 0 # VPS-youhua managed swapfile\n' "$VPSY_SWAP_FILE" >> /etc/fstab
+}
+
+vpsy_remove_swap_fstab() {
+    local tmp
+    [[ -f /etc/fstab ]] || return 0
+    grep -Fq "VPS-youhua managed swapfile" /etc/fstab || return 0
+
+    backup_file /etc/fstab
+    tmp="$(mktemp)"
+    awk -v f="$VPSY_SWAP_FILE" '!(($1 == f) && ($3 == "swap") && ($0 ~ /VPS-youhua managed swapfile/))' /etc/fstab > "$tmp"
+    cat "$tmp" > /etc/fstab
+    rm -f -- "$tmp"
+}
+
+vpsy_ensure_swapfile() {
+    local size_mb free_mb min_free_after_mb
+
+    SWAP_STATUS="跳过"
+
+    if [[ "$VPSY_SWAP_MODE" == "off" || "$VPSY_SWAP_MODE" == "disabled" ]]; then
+        SWAP_STATUS="已关闭"
+        log_info "虚拟内存: 已按配置跳过"
+        return 0
+    fi
+
+    if ! command -v swapon >/dev/null 2>&1 || ! command -v mkswap >/dev/null 2>&1; then
+        SWAP_STATUS="缺少 swapon/mkswap，跳过"
+        log_warn "虚拟内存: 系统缺少 swapon/mkswap，跳过"
+        return 0
+    fi
+
+    if (( $(vpsy_active_swap_count) > 0 )); then
+        SWAP_STATUS="检测到已有 swap/zram，未改动"
+        log_info "虚拟内存: 检测到已有 swap/zram，保持现状"
+        return 0
+    fi
+
+    if (( $(vpsy_configured_swap_count) > 0 )) && ! vpsy_project_swap_configured; then
+        SWAP_STATUS="检测到 fstab 已有 swap 配置，未改动"
+        log_info "虚拟内存: 检测到 fstab 已有 swap 配置，保持现状"
+        return 0
+    fi
+
+    if [[ "$VPSY_SWAP_FILE" != /* || "$VPSY_SWAP_FILE" =~ [[:space:]] ]]; then
+        SWAP_STATUS="swapfile 路径不安全，跳过"
+        log_warn "虚拟内存: swapfile 路径需要是无空格的绝对路径，跳过"
+        return 0
+    fi
+
+    if [[ "$VPSY_STORAGE_PROFILE" == "tf-card" || "$SYS_IS_TF_CARD" == "true" ]] && [[ "$VPSY_SWAP_MODE" != "force" ]]; then
+        SWAP_STATUS="TF 卡场景默认跳过"
+        log_info "虚拟内存: TF 卡场景默认不创建 swapfile"
+        return 0
+    fi
+
+    size_mb="$(vpsy_swap_size_mb)"
+    if (( size_mb <= 0 )); then
+        SWAP_STATUS="当前档位无需创建"
+        log_info "虚拟内存: 当前档位无需创建 swapfile"
+        return 0
+    fi
+
+    free_mb="$(vpsy_root_free_mb)"
+    min_free_after_mb=1024
+    if (( free_mb > 0 && free_mb < size_mb + min_free_after_mb )); then
+        SWAP_STATUS="磁盘空间不足，跳过"
+        log_warn "虚拟内存: 根分区剩余 ${free_mb}MB，不足以创建 ${size_mb}MB swapfile"
+        return 0
+    fi
+
+    if [[ -e "$VPSY_SWAP_FILE" && ! -f "$VPSY_SWAP_FILE" ]]; then
+        SWAP_STATUS="目标路径不是普通文件，跳过"
+        log_warn "虚拟内存: ${VPSY_SWAP_FILE} 不是普通文件，跳过"
+        return 0
+    fi
+
+    if [[ ! -f "$VPSY_SWAP_FILE" ]]; then
+        log_step "创建项目自有 swapfile: ${VPSY_SWAP_FILE} (${size_mb}MB)"
+        if ! {
+            if command -v fallocate >/dev/null 2>&1; then
+                fallocate -l "${size_mb}M" "$VPSY_SWAP_FILE" >> "$APT_LOG" 2>&1 || \
+                    dd if=/dev/zero of="$VPSY_SWAP_FILE" bs=1M count="$size_mb" status=none >> "$APT_LOG" 2>&1
+            else
+                dd if=/dev/zero of="$VPSY_SWAP_FILE" bs=1M count="$size_mb" status=none >> "$APT_LOG" 2>&1
+            fi
+        }; then
+            rm -f -- "$VPSY_SWAP_FILE"
+            SWAP_STATUS="创建失败，跳过"
+            log_warn "虚拟内存: swapfile 创建失败，已跳过"
+            return 0
+        fi
+        SWAP_CREATED=true
+    else
+        log_info "虚拟内存: 发现项目 swapfile，尝试启用"
+    fi
+
+    chmod 600 "$VPSY_SWAP_FILE"
+    if ! mkswap -f "$VPSY_SWAP_FILE" >> "$APT_LOG" 2>&1; then
+        [[ "$SWAP_CREATED" == "true" ]] && rm -f -- "$VPSY_SWAP_FILE"
+        SWAP_STATUS="mkswap 失败，跳过"
+        log_warn "虚拟内存: mkswap 失败，已跳过"
+        return 0
+    fi
+
+    if ! swapon "$VPSY_SWAP_FILE" >> "$APT_LOG" 2>&1; then
+        [[ "$SWAP_CREATED" == "true" ]] && rm -f -- "$VPSY_SWAP_FILE"
+        SWAP_STATUS="swapon 失败，跳过"
+        log_warn "虚拟内存: swapon 失败，已跳过（可能是文件系统不支持 swapfile）"
+        return 0
+    fi
+
+    vpsy_ensure_swap_fstab
+
+    SWAP_STATUS="已启用 ${size_mb}MB (${VPSY_SWAP_FILE})"
+    log_info "虚拟内存: ${SWAP_STATUS}"
+}
+
 vpsy_write_logrotate() {
     local file="/etc/logrotate.d/vps-youhua"
     log_step "写入脚本日志轮转规则"
@@ -425,6 +634,9 @@ cpu_profile=${VPSY_CPU_PROFILE}
 storage_profile=${VPSY_STORAGE_PROFILE}
 role_profile=${VPSY_ROLE_PROFILE}
 sysctl_file=${VPSY_SYSCTL_FILE}
+swap_mode=${VPSY_SWAP_MODE}
+swap_file=${VPSY_SWAP_FILE}
+swap_status=${SWAP_STATUS}
 updated_at=$(date -Is)
 EOF
     chmod 644 "$file"
@@ -439,9 +651,10 @@ vpsy_show_summary() {
     echo -e "${BLUE}描述:${NC} ${PLATFORM_DESC}"
     echo -e "${BLUE}档位:${NC} memory=${VPSY_MEMORY_PROFILE}, cpu=${VPSY_CPU_PROFILE}, storage=${VPSY_STORAGE_PROFILE}"
     echo -e "${BLUE}资源:${NC} nofile=${NOFILE_LIMIT}, somaxconn=${SOMAXCONN}, conntrack=${CONNTRACK_MAX}"
+    echo -e "${BLUE}虚拟内存:${NC} ${SWAP_STATUS}"
     echo -e "${BLUE}写入:${NC} ${VPSY_SYSCTL_FILE}, /etc/security/limits.d/99-vps-youhua.conf"
     echo ""
-    echo -e "${YELLOW}未执行:${NC} 软件安装、DNS、SSH、防火墙、服务启停、包卸载、swap/zram/fstab、云厂商组件处理"
+    echo -e "${YELLOW}未执行:${NC} 软件安装、DNS、SSH、防火墙、服务启停、包卸载、zram、云厂商组件处理"
     echo -e "${YELLOW}说明:${NC} sysctl 已立即应用；limits 对新登录会话生效。"
     echo ""
 }
@@ -464,6 +677,7 @@ vpsy_optimize() {
     vpsy_write_sysctl
     vpsy_apply_sysctl
     vpsy_write_limits
+    vpsy_ensure_swapfile
     vpsy_write_logrotate
     vpsy_write_marker
     vpsy_show_summary
@@ -480,6 +694,8 @@ vpsy_status() {
     echo "  marker: $([[ -f /etc/vps-youhua-optimized ]] && echo present || echo absent)"
     echo "  sysctl: $([[ -f "$VPSY_SYSCTL_FILE" ]] && echo "$VPSY_SYSCTL_FILE" || echo absent)"
     echo "  limits: $([[ -f /etc/security/limits.d/99-vps-youhua.conf ]] && echo present || echo absent)"
+    echo "  swap: $(swapon --noheadings --show=NAME,SIZE,TYPE 2>/dev/null | tr '\n' ';' | sed 's/;$//' || true)"
+    echo "  project_swap: $([[ -f "$VPSY_SWAP_FILE" ]] && echo "$VPSY_SWAP_FILE" || echo absent)"
 }
 
 vpsy_uninstall() {
@@ -491,6 +707,11 @@ vpsy_uninstall() {
     for f in /etc/sysctl.d/99-vps-youhua*.conf; do
         [[ -e "$f" ]] && rm -f -- "$f"
     done
+    if vpsy_project_swap_active; then
+        swapoff "$VPSY_SWAP_FILE" 2>/dev/null || true
+    fi
+    vpsy_remove_swap_fstab
+    rm -f -- "$VPSY_SWAP_FILE"
     rm -f -- /etc/security/limits.d/99-vps-youhua.conf
     rm -f -- /etc/logrotate.d/vps-youhua
     rm -f -- /etc/vps-youhua-optimized
@@ -511,6 +732,9 @@ VPS-youhua 普通优化入口 v${SCRIPT_VERSION}
   --status                      查看本项目配置状态
   --uninstall                   仅移除本项目写入的配置文件
   --force-reapply               重写本项目配置
+  --no-swap                     不创建项目 swapfile
+  --force-swap                  允许在 TF 卡场景创建 swapfile
+  --swap-size=<MB>              指定项目 swapfile 大小
   --help, -h                    显示帮助
 
 兼容说明:
@@ -528,6 +752,9 @@ vpsy_main() {
             --uninstall) mode="uninstall" ;;
             --optimize|--optimize-only|--proxy-mode|--no-software) mode="optimize" ;;
             --force|--force-reapply) FORCE_REAPPLY=true ;;
+            --no-swap|--without-swap) VPSY_SWAP_MODE="off" ;;
+            --force-swap) VPSY_SWAP_MODE="force" ;;
+            --swap-size=*) VPSY_SWAP_SIZE_MB="${arg#*=}" ;;
             --help|-h) vpsy_help; return 0 ;;
             --full|--install-all|--install-deps|--clean-system|--with-*|--without-*|--mirror-*)
                 log_warn "忽略旧版参数 ${arg}：当前版本只做普通优化"
