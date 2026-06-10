@@ -1,562 +1,127 @@
-# VPS-youhua 系统优化脚本
+# VPS-youhua 普通优化脚本
 
-<div align="center">
+VPS-youhua v4.2 提供一套高兼容、低冲突、适合生产环境的 Linux 普通优化脚本。所有平台脚本现在都是薄包装器：只设置平台档位，然后调用同一个 `common-optimize.sh` 引擎。
 
-**NanoPi R4S / T6、Oracle Cloud ARM、N5105、通用 x86 VPS 的系统优化**
-适用于任何需要 Linux 环境优化的应用场景
+适用场景：代理节点、普通 VPS、ARM VPS、N5105 小主机、R4S/T6 开发板、本地虚拟机、低配共享 CPU 实例。
 
-[![Debian 12](https://img.shields.io/badge/Debian-12-AA0000?logo=debian)](https://www.debian.org/)
-[![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu)](https://ubuntu.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![v4.1](https://img.shields.io/badge/版本-v4.1-green.svg)](https://github.com/vpn3288/VPS-youhua)
-[![8平台](https://img.shields.io/badge/平台-8个-cyan.svg)](https://github.com/vpn3288/VPS-youhua)
+## 核心原则
 
-</div>
-
----
-
-## 简介
-
-本项目为 VPS、小主机和虚拟机提供**通用系统优化**，让 Linux 系统能以安全、稳定、高速、长期运行的状态部署任何应用。
-
-**交互模式默认行为：完整优化 + Docker + Node.js（适合新手快速部署）。**
-
-使用 `--optimize-only` 可跳过所有安装步骤，仅做纯环境优化（sysctl、journald、swap、CPU governor、inotify 等），适合"只想优化环境、后面装其他东西"的场景。使用环境变量 `INSTALL_DOCKER=false` 或 `INSTALL_NODEJS=false` 可单独禁用某项安装。
-
-### 核心原则
-
-- **安全优先**：所有优化均经过验证，不引入潜在风险
-- **稳定长期**：参数以长期稳定运行为目标，不过度激进
-- **硬件适配**：每个平台针对性优化，不搞一刀切
-- **TF卡保护**（R4S专用）：dirty_writeback、SWAP、journald 等全部针对TF卡寿命优化
-- **用户配置保护**：智能检测并保留用户手动配置的 BBR3、bbrplus、cake 等优化，不会覆盖
-
----
+- 默认只做低冲突优化：sysctl、文件句柄限制、脚本日志轮转、优化标记。
+- 不安装任何软件，不安装运行时，不接管用户业务栈。
+- 不修改 DNS、SSH、防火墙、iptables/nftables、APT 源、fstab、swap/zram、CPU governor。
+- 不停止、禁用、卸载任何已有服务或云厂商组件。
+- 各平台仍保留轻微档位差异：内存档、CPU 档、存储档、TF 卡/eMMC/云盘差异。
 
 ## 快速开始
 
-### 第一步：运行优化脚本（选一个）
+自动检测平台：
 
-
-### 自动检测平台（推荐新手）
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh)
 ```
-### 手动指定平台
-### NanoPi R4S (4GB ARM, TF卡)
+
+非交互自动检测：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh) --non-interactive
+```
+
+手动指定平台：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh) --platform=generic-x86
+```
+
+查看状态：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh) --status
+```
+
+仅移除本项目写入的持久化配置：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/install.sh) --uninstall
+```
+
+## 平台脚本
+
+也可以直接运行平台脚本：
+
+| 平台 | 脚本 | 档位 |
+|------|------|------|
+| NanoPi R4S | `nanopi-r4s.sh` | ARM + TF 卡保护 |
+| NanoPC T6/T6S | `nanopc-t6.sh` | ARM + eMMC |
+| Oracle Cloud ARM | `oracle-arm.sh` | ARM VPS + 云盘 |
+| Oracle Cloud ARM 1C4G | `oracle-1c4g.sh` | 小规格 ARM VPS |
+| N5105/N5095 | `n5105.sh` | 本地 x86 小主机 + SSD |
+| 通用 x86 VPS | `generic-x86.sh` | 自动内存档 + 云盘 |
+| 通用 1C1G VPS | `generic-1c1g.sh` | 低内存 + 共享 CPU |
+| Google Cloud e2/f1/g1 | `google-cloud-e2.sh` | 共享 CPU + 低资源 |
+
+示例：
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopi-r4s.sh)
 ```
-### NanoPC T6 (16GB ARM, eMMC)
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/nanopc-t6.sh)
-```
-### Oracle Cloud ARM 2C16G
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-arm.sh)
-```
-### Oracle Cloud ARM 1C4G
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/oracle-1c4g.sh)
-```
-### N5105/N5095 小主机
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/n5105.sh)
-```
-### 通用 x86 VPS
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-x86.sh)
-```
-### 通用 1C1G 低配 VPS
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/generic-1c1g.sh)
-```
- ### Google Cloud e2-micro
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/google-cloud-e2.sh)
+
+## 选项
+
+```text
+--optimize, --optimize-only   执行普通优化（默认）
+--proxy-mode                  普通优化别名，保持业务环境不变
+--status                      查看本项目配置状态
+--uninstall                   移除本项目写入的配置文件
+--force-reapply               重写本项目配置
+--platform=<name>             install.sh 指定平台
+--non-interactive, -y, --yes  install.sh 非交互模式
 ```
 
-可选参数：
---optimize-only   仅做环境优化，跳过 Docker / Node.js 安装
---clean-system    清理 apt purge 预装软件（apache2/nginx/postfix 等）
---uninstall       卸载已安装的优化配置
---non-interactive 自动执行（适合自动化）
+旧版安装、清理、镜像、服务相关参数会被接受但忽略或提示忽略。
 
+## 实际写入内容
 
-### 第二步：验证优化效果
+普通优化只写这些本项目自有文件：
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.4.sh -o /tmp/verify-v3.4.sh && bash /tmp/verify-v3.4.sh
-
-```
-
-### 第三步：部署你的应用
-
-系统优化完成后，你可以安装任何应用：
-
-- **Web 服务器**：Nginx、Apache、Caddy
-- **容器平台**：Docker、Kubernetes
-- **数据库**：MySQL、PostgreSQL、Redis
-- **网络服务**：VPN、代理、CDN
-- **AI 应用**：各类 Agent、模型推理
-- **开发环境**：Node.js、Python、Go
-
-如果你在第一步选择了安装 Docker / Node.js，它们已经就绪。
-
----
-
-## 支持的平台
-
-| 平台 | CPU | 内存 | 存储 | 推荐脚本 |
-|------|-----|------|------|----------|
-| NanoPi R4S | RK3399 (ARM64) | 4GB | **TF卡** | `nanopi-r4s.sh` |
-| NanoPC T6 | RK3588S (ARM64) | 16GB | **eMMC** | `nanopc-t6.sh` |
-| Oracle Cloud ARM | Ampere Altra (ARM64) | 2核16GB | 云盘 | `oracle-arm.sh` |
-| Oracle Cloud ARM | Ampere Altra (ARM64) | 1核4GB | 云盘 | `oracle-1c4g.sh` |
-| N5105/N5095 小主机 | Intel N5105 (x86_64) | 4-16GB | SSD | `n5105.sh` |
-| 通用 x86 VPS | 任意 x86_64 | 1C1G | 自动检测（SSD/HDD） | `generic-1c1g.sh` |
-| Google Cloud e2-micro | 共享 vCPU | 1GB | **免费套餐** | `google-cloud-e2.sh` |
-| 通用 x86 VPS | 任意 x86_64 | 自动适配 | 自动检测（SSD/HDD） | `generic-x86.sh` |
-
----
-
-## 各平台优化详情
-
-### NanoPi R4S（TF卡保护重点）
-
-TF卡写入寿命有限，脚本从系统层面最大限度减少随机写入：
-
-| 优化项 | 配置值 | 说明 |
-|--------|--------|------|
-| journald Storage | volatile | 日志写入内存而非TF卡 |
-| vm.dirty_ratio | 8 | 减少刷盘次数 |
-| vm.dirty_background_ratio | 3 | 后台合并写入 |
-| vm.dirty_writeback_centisecs | 6000（6秒） | 拉长回写间隔 |
-| vm.dirty_expire_centisecs | 60000（10分钟） | 数据过期才回写 |
-| SWAP | 禁用 | 禁用swap分区 |
-| zswap | N | 禁用压缩swap |
-| log2ram | 可选安装 | journal写入RAM缓冲 |
-| netdev_max_backlog | 16384 | 适度队列，不过度缓冲 |
-| conntrack timeout | 1800s | 减少连接表条目 |
-| CPU Governor | performance | ARM高频稳定运行 |
-| inotify watches | 524288 | 大量文件监控支持 |
-
-### NanoPC T6（eMMC 存储，3网口）
-
-ARMbian 官方配置：**RK3588S, 8GB RAM, eMMC, 1×GbE + 2×2.5GbE**
-
-eMMC 写入寿命比 TF 卡好得多，但仍需优化随机写入：
-
-| 优化项 | 配置值 | 说明 |
-|--------|--------|------|
-| 物理 swap | 禁用文件，保留 zswap | 16GB RAM + zswap 压缩，eMMC 不怕写 |
-| dirty_ratio | 20 | 减少回写频率 |
-| dirty_background_ratio | 10 | 后台合并写入 |
-| dirty_writeback_centisecs | 6000（6秒） | 减少 eMMC 随机写入 |
-| vm.swappiness | 10 | 减少 swap 倾向 |
-| netdev_max_backlog | 65535 | 大吞吐量队列 |
-| conntrack timeout | 3600s | 长连接优化 |
-| CPU Governor | performance | RK3588 高频稳定运行 |
-| inotify watches | 1048576 | 大量文件监控支持 |
-
-
-### Oracle Cloud ARM 2C16G（云环境）
-
-云上环境侧重吞吐量和连接处理：
-
-| 优化项 | 配置值 | 说明 |
-|--------|--------|------|
-| TCP缓冲 | 动态（内存5%） | 云网络带宽优化，上限64MB |
-| netdev_max_backlog | 65535 | 大吞吐量队列 |
-| conntrack_max | 262144 | 高并发连接数 |
-| conntrack timeout | 3600s | 长连接优化 |
-| dirty_ratio | 20 | 云盘写入更激进 |
-| TCP early_retrans | 3 | 丢包快速恢复 |
-| TCP MTU probing | 开启 | Oracle网络优化 |
-
-### Oracle Cloud ARM 1C4G（低配云环境）
-
-低配版针对1核4GB内存优化，侧重内存压缩和资源控制：
-
-| 优化项 | 配置值 | 说明 |
-|--------|--------|------|
-| TCP缓冲 | 动态（内存5%） | 云网络优化，上限32MB |
-| netdev_max_backlog | 32768 | 适度队列 |
-| conntrack_max | 131072 | 中等并发连接数 |
-| vm.swappiness | 60 | 较高swap倾向（内存有限） |
-| zram | 启用（内存50%） | 内存压缩替代物理swap |
-| dirty_ratio | 15 | 保守回写 |
-| transparent_hugepage | 开启 | 对容器/数据库友好 |
-
-### N5105/N5095（静音省电）
-
-静音小主机，禁用 Turbo Boost 减少风扇噪音：
-
-| 优化项 | 配置值 | 说明 |
-|--------|--------|------|
-| Turbo Boost | 禁用 | 静音降功耗 |
-| CPU Governor | performance | 禁用后维持基准频率 |
-| SSD调度器 | none | 直通调度无延迟 |
-| irqbalance | 自动 | 多核负载均衡 |
-| conntrack timeout | 3600s | 长连接优化 |
-| dirty_ratio | 15 | SSD不怕写磨损 |
-| TCP缓冲 | 16MB | 平衡内存占用 |
-
-### Generic x86 VPS（通用中配）
-
-通用Debian12环境，2核2GB以上，自适应内存配置：
-
-| 优化项 | 配置值 | 说明 |
-|--------|--------|------|
-| 内存分级 | 4GB/8GB/16GB+ | 配置文件数自动适配 |
-| dirty_ratio | 15 | 通用推荐值 |
-| TCP fastopen | 3 | 快速建立连接 |
-| BBR | 强制开启 | 拥塞控制优化 |
-| inotify watches | 1048576 | 大型agent支持 |
-
-### Generic 1C1G VPS（低配通用）
-
-极低配VPS，1核1GB，专为资源受限环境设计：
-
-| 优化项 | 配置值 | 说明 |
-|--------|--------|------|
-| TCP缓冲 | 动态（内存3%） | 最低4MB，最高8MB |
-| netdev_max_backlog | 16384 | 适度队列 |
-| conntrack_max | 65536 | 有限并发 |
-| vm.swappiness | 60 | 较高swap倾向 |
-| swap | 512MB zram | 低内存防护（压缩内存） |
-| dirty_ratio | 10 | 保守回写 |
-| inotify watches | 262144 | 有限但够用 |
-
-### Google Cloud e2-micro（免费套餐）
-
-GCP免费套餐，共享vCPU 1核1GB，针对资源共享优化：
-
-| 优化项 | 配置值 | 说明 |
-|--------|--------|------|
-| TCP缓冲 | 动态（内存3%） | 最低4MB，最高8MB |
-| netdev_max_backlog | 16384 | 适度队列 |
-| conntrack_max | 65536 | 有限并发 |
-| vm.swappiness | 60 | 较高swap倾向 |
-| swap | 1GB文件swap | 低内存防护 |
-| dirty_ratio | 10 | 保守回写 |
-| CPU限制 | GCP元数据 | 识别共享CPU |
-
----
-
-## v4.1 全部优化参数一览
-
-### TCP 网络优化（全平台）
-
-| 参数 | 值 | 说明 |
-|------|----|------|
-| tcp_congestion_control | bbr | BBR拥塞控制 |
-| tcp_fastopen | 3 | TFO客户端+服务端 |
-| tcp_timestamps | 1 | RTT精确计算 |
-| tcp_sack | 1 | 选择性确认 |
-| tcp_slow_start_after_idle | 0 | 空闲保持拥塞窗口 |
-| tcp_rfc1337 | 1 | TIME_WAIT套接字保护 |
-| tcp_early_retrans | 3 | 丢包早期恢复 |
-| tcp_orphan_retries | 1 | 快速清理孤儿socket |
-| tcp_mtu_probing | 1 | PMTU黑洞探测 |
-| tcp_notsent_lowat | 16384 | 未发送缓冲优化 |
-| tcp_tw_reuse | 1 | TIME_WAIT复用 |
-| tcp_fin_timeout | 15 | 加快FIN处理 |
-| tcp_keepalive_time | 1800 | 保活间隔 |
-| tcp_keepalive_intvl | 30 | 保活重试间隔 |
-| tcp_keepalive_probes | 3 | 保活探测次数 |
-
-### 网络队列（全平台）
-
-| 参数 | 说明 |
+| 文件 | 说明 |
 |------|------|
-| net.core.default_qdisc = fq | 公平队列算法 |
-| net.core.somaxconn = 65535 | 监听队列长度 |
-| net.core.rmem_max / wmem_max | 套接字缓冲上限 |
+| `/etc/sysctl.d/99-vps-youhua-<platform>.conf` | 保守 sysctl 参数 |
+| `/etc/security/limits.d/99-vps-youhua.conf` | 保守 nofile/nproc 限制 |
+| `/etc/logrotate.d/vps-youhua` | `/var/log/vps-youhua.log` 轮转 |
+| `/etc/vps-youhua-optimized` | 优化标记和档位信息 |
 
-### 安全加固（全平台）
+`--uninstall` 只删除这些本项目自有文件。运行时 sysctl 不强制回滚，重启后按系统默认或其他配置生效。
 
-| 参数 | 值 | 说明 |
-|------|----|------|
-| accept_redirects | 0 | 禁用ICMP重定向 |
-| accept_source_route | 0 | 禁用源路由 |
-| secure_redirects | 0 | 仅接受网关发来的重定向 |
-| log_martians | 0 | 关闭虚假地址日志 |
-| rp_filter | 1 | 反向路径过滤 |
-| tcp_syncookies | 1 | SYN洪水防护 |
-| ipv6.accept_redirects | 0 | IPv6重定向防护 |
-| kernel.dmesg_restrict | 1 | 限制dmesg访问 |
-| kernel.kptr_restrict | 1 | 隐藏内核指针 |
-| kernel.yama.ptrace_scope | 1 | 限制ptrace |
+## 档位差异
 
-### 连接追踪 conntrack（全平台）
+差异只体现在保守参数强度上：
 
-| 参数 | 值 | 说明 |
-|------|----|------|
-| established | 1800-3600s | 已建立连接超时 |
-| time_wait | 10-15s | 快速释放TIME_WAIT |
-| close_wait | 5s | 快速关闭CLOSE_WAIT |
-| fin_wait | 10s | 快速关闭FIN_WAIT |
+| 场景 | 主要差异 |
+|------|----------|
+| 1C1G / 共享 CPU | 更小的队列、连接追踪和文件句柄上限 |
+| 2GB+ VPS | 中等队列和 TCP 缓冲 |
+| 大内存 ARM/VPS | 更高但仍保守的 backlog、conntrack、nofile |
+| R4S / TF 卡 | 更低 dirty ratio，减少大批量回写 |
+| T6 / eMMC | 比 TF 卡略宽松，但不改 Armbian zram/ramlog |
+| 本地小主机 / SSD | 标准存储回写策略，不改 I/O scheduler |
 
-### 内存管理（全平台）
+## 明确不会执行
 
-| 参数 | 值 | 说明 |
-|------|----|------|
-| vm.swappiness | 10（R4S）/ 60（云） | 减少swap倾向 |
-| vm.overcommit_memory | 1 | 允许内存超量分配 |
-| vm.zone_reclaim_mode | 0 | NUMA节点优先本地分配 |
-| vm.vfs_cache_pressure | 50 | 优先回收dentry/inode |
+- 不安装 Docker、Node.js、构建依赖或其他软件包。
+- 不改 `/etc/resolv.conf`，不锁 DNS。
+- 不写 SSH drop-in，不重启 SSH。
+- 不添加 iptables/nftables/ufw 规则。
+- 不停止、禁用、mask、卸载任何服务。
+- 不创建 swapfile，不重置 zram，不改 Armbian 原生组件。
+- 不改 APT 源，不执行包清理，不移除云厂商 agent。
 
-### 文件描述符（全平台）
-
-| 参数 | 值 | 说明 |
-|------|----|------|
-| fs.file-max | 900000 | 全局文件句柄上限 |
-| limits nofile | 1048576 | 进程打开文件数 |
-
----
-
-## 验证脚本（verify-v3.4.sh）
-
-下载并运行验证脚本，检查所有优化参数是否生效：
+## 本地开发检查
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vpn3288/VPS-youhua/main/verify-v3.4.sh -o /tmp/verify-v3.4.sh
-bash /tmp/verify-v3.4.sh                    # 本机验证
-sudo bash /tmp/verify-v3.4.sh               # 带root权限验证（完整检查）
-bash /tmp/verify-v3.4.sh --remote root@IP  # 远程SSH验证
+for f in *.sh; do bash -n "$f" || exit 1; done
+bash install.sh --status --non-interactive
+grep -nE '\b(apt-get|systemctl|iptables|nft|ufw|chattr|sshd|docker|node|npm|swapoff|swapon|mkswap|modprobe|dpkg|autoremove|purge)\b' \
+  common-optimize.sh install.sh generic-1c1g.sh generic-x86.sh google-cloud-e2.sh n5105.sh nanopc-t6.sh nanopi-r4s.sh oracle-1c4g.sh oracle-arm.sh
 ```
 
-验证范围（14个维度）：
-1. 系统基础信息（CPU/内存/磁盘/TF卡）
-2. sysctl 网络参数（TCP/队列/BBR/安全）
-3. conntrack 连接追踪
-4. 内存管理（dirty_writeback/TF卡保护）
-5. 文件描述符 & 进程限制
-6. SSH 配置
-7. journald 日志配置
-8. inotify 文件监控
-9. SWAP 状态（TF卡保护）
-10. CPU Governor
-11. systemd 服务状态
-12. sysctl 配置文件完整性
-13. 网络连接实战状态
-14. 与 v3.1 目标值逐项对比（自动pass/fail）
-
----
-
-## 配置文件位置
-
-| 文件 | 路径 |
-|------|------|
-| sysctl 主配置 | `/etc/sysctl.d/99-vps-youhua-sysctl.conf` |
-| sysctl inotify | `/etc/sysctl.d/99-vps-youhua-inotify.conf` |
-| sysctl TF卡优化 | `/etc/sysctl.d/99-vps-youhua-tf-optimize.conf` (R4S) |
-| journald 配置 | `/etc/systemd/journald.conf` |
-| limits 配置 | `/etc/security/limits.conf` |
-| SSH 服务配置 | `/etc/ssh/sshd_config` |
-| log2ram 配置 | `/etc/log2ram.conf` (可选) |
-| 优化标记 | `/etc/vps-youhua-optimized` |
-
-### 卸载后配置文件自动清理
-
-使用 `--uninstall` 会自动删除上述所有配置文件。
-
----
-
-## 常见问题
-
-### Q: 脚本会修改哪些系统文件？
-
-主要修改以下文件（幂等设计，可重复运行）：
-- `/etc/sysctl.d/99-vps-youhua-*.conf` — sysctl网络/内存参数
-- `/etc/systemd/journald.conf` — 日志配置
-- `/etc/security/limits.conf` — 进程限制
-- `/etc/ssh/sshd_config` — SSH加固
-- SSH 公钥authorized_keys（如果配置了）
-- `/etc/vps-youhua-optimized` — 优化完成标记
-
-**不会修改**：系统核心配置文件、用户数据、已有服务配置。
-
-### Q: 运行后需要重启吗？
-
-大多数参数通过 `sysctl -p` 即时生效，无需重启。少数参数（如 journald Storage）需要重启 journald：
-
-```bash
-systemctl restart systemd-journald
-```
-
-### Q: NanoPi R4S 为什么禁用 SWAP？
-
-TF卡写入寿命有限。SWAP会产生大量随机小写入，严重影响TF卡寿命。脚本通过：
-- 禁用SWAP分区
-- 优化 `vm.swappiness=10` 减少内存回收
-- 使用 zram 压缩内存（可选）
-- 减少 dirty_writeback 频率
-等多重手段减少对 TF 卡的写入。
-
-### Q: Oracle Cloud ARM 为什么 TCP缓冲不是固定值？
-
-Oracle Cloud 的网络带宽与实例规格相关：
-- **X86 免费小户型 (AMD/E4)**：最大 50Mbps（Small Tenant），确实不是越高越好。
-- **ARM Ampere (1C/2C/4C)**：每核 1Gbps，最大 4Gbps（4核），带宽远大于 X86 免费版。脚本使用动态计算：内存的5%，上限64MB（2C16G）或32MB（1C4G），在不同内存规格下都能获得最优值。
-
-### Q: 如何确认 BBR 已开启？
-
-```bash
-sysctl net.ipv4.tcp_congestion_control   # 应显示 bbr
-lsmod | grep bbr                         # 应显示 tcp_bbr
-```
-
-### Q: 优化后还需要做什么？
-
-运行完本脚本后，系统环境已优化完毕，可以直接安装你需要的任何应用。
-
----
-
-## 版本历史
-
-### v4.1.0（2026-06-08）
-- **核心改进**：智能保留用户手动配置的网络优化（BBR3、bbrplus、cake 等），不再覆盖
-- **网络增强**：所有下载操作添加 3 次重试机制（指数退避），提升稳定性
-- **系统检测**：严格限制支持的系统版本（Debian 12/13, Ubuntu 22.04/24.04）
-- **文档更新**：移除应用特定引用，改为通用系统优化定位
-- **版本统一**：所有脚本升级到 v4.1.0，配置文件版本同步更新
-
-### v3.4.3（最新）
-- **代码质量**：完成 3 轮系统性代码审查，所有脚本通过语法检查和变量作用域验证
-- **修复**：所有函数内变量统一使用 `local` 声明，消除变量作用域泄漏风险
-- **修复**：删除所有重复的 `local` 声明，确保代码规范一致
-- **修复**：`install.sh` 函数定义顺序问题（`cleanup_apt_mask` 在 `trap` 调用前定义）
-- **修复**：多个脚本中的变量作用域问题（`nanopi-r4s.sh`, `nanopc-t6.sh`, `oracle-1c4g.sh`, `oracle-arm.sh`）
-- **优化**：`common-optimize.sh` 的 `configure_apt_sources` 函数变量声明完善
-- **优化**：`google-cloud-e2.sh` 错误处理逻辑改进（避免 `|| true` 掩盖真实错误）
-- **验证**：所有 13 个脚本通过 `bash -n` 语法检查和 `shellcheck` 静态分析
-
-### v3.3 R67
-- 审查：8轮严格审查（6轮 Sonnet-4.5 + 5轮 Opus-4.6），连续5轮0 bug确认
-- 审查：代码质量达到生产级别（8,731行，11个脚本）
-- 修复：APT锁超时处理从强制删锁改为提示用户手动处理
-- 修复：fstab sed转义使用完整字符集 `[][.*^$\\]` 避免误匹配
-- 修复：nanopi-t6 conntrack_max添加262144上限保护
-- 修复：RPS配置添加cores>1和cores>0双重检查
-- 修复：所有平台RPS配置统一防御性检查
-- 新增：nanopi-r4s fstab使用awk精确匹配root分区避免sed误匹配
-- 新增：所有平台函数调用顺序优化（detect_system先于configure_*）
-
-### v3.2 R61
-- 新增：11个平台脚本完整支持（新增 oracle-1c4g、generic-1c1g、google-cloud-e2）
-- 新增：`--status` 参数直接调用 verify-v3.4.sh 健康检查（install.sh），并更新帮助文档
-- 新增：R4S `install_nodejs()` 编译前临时挂载 1G tmpfs 到 /tmp（TF 卡保护），编译完自动卸载
-- 新增：fail2ban 选项 B 增加新手警告"请确保已配置 SSH 密钥登录，否则可能锁死"
-- 新增：Oracle Cloud ARM 增加 `check_oracle_metadata()` 元数据健康检查（非 Oracle 环境自动跳过）
-- 修复：verify-v3.4.sh 删除残留 `99-openclaw.conf`（替换为 `99-vps-youhua-*.conf`）
-- 修复：Oracle ARM TCP 缓冲从固定 32MB 改为动态自适应（内存 5%，上限 64MB，下限 16MB）
-- 新增：所有平台添加 `vm.oom_kill_allocating_task=1`（sysctl 配置 + 运行时立即生效）
-- 新增：幂等性检测，重复运行时提示"系统已完成过优化"（检测 /etc/vps-youhua-optimized 标记文件，-y 参数跳过确认）
-- 新增：所有平台脚本完成时写入 /etc/vps-youhua-optimized 标记（date 时间戳）
-- 新增：R4S TF 卡检测升级为多方法交叉验证（df + sys/class/block + eMMC 存在性检测）
-- 新增：R4S Armbian zram-config 强化（SIZE=50%，ENABLED=true）
-- 新增：R4S Armbian ramlog 强化（SIZE=256M）
-- 新增：R4S TF 卡每周 fstrim 定时任务（延长卡寿命）
-- 新增：T6 Armbian zram-config 强化（SIZE=30%，ENABLED=true）
-- 新增：T6 Armbian ramlog 强化（SIZE=256M）
-- 新增：T6 eMMC 每周 fstrim 定时任务（保持长期 IO 性能）
-- 安全：APT 官方源 http→https（deb.debian.org 全线加密）
-- 安全：install.sh 添加 `wait_for_apt_lock()` 函数（解决 Debian 12 新机 unattended-upgrades 锁阻塞）
-- 健壮：未知 ARM64 设备 fallback 增加 log_warn 警告提示
-
-### v3.1
-- 移除 OpenClaw 相关代码及文本残留（纯优化定位更清晰）
-- R57: 5个平台脚本 uninstall 函数清理 OpenClaw 残留
-- 统一全平台 conntrack timeout（close_wait=5, fin_wait=10）
-- 补全 tcp_rfc1337、IPv6 forwarding、ip_forward
-- nanopi-r4s 补全 IPv6 accept_redirects 安全参数
-- 统一 tcp_early_retrans=3、tcp_orphan_retries=1
-- n5105 补全 vm.zone_reclaim_mode=0 NUMA优化
-- generic-x86 补全 conntrack close_wait/fin_wait
-- 新增 verify-v3.4.sh 完整验证脚本
-- oracle-arm TCP缓冲从 64MB 调整为 32MB（更合理）
-- nanopi-r4s 移除不可靠的外部 log2ram 源，改为 journald volatile 替代
-
-### v3.0
-- 完整重构，4平台差异化配置
-- BBR + fq 队列全平台统一
-- SSH 加固（MaxAuthTries、ClientAliveInterval）
-- journald 压缩 + RateLimit
-- TF卡保护体系（dirty_writeback、journald volatile）
-- N5105 Turbo Boost 静音优化
-
----
-
-## 代码质量保证
-
-本项目采用严格的多轮审查流程确保代码质量：
-
-### 审查标准
-- **变量作用域**：函数内所有变量必须使用 `local` 声明
-- **错误处理**：必须有 `set -euo pipefail` 和适当的错误处理
-- **安全性**：不强制删除 APT 锁，不破坏 fstab，不在 TF 卡/USB SSD/USB HDD 上启用 swap
-- **幂等性**：重复运行产生相同结果，不重复添加配置项
-- **函数定义顺序**：被调用的函数必须在调用前定义
-
-### 审查流程
-- **Round 1**：审查 Group A（6 个文件）- common-optimize.sh, generic-1c1g.sh, generic-x86.sh, google-cloud-e2.sh, install.sh, n5105.sh
-- **Round 2**：审查 Group B（4 个文件）- nanopi-r4s.sh, nanopc-t6.sh, oracle-1c4g.sh, oracle-arm.sh
-- **Round 3**：审查验证脚本 verify-v3.4.sh
-
-### 验证工具
-- `bash -n` 语法检查
-- `shellcheck` 静态分析
-- 跨文件一致性检查
-- 变量作用域验证
-
-所有脚本已通过完整审查，确保生产环境可用。
-
----
-
-
----
-
-## 脚本标准
-
-### Shebang 规范
-
-所有脚本统一使用 `#!/usr/bin/env bash` 作为 Shebang：
-
-```bash
-#!/usr/bin/env bash
-```
-
-**为什么使用 `/usr/bin/env bash` 而不是 `/bin/bash`？**
-
-- **可移植性更好**：`env` 会在 PATH 中查找 bash，适配不同系统的 bash 安装路径
-- **支持更多环境**：某些系统（如 NixOS、Homebrew）的 bash 不在 `/bin` 目录
-- **符合最佳实践**：现代 Shell 脚本推荐的标准写法
-
-### 脚本执行权限
-
-所有 `.sh` 脚本文件都具有可执行权限（`chmod +x`），可以直接运行：
-
-```bash
-./nanopi-r4s.sh
-```
-
-或通过 bash 显式调用：
-
-```bash
-bash nanopi-r4s.sh
-```
-
----
-
-## 获取帮助
-
-- 问题反馈：https://github.com/vpn3288/VPS-youhua/issues
-- 提交优化：欢迎提交 Issue 和 PR
-
----
-
-## License
-
-MIT License
+最后一条命令在当前设计下应无输出。
